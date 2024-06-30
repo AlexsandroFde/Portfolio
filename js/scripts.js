@@ -39,3 +39,25 @@ function showSection(sectionId) {
         document.querySelector('#nav-links li:nth-child(2)').classList.add('select');
     }
 }
+document.addEventListener('DOMContentLoaded', function() {
+    const sidebar = document.querySelector('.sidebar');
+    const sidebarIcons = document.querySelectorAll('.sidebar-icon');
+    const sidebarOverlay = document.querySelector('.sidebar-overlay');
+
+    sidebarIcons.forEach(icon => {
+        icon.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            sidebarOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+        });
+    });
+
+    document.addEventListener('click', function(event) {
+        const isClickInsideSidebar = sidebar.contains(event.target);
+        const isClickInsideSidebarIcon = Array.from(sidebarIcons).some(icon => icon.contains(event.target));
+
+        if (!isClickInsideSidebar && !isClickInsideSidebarIcon) {
+            sidebar.classList.remove('open');
+            sidebarOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.0)';
+        }
+    });
+});

@@ -234,6 +234,21 @@ sidebar-overlay {
 .menu ul li:hover {
     background: #f4f4f4;
 }
+.profile-container {
+    display: flex;
+    align-items: center;
+}
+.profile-pic {
+    width: 220px;
+    height: 220px;
+    object-fit: cover;
+    border-radius: 50%;
+    margin-right: 20px;
+}
+.profile-text {
+    text-align: left;
+    flex: 1;
+}
 @media(max-width: 1000px) {
     .content {
         width: 100%;
@@ -276,5 +291,18 @@ sidebar-overlay {
     }
     .sidebar-icon {
         display: block;
+    }
+}
+@media(max-width: 650px) {
+    .profile-container {
+        display: block;
+        text-align: center;
+    }
+    .profile-pic {
+        width: 100%;
+        height: auto;
+        object-fit: cover;
+        border-radius: 0%;
+        
     }
 }

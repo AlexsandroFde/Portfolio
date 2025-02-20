@@ -163,6 +163,8 @@ sidebar-overlay {
 }
 .project {
     position: relative;
+    display: inline-block;
+    padding-right: 30px;
 }
 .overlay {
     position: absolute;
@@ -185,11 +187,14 @@ sidebar-overlay {
 }
 .toggle-icon {
     position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
     cursor: pointer;
     transition: transform 0.3s ease;
 }
 .toggle-icon.rotate {
-    transform: rotate(-180deg);
+    transform: translateY(-50%) rotate(-180deg);
 }
 .project-details {
     max-height: 0;
@@ -244,6 +249,8 @@ sidebar-overlay {
     object-fit: cover;
     border-radius: 50%;
     margin-right: 20px;
+    border: 5px dotted   #2D5473;
+    margin-top: 15px;
 }
 .profile-text {
     text-align: left;
@@ -302,7 +309,7 @@ sidebar-overlay {
         width: 100%;
         height: auto;
         object-fit: cover;
-        border-radius: 0%;
+        border-radius: 20%;
         
     }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { linkCurriculo } from '../data/curriculo.ts'
 import { profile } from '../data/profile.ts'
 import { useClock } from '../hooks/useClock.ts'
 import { useIdioma, useT } from '../i18n/idioma.ts'
@@ -66,7 +67,15 @@ function CopiarEmail() {
 
 export function Contact() {
   const t = useT()
-  const time = useClock(profile.timeZone, useIdioma())
+  const idioma = useIdioma()
+  const time = useClock(profile.timeZone, idioma)
+
+  const canais = [
+    { rotulo: 'WhatsApp', valor: profile.whatsapp.label, href: profile.whatsapp.href },
+    { rotulo: 'LinkedIn', valor: profile.linkedin.label, href: profile.linkedin.href },
+    { rotulo: 'GitHub', valor: profile.github.label, href: profile.github.href },
+    { rotulo: t(ui.contato.curriculo), valor: t(ui.contato.versaoPdf), href: linkCurriculo(idioma), pdf: true },
+  ]
 
   return (
     <Section id="contato" index="05" title={t(ui.nav.contato)}>
@@ -94,30 +103,31 @@ export function Contact() {
         <CopiarEmail />
       </Reveal>
 
+      {/* celular: uma coluna; tablet: duas; desktop: três (o "Local" ocupa duas colunas para fechar a grade) */}
       <Reveal
         as="ul"
         delay={180}
-        className="mt-14 grid gap-x-8 border-t border-line sm:grid-cols-3"
+        className="mt-14 grid gap-x-8 border-t border-line sm:grid-cols-2 lg:grid-cols-3"
       >
-        <li className="border-b border-line">
-          <a href={profile.whatsapp.href} target="_blank" rel="noreferrer" className={channel}>
-            <span>
-              <span className="label block text-subtle">WhatsApp</span>
-              <span className="mt-1.5 block text-[0.9375rem]">{profile.whatsapp.label}</span>
-            </span>
-            <ArrowUpRight className={arrow} />
-          </a>
-        </li>
-        <li className="border-b border-line">
-          <a href={profile.github.href} target="_blank" rel="noreferrer" className={channel}>
-            <span>
-              <span className="label block text-subtle">GitHub</span>
-              <span className="mt-1.5 block text-[0.9375rem]">{profile.github.label}</span>
-            </span>
-            <ArrowUpRight className={arrow} />
-          </a>
-        </li>
-        <li className="border-b border-line py-5">
+        {canais.map((canal) => (
+          <li key={canal.href} className="border-b border-line">
+            <a
+              href={canal.href}
+              target="_blank"
+              rel="noreferrer"
+              type={canal.pdf ? 'application/pdf' : undefined}
+              className={channel}
+            >
+              <span>
+                <span className="label block text-subtle">{canal.rotulo}</span>
+                <span className="mt-1.5 block text-[0.9375rem]">{canal.valor}</span>
+                {canal.pdf && <span className="sr-only"> {t(ui.pdfNovaAba)}</span>}
+              </span>
+              <ArrowUpRight className={arrow} />
+            </a>
+          </li>
+        ))}
+        <li className="border-b border-line py-5 sm:col-span-2">
           <span className="label block text-subtle">{t(ui.contato.local)}</span>
           <span className="mt-1.5 block text-[0.9375rem]">
             {t(profile.location)}

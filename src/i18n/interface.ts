@@ -32,7 +32,9 @@ export const ui = {
     retrato: t('Retrato de', 'Portrait of'),
     verProjetos: t('Ver projetos', 'View projects'),
     contato: t('Entrar em contato', 'Get in touch'),
+    curriculo: t('Currículo em PDF', 'Resume (PDF)'),
   },
+  pdfNovaAba: t('(PDF, abre em nova aba)', '(PDF, opens in a new tab)'),
   sobre: {
     linguagens: t('linguagens de programação', 'programming languages'),
   },
@@ -80,6 +82,8 @@ export const ui = {
     emailCopiado: t('E-mail copiado', 'Email copied'),
     avisoCopiado: t('E-mail copiado para a área de transferência', 'Email copied to the clipboard'),
     local: t('Local', 'Location'),
+    curriculo: t('Currículo', 'Resume'),
+    versaoPdf: t('Versão em PDF', 'PDF version'),
   },
   rodape: {
     feitoCom: t('Feito com React, TypeScript e Tailwind CSS', 'Built with React, TypeScript and Tailwind CSS'),

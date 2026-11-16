@@ -3,11 +3,12 @@ import profile320 from '../assets/profile-320.webp'
 import profile480 from '../assets/profile-480.webp'
 import profile640 from '../assets/profile-640.webp'
 import profile960 from '../assets/profile-960.webp'
+import { linkCurriculo } from '../data/curriculo.ts'
 import { facts, intro, profile } from '../data/profile.ts'
-import { useT } from '../i18n/idioma.ts'
+import { useIdioma, useT } from '../i18n/idioma.ts'
 import { ui } from '../i18n/interface.ts'
-import { botaoPrimario, botaoSecundario } from '../lib/estilos.ts'
-import { ArrowDown } from './icons.tsx'
+import { botaoDiscreto, botaoPrimario, botaoSecundario } from '../lib/estilos.ts'
+import { ArrowDown, FileText } from './icons.tsx'
 import { Reveal } from './Reveal.tsx'
 
 /** Posição do elemento na entrada escalonada (ver `.enter` no index.css). */
@@ -15,6 +16,7 @@ const step = (i: number) => ({ '--i': i }) as CSSProperties
 
 export function Hero() {
   const t = useT()
+  const idioma = useIdioma()
 
   return (
     <section id="topo" className="relative isolate overflow-hidden pt-28 sm:pt-36 md:pt-40">
@@ -76,6 +78,17 @@ export function Hero() {
             </a>
             <a href="#contato" className={botaoSecundario}>
               {t(ui.hero.contato)}
+            </a>
+            <a
+              href={linkCurriculo(idioma)}
+              target="_blank"
+              rel="noreferrer"
+              type="application/pdf"
+              className={botaoDiscreto}
+            >
+              <FileText className="size-4" />
+              {t(ui.hero.curriculo)}
+              <span className="sr-only"> {t(ui.pdfNovaAba)}</span>
             </a>
           </div>
         </div>

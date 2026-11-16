@@ -41,6 +41,7 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      # Também gera o currículo em PDF, impresso pelo Google Chrome que já vem no runner.
       - name: Gerar o site
         run: npm run build
         env:

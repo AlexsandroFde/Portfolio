@@ -1,0 +1,145 @@
+/*
+ * Estilo do currículo em PDF (impresso pelo Chrome no build, ver scripts/curriculo.mjs).
+ *
+ * Para os sistemas de triagem (ATS) lerem bem: uma coluna só, nada de tabelas ou
+ * imagens, texto alinhado à esquerda, sem ligaduras e com pouco espaçamento
+ * entre letras (espaço demais faz alguns leitores separarem as palavras em letras).
+ */
+
+@page {
+  size: A4;
+  margin: 15mm 16mm;
+}
+
+:root {
+  --texto: #1c1c1b;
+  --suave: #4f4e49;
+  --fraco: #8a8982;
+  --linha: #d6d4cc;
+  --destaque: #2d5473;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: 'Geist', Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  line-height: 1.45;
+  color: var(--texto);
+  font-variant-ligatures: none;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+strong {
+  font-weight: 600;
+}
+
+/* Cabeçalho: nome, cargo e contatos (no corpo da página, nunca no cabeçalho de impressão). */
+h1 {
+  font-size: 22pt;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.cargo {
+  margin-top: 3pt;
+  font-size: 12pt;
+  font-weight: 500;
+  color: var(--destaque);
+}
+
+.contatos {
+  margin-top: 7pt;
+  color: var(--suave);
+}
+
+.contatos + .contatos {
+  margin-top: 1.5pt;
+}
+
+.sep {
+  color: var(--fraco);
+}
+
+/* Seções */
+section {
+  margin-top: 15pt;
+}
+
+h2 {
+  margin-bottom: 7pt;
+  padding-bottom: 3pt;
+  border-bottom: 0.75pt solid var(--linha);
+  font-family: 'Geist Mono', 'Courier New', monospace;
+  font-size: 9pt;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--destaque);
+  break-after: avoid;
+}
+
+h3 {
+  font-size: 10.5pt;
+  font-weight: 600;
+  line-height: 1.35;
+  break-after: avoid;
+}
+
+.item {
+  break-inside: avoid;
+}
+
+.item + .item {
+  margin-top: 9pt;
+}
+
+.meta {
+  color: var(--suave);
+}
+
+ul {
+  margin-top: 3pt;
+  padding-left: 12pt;
+}
+
+li {
+  padding-left: 2pt;
+  break-inside: avoid;
+}
+
+li + li {
+  margin-top: 2.5pt;
+}
+
+li::marker {
+  color: var(--fraco);
+}
+
+/* Competências e idiomas: uma linha por item, sem marcador, sem dividir entre páginas. */
+.linhas {
+  margin-top: 0;
+  padding-left: 0;
+  list-style: none;
+  break-inside: avoid;
+}
+
+.linhas li {
+  padding-left: 0;
+}
+
+ul + p,
+p + p {
+  margin-top: 5pt;
+}

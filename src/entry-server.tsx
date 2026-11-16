@@ -1,7 +1,9 @@
 import { StrictMode } from 'react'
-import { renderToString } from 'react-dom/server'
+import { renderToStaticMarkup, renderToString } from 'react-dom/server'
 import App from './App.tsx'
 import { NotFound } from './components/NotFound.tsx'
+import { Curriculo } from './curriculo/Curriculo.tsx'
+import { arquivoCurriculo } from './data/curriculo.ts'
 import type { Idioma } from './i18n/idioma.ts'
 
 // Usado apenas no build, por scripts/prerender.mjs.
@@ -22,4 +24,12 @@ export function renderNotFound(): string {
       <NotFound />
     </StrictMode>,
   )
+}
+
+/** Documento do currículo (impresso em PDF por scripts/curriculo.mjs) e o nome do arquivo. */
+export function renderCurriculo(idioma: Idioma): { html: string; arquivo: string } {
+  return {
+    html: `<!doctype html>${renderToStaticMarkup(<Curriculo idioma={idioma} />)}`,
+    arquivo: arquivoCurriculo[idioma],
+  }
 }

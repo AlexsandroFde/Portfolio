@@ -1,4 +1,4 @@
-// Pré-renderiza as páginas do site em dist/.
+// Pré-renderiza as páginas do site em dist/ e gera o currículo em PDF.
 //
 // O build gera duas saídas: o site (dist/) e uma versão do app para Node
 // (dist-ssr/). Aqui rodamos essa versão para obter o HTML de cada página e o
@@ -7,12 +7,13 @@
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { gerarCurriculos } from './curriculo.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const ssrDir = path.join(root, 'dist-ssr')
 const placeholder = '<div id="root"></div>'
 
-const { render, renderNotFound } = await import(
+const { render, renderNotFound, renderCurriculo } = await import(
   pathToFileURL(path.join(ssrDir, 'entry-server.js')).href
 )
 
@@ -34,5 +35,8 @@ for (const pagina of paginas) {
   await writeFile(htmlFile, template.replace(placeholder, () => `<div id="root">${appHtml}</div>`))
   console.log(`✓ dist/${pagina.arquivo} pré-renderizado (${(appHtml.length / 1024).toFixed(1)} kB de HTML)`)
 }
+
+// O currículo em PDF, linkado pelo site (ver scripts/curriculo.mjs).
+await gerarCurriculos(renderCurriculo, path.join(root, 'dist'))
 
 await rm(ssrDir, { recursive: true, force: true })

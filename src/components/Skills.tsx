@@ -1,11 +1,19 @@
 import { courses, principais, skillGroups } from '../data/skills.ts'
-import { useT } from '../i18n/idioma.ts'
+import { useT, type Traduzivel } from '../i18n/idioma.ts'
 import { ui } from '../i18n/interface.ts'
 import { cx } from '../lib/cx.ts'
 import { Reveal } from './Reveal.tsx'
 import { Section } from './Section.tsx'
 
-const row = 'grid gap-x-6 gap-y-3 border-b border-line py-6 md:grid-cols-[9rem_minmax(0,1fr)]'
+const ehPrincipal = (item: Traduzivel) => typeof item === 'string' && principais.has(item)
+
+/** Itens de cada grupo com a stack principal na frente; o resto mantém a ordem de skills.ts. */
+const grupos = skillGroups.map((group) => ({
+  ...group,
+  items: [...group.items.filter(ehPrincipal), ...group.items.filter((item) => !ehPrincipal(item))],
+}))
+
+const row ='grid gap-x-6 gap-y-3 border-b border-line py-6 md:grid-cols-[9rem_minmax(0,1fr)]'
 const pilula = 'rounded-full border px-3 py-1 text-sm leading-6'
 
 export function Skills() {
@@ -19,13 +27,13 @@ export function Skills() {
       </Reveal>
 
       <dl className="border-t border-line">
-        {skillGroups.map((group, index) => (
+        {grupos.map((group, index) => (
           <Reveal key={group.id} delay={index * 45} className={row}>
             <dt className="label pt-2 text-muted">{t(group.label)}</dt>
             <dd>
               <ul className="flex flex-wrap gap-2">
                 {group.items.map((item) => {
-                  const principal = typeof item === 'string' && principais.has(item)
+                  const principal = ehPrincipal(item)
                   return (
                     <li
                       key={t(item)}

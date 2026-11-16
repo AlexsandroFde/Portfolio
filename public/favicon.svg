@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>
+    .fundo { fill: #111110; }
+    .letra { stroke: #f4f3ee; }
+    .ponto { fill: #7cb8dd; }
+    @media (prefers-color-scheme: dark) {
+      .fundo { fill: #ededea; }
+      .letra { stroke: #0b0b0c; }
+      .ponto { fill: #2d5473; }
+    }
+  </style>
+  <rect class="fundo" width="64" height="64" rx="16" />
+  <path class="letra" d="M17.5 47 32 16.5 46.5 47" fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+  <circle class="ponto" cx="32" cy="38.5" r="4.8" />
+</svg>

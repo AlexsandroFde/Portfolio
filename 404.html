@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  Página de erro do GitHub Pages: é servida para qualquer endereço inexistente do site,
+  em qualquer profundidade. Por isso todos os caminhos aqui são absolutos.
+-->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Página não encontrada | Alexsandro Ferreira da Silva</title>
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#f4f3ee" />
+
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="/node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2"
+      crossorigin
+    />
+
+    <!-- Mesmo script do index.html: tema antes da primeira pintura e marca de JavaScript ativo. -->
+    <script>
+      ;(function () {
+        var root = document.documentElement
+        var saved = null
+        try {
+          saved = localStorage.getItem('theme')
+        } catch (error) {}
+        var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+        root.classList.add('js')
+        if (dark) {
+          root.classList.add('dark')
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', '#0b0b0c')
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main-404.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<!-- Versão em inglês do portfólio, publicada em /en/. O conteúdo é o mesmo app de index.html. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Alexsandro Ferreira da Silva | Software Developer</title>
+    <meta
+      name="description"
+      content="Portfolio of Alexsandro Ferreira da Silva, a software developer in Fortaleza, Brazil. Web, mobile, game and Python automation projects."
+    />
+    <meta name="author" content="Alexsandro Ferreira da Silva" />
+    <meta name="theme-color" content="#f4f3ee" />
+    <link rel="canonical" href="%VITE_SITE_URL%/en/" />
+    <link rel="alternate" hreflang="pt-BR" href="%VITE_SITE_URL%/" />
+    <link rel="alternate" hreflang="en" href="%VITE_SITE_URL%/en/" />
+    <link rel="alternate" hreflang="x-default" href="%VITE_SITE_URL%/" />
+
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="/node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2"
+      crossorigin
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="pt_BR" />
+    <meta property="og:site_name" content="Alexsandro Ferreira da Silva" />
+    <meta property="og:title" content="Alexsandro Ferreira da Silva | Software Developer" />
+    <meta
+      property="og:description"
+      content="Web, mobile, game and Python automation projects. Fortaleza, Brazil."
+    />
+    <meta property="og:url" content="%VITE_SITE_URL%/en/" />
+    <meta property="og:image" content="%VITE_SITE_URL%/og-en.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Alexsandro Ferreira da Silva, software developer: web, mobile, games and Python automation."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Alexsandro Ferreira da Silva",
+        "jobTitle": "Software Developer",
+        "url": "%VITE_SITE_URL%/en/",
+        "image": "%VITE_SITE_URL%/og-en.jpg",
+        "address": {
+          "@type": "PostalAddress",
+          "addressLocality": "Fortaleza",
+          "addressRegion": "CE",
+          "addressCountry": "BR"
+        },
+        "sameAs": ["https://github.com/AlexsandroFde"]
+      }
+    </script>
+
+    <!-- Mesmo script do index.html: tema antes da primeira pintura e marca de JavaScript ativo. -->
+    <script>
+      ;(function () {
+        var root = document.documentElement
+        var saved = null
+        try {
+          saved = localStorage.getItem('theme')
+        } catch (error) {}
+        var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+        root.classList.add('js')
+        if (dark) {
+          root.classList.add('dark')
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', '#0b0b0c')
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

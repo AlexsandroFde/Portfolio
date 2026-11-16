@@ -1,0 +1,331 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ *
+ * Fontes: Geist e Geist Mono, servidas pelo próprio site.
+ * Só o subconjunto latino é necessário para o conteúdo em português e em inglês.
+ * ------------------------------------------------------------------ */
+@font-face {
+  font-family: 'Geist Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/geist/files/geist-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Geist Mono Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ------------------------------------------------------------------ *
+ * Tokens
+ * ------------------------------------------------------------------ */
+@theme {
+  --font-sans:
+    'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:
+    'Geist Mono Variable', ui-monospace, 'SFMono-Regular', 'Cascadia Code', Menlo, Consolas,
+    monospace;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-ok: var(--ok);
+}
+
+:root {
+  color-scheme: light;
+  --bg: #f4f3ee;
+  --surface: #eae8e1;
+  --fg: #111110;
+  --muted: #55544e;
+  --subtle: #6c6b65;
+  --faint: #8a8982;
+  --line: rgb(17 17 16 / 0.12);
+  --line-strong: rgb(17 17 16 / 0.3);
+  --accent: #2d5473;
+  --accent-fg: #ffffff;
+  --ok: #23874b;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #0b0b0c;
+  --surface: #161617;
+  --fg: #ededea;
+  --muted: #a3a29c;
+  --subtle: #7c7b76;
+  --faint: #666561;
+  --line: rgb(255 255 255 / 0.1);
+  --line-strong: rgb(255 255 255 / 0.26);
+  --accent: #7cb8dd;
+  --accent-fg: #0b0b0c;
+  --ok: #4cc27a;
+}
+
+/* ------------------------------------------------------------------ *
+ * Base
+ * ------------------------------------------------------------------ */
+@layer base {
+  html {
+    scroll-padding-top: 5.5rem;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Utilitários próprios
+ * ------------------------------------------------------------------ */
+
+/* Largura máxima e respiro lateral da página. */
+@utility wrap {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 72rem;
+  padding-inline: 1.25rem;
+
+  @media (width >= 40rem) {
+    padding-inline: 2rem;
+  }
+}
+
+/* Rótulo monoespaçado em caixa alta (datas, índices, legendas). */
+@utility label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------ *
+ * Componentes
+ * ------------------------------------------------------------------ */
+@layer components {
+  .skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 100;
+    padding: 0.625rem 1rem;
+    border-radius: 999px;
+    background-color: var(--fg);
+    color: var(--bg);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transform: translateY(-200%);
+  }
+
+  .skip-link:focus-visible {
+    transform: none;
+  }
+
+  /* Malha discreta atrás da apresentação, que remete a papel de engenharia. */
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, var(--line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+    background-size: 4rem 4rem;
+    background-position: center top;
+    mask-image: radial-gradient(ellipse 75% 85% at 75% 0%, #000 0%, transparent 72%);
+    opacity: 0.7;
+  }
+
+  /* Marcas de corte nos cantos do retrato (só a partir do tablet: na foto pequena do celular viram ruído). */
+  .crop-marks {
+    position: relative;
+  }
+
+  @media (width >= 48rem) {
+    .crop-marks::before,
+    .crop-marks::after {
+      content: '';
+      position: absolute;
+      width: 0.75rem;
+      height: 0.75rem;
+      border: 0 solid var(--line-strong);
+      pointer-events: none;
+    }
+
+    .crop-marks::before {
+      top: -0.5rem;
+      left: -0.5rem;
+      border-top-width: 1px;
+      border-left-width: 1px;
+    }
+
+    .crop-marks::after {
+      right: -0.5rem;
+      bottom: -0.5rem;
+      border-right-width: 1px;
+      border-bottom-width: 1px;
+    }
+  }
+
+  /* Ponto pulsante ao lado do status atual, no topo da página. */
+  .status-dot {
+    position: relative;
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    flex: none;
+    border-radius: 999px;
+    background-color: var(--ok);
+  }
+
+  .status-dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-color: inherit;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Movimento
+ * ------------------------------------------------------------------ */
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 1.125rem, 0);
+  }
+}
+
+@keyframes ping {
+  75%,
+  100% {
+    transform: scale(2.75);
+    opacity: 0;
+  }
+}
+
+@keyframes reveal-failsafe {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Entrada escalonada da apresentação (não depende de JavaScript). */
+  .enter {
+    animation: enter 0.9s var(--ease-out-expo) both;
+    animation-delay: calc(var(--i, 0) * 90ms + 60ms);
+  }
+
+  .status-dot::after {
+    animation: ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  /* Revelação ao rolar: só esconde o conteúdo quando há JavaScript (.js). */
+  .js [data-reveal] {
+    opacity: 0;
+    transform: translate3d(0, 0.875rem, 0);
+    transition:
+      opacity 0.8s var(--ease-out-expo) var(--reveal-delay, 0ms),
+      transform 0.8s var(--ease-out-expo) var(--reveal-delay, 0ms);
+  }
+
+  .js [data-reveal][data-revealed] {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Se o JavaScript estiver ativo mas o app não carregar, mostra tudo mesmo assim. */
+  .js:not(.hydrated) [data-reveal] {
+    animation: reveal-failsafe 0.4s ease 4s forwards;
+  }
+}
+
+/* Troca de tema com a View Transitions API: o novo tema "abre" em círculo. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ------------------------------------------------------------------ *
+ * Impressão
+ * ------------------------------------------------------------------ */
+@media print {
+  :root,
+  .dark {
+    --bg: #ffffff;
+    --surface: #f3f3f3;
+    --fg: #000000;
+    --muted: #333333;
+    --subtle: #555555;
+    --faint: #777777;
+    --line: rgb(0 0 0 / 0.2);
+    --line-strong: rgb(0 0 0 / 0.4);
+    --accent: #000000;
+  }
+
+  [data-reveal],
+  .enter {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .print-hidden {
+    display: none !important;
+  }
+}

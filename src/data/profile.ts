@@ -21,6 +21,10 @@ export const profile = {
     label: '@AlexsandroFde',
     href: 'https://github.com/AlexsandroFde',
   },
+  linkedin: {
+    label: 'Alexsandro Ferreira da Silva',
+    href: 'https://www.linkedin.com/in/alexsandro-ferreira-da-silva-6914b6317',
+  },
 } as const
 
 export const intro: Texto = {

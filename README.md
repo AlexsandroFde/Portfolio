@@ -9,6 +9,7 @@ Portfólio e currículo online, em português e em inglês: apresentação, proj
 - **React 19** e **TypeScript**
 - **Vite 8** para desenvolvimento e build
 - **Tailwind CSS 4** para os estilos, com tema claro e escuro
+- **WebGL 2** para o buraco negro animado no fundo da página (shader próprio, sem bibliotecas)
 - **Pré-renderização estática**: o HTML publicado de cada página (português, inglês e a de erro) já contém todo o conteúdo e o React apenas o hidrata, o que ajuda no carregamento e na indexação
 - **Currículo em PDF** gerado no build, impresso pelo Chrome ou Edge via `puppeteer-core`
 - **GitHub Actions** para o deploy automático no GitHub Pages
@@ -40,6 +41,7 @@ Todo o conteúdo fica em arquivos de dados, separados dos componentes:
 | Textos fixos da interface (menu, botões etc.)                      | `src/i18n/interface.ts`        |
 | Página de erro 404                                                 | `src/components/NotFound.tsx`  |
 | Cores, fontes e animações                                          | `src/index.css`                |
+| Buraco negro do fundo da página                                    | `src/lib/buracoNegro/`         |
 | Título, descrição e prévia de compartilhamento                     | `index.html` e `en/index.html` |
 
 Os projetos com `featured` aparecem como cartões em **Destaques**, na ordem desse número; os demais vão para a lista **Outros projetos**, que tem os filtros por área. Cada projeto tem um `summary` (uma frase, usada na lista) e uma `description` (o texto completo dos cartões). Um projeto sem o campo `repo` é exibido como repositório privado (com cadeado, sem link).
@@ -68,6 +70,20 @@ O PDF é impresso por um Chrome ou Edge instalado na máquina, que o build encon
 ### Vídeos dos projetos
 
 Um projeto pode ter um vídeo curto (campo `video` em `src/data/projects.ts`): um MP4 sem som, em 16:9, que toca em loop como um GIF. Ele só é baixado quando aparece na tela, pausa ao sair dela, tem botão de pausar e não toca sozinho para quem ativou "reduzir movimento" no sistema. Para manter o site leve, vale exportar em 1280x720, 30 fps e uns 15 segundos (H.264, CRF entre 26 e 28), junto com um quadro em WebP para o pôster.
+
+### Buraco negro do fundo
+
+No fundo da página há um buraco negro animado, desenhado em WebGL. O shader (`src/lib/buracoNegro/buracoNegro.frag`) traça os raios de luz na trajetória curva em volta do buraco negro: daí a sombra, o anel de luz e o disco de gás, que aparece dobrado por cima da sombra e passa na frente da metade de baixo dela. A malha quadriculada da apresentação também é desenhada por ele, curvada pela gravidade. No tema escuro o disco brilha na cor de destaque; no claro vira uma gravura em nanquim.
+
+Ele fica no canto de cima à direita, logo abaixo do cabeçalho, com cerca de um terço à vista, como algo muito distante (a malha fica numa camada intermediária). Só o conteúdo que sobe até uma faixa estreita logo abaixo do cabeçalho é absorvido: a página é tratada como a continuação do plano do disco, e a parte de cima de cada bloco é puxada primeiro na direção dele (por isso o bloco se alonga, a "espaguetificação"). O que está perto do disco chega a ele; o que está longe anda só um trecho e se desfaz em filamentos de matéria, que o shader desenha entrando no disco, esquentando o gás e girando com ele. Um bloco alto, como um cartão de projeto, sobe inteiro: só a parte dele que entra na faixa se desfaz, e o resto só é puxado quando a borda de baixo chega perto, para o restante da página continuar legível. Quanto cada bloco já foi absorvido depende só de onde ele está na tela: rolando devagar o efeito é o mesmo, com a página parada o que estava no meio do caminho continua ali, e rolando para cima o conteúdo é cuspido de volta pelo mesmo caminho. Tudo muda de forma contínua com a rolagem, e o brilho do disco e os filamentos acompanham a velocidade com um pequeno atraso: assim a absorção corre fluida mesmo com a roda do mouse, que rola aos trancos. Os blocos são os que já têm animação de entrada (`Reveal` e `.enter`); a lógica fica em `src/lib/buracoNegro/absorcao.ts`.
+
+Como o alto da tela passa a ser do buraco negro, os links do menu levam cada seção para logo abaixo da faixa de absorção, e não para o topo: o JavaScript calcula essa altura e a passa ao `scroll-padding-top` do `index.css` (a variável `--topo-livre`). Sem o efeito, vale a distância padrão.
+
+O gás do disco gira com a velocidade de cada órbita (mais rápido perto do centro) sem que o desenho se enrole com o tempo: cada anel da textura gira inteiro e desliza sobre os vizinhos, e a rotação fecha um ciclo exato a cada três horas, mais ou menos.
+
+Para ajustar: o quanto do buraco negro fica à vista é a constante `CANTO` e a altura da faixa de absorção é a função `faixa`, ambas em `src/lib/buracoNegro/index.ts`.
+
+Para não pesar: o código do efeito só é baixado depois que a página carrega, a animação pausa com a aba escondida, a resolução cai sozinha em aparelhos que não dão conta, e quem ativou "reduzir movimento" no sistema (ou tem um aparelho lento demais) vê o buraco negro parado no alto da página, sem absorção. Sem WebGL 2, fica a malha em CSS de antes.
 
 ### Página de erro
 
@@ -108,6 +124,7 @@ O andamento de cada publicação pode ser acompanhado na aba **Actions** do repo
 │   ├── data/                      # conteúdo do portfólio e do currículo
 │   ├── i18n/                      # idiomas e textos fixos da interface
 │   ├── hooks/ e lib/              # utilitários
+│   ├── lib/buracoNegro/           # buraco negro do fundo (WebGL)
 │   ├── index.css                  # tema e estilos globais
 │   ├── main.tsx                   # entrada no navegador (português e inglês)
 │   ├── main-404.tsx               # entrada da página de erro

@@ -91,7 +91,9 @@
  * ------------------------------------------------------------------ */
 @layer base {
   html {
-    scroll-padding-top: 5.5rem;
+    /* Com o buraco negro no ar, o alto da tela é dele: os links levam cada seção para logo abaixo
+       da faixa em que o conteúdo é absorvido (--topo-livre vem do JavaScript). */
+    scroll-padding-top: var(--topo-livre, 5.5rem);
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
@@ -104,6 +106,11 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+
+  /* Os blocos que caem no buraco negro em espiral não podem criar rolagem para o lado. */
+  main {
+    overflow-x: clip;
   }
 
   ::selection {
@@ -184,6 +191,36 @@
     background-position: center top;
     mask-image: radial-gradient(ellipse 75% 85% at 75% 0%, #000 0%, transparent 72%);
     opacity: 0.7;
+    transition: opacity 1.6s var(--ease-out-expo);
+  }
+
+  /* Buraco negro em WebGL no fundo da página (ver BlackHole.tsx). Ele também desenha a malha
+     da apresentação, curvada pela gravidade: quando entra, a malha em CSS sai. */
+  .buraco-negro {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    width: 100%;
+    height: 100vh;
+    height: 100lvh;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1.6s var(--ease-out-expo);
+  }
+
+  /* Sem animação (movimento reduzido ou aparelho lento): fica parado no alto da página e rola
+     junto com a apresentação (a altura vem do JavaScript). */
+  .buraco-negro[data-preso] {
+    position: absolute;
+  }
+
+  .buraco-negro[data-ativo] {
+    opacity: 1;
+  }
+
+  [data-buraco-negro] .hero-grid {
+    opacity: 0;
   }
 
   /* Marcas de corte nos cantos do retrato (só a partir do tablet: na foto pequena do celular viram ruído). */

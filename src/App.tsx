@@ -1,4 +1,5 @@
 import { About } from './components/About.tsx'
+import { BlackHole } from './components/BlackHole.tsx'
 import { Contact } from './components/Contact.tsx'
 import { Footer } from './components/Footer.tsx'
 import { Header } from './components/Header.tsx'
@@ -15,6 +16,7 @@ export default function App({ idioma }: { idioma: Idioma }) {
       <a href="#conteudo" className="skip-link">
         {ui.pularConteudo[idioma]}
       </a>
+      <BlackHole />
       <Header />
       <main id="conteudo">
         <Hero />

@@ -96,6 +96,12 @@
     scroll-padding-top: var(--topo-livre, 5.5rem);
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* Sem barra de rolagem: a página continua rolando pela roda, pelo toque e pelo teclado. */
+    scrollbar-width: none;
+  }
+
+  html::-webkit-scrollbar {
+    display: none;
   }
 
   body {

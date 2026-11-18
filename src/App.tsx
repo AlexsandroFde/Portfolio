@@ -1,6 +1,7 @@
 import { About } from './components/About.tsx'
 import { BlackHole } from './components/BlackHole.tsx'
 import { Contact } from './components/Contact.tsx'
+import { Dive } from './components/Dive.tsx'
 import { Footer } from './components/Footer.tsx'
 import { Header } from './components/Header.tsx'
 import { Hero } from './components/Hero.tsx'
@@ -27,6 +28,7 @@ export default function App({ idioma }: { idioma: Idioma }) {
         <Contact />
       </main>
       <Footer />
+      <Dive />
     </IdiomaContexto>
   )
 }

@@ -2,6 +2,14 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* O raio da janela que se abre no escuro, dentro do buraco negro, na volta ao topo (ver mergulho.ts).
+   Registrado para o navegador poder animá-lo. */
+@property --janela {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 /* ------------------------------------------------------------------ *
  * Fontes: Geist e Geist Mono, servidas pelo próprio site.
  * Só o subconjunto latino é necessário para o conteúdo em português e em inglês.
@@ -222,6 +230,19 @@
 
   [data-buraco-negro] .hero-grid {
     opacity: 0;
+  }
+
+  /* O espaço depois do rodapé (ver Dive.tsx): uma tela para a página sair toda de vista e, depois,
+     o trecho do mergulho, em que o buraco negro engole a tela e a página volta ao topo. Só existe
+     com JavaScript, que faz a volta. */
+  .mergulho {
+    display: none;
+  }
+
+  .js .mergulho {
+    display: block;
+    height: 250vh;
+    height: 250lvh;
   }
 
   /* Marcas de corte nos cantos do retrato (só a partir do tablet: na foto pequena do celular viram ruído). */

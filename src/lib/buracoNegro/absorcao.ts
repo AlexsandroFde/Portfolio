@@ -1,7 +1,7 @@
 // Absorção: o conteúdo que sobe até perto do buraco negro é puxado até ele e engolido, e é cuspido
 // de volta quando a página sobe. Quanto ele já foi absorvido depende só de onde ele está na tela, e
 // o desenho de cada posição da rolagem é calculado de antemão: rolando devagar ou rápido, com a
-// roda, o botão do meio, a barra ou o teclado, cada posição da página mostra sempre a mesma imagem,
+// roda, o botão do meio, o toque ou o teclado, cada posição da página mostra sempre a mesma imagem,
 // como um filme que a rolagem avança e volta.
 //
 // O efeito acontece numa faixa estreita no alto da tela (veja Faixa). Cada linha horizontal do
@@ -10,8 +10,9 @@
 // esmaece na medida em que se estreita). As linhas de cima vão na frente e as de baixo ainda estão
 // presas à página: o conteúdo se alonga numa tira contínua que sai da página e entra no buraco
 // negro, a "espaguetificação" de quem cai num, sumindo aos poucos até cruzar a borda da sombra (o
-// horizonte). Um bloco alto (um cartão de projeto) não espera chegar inteiro: só o trecho dele que
-// já está na faixa é puxado, e o resto continua no lugar até a sua vez.
+// horizonte).
+// Um bloco alto (um cartão de projeto) não espera chegar inteiro: só o trecho dele que já está na
+// faixa é puxado, e o resto continua no lugar até a sua vez.
 //
 // Uma transformação CSS deforma o elemento inteiro de um jeito só, então o trecho na faixa é
 // desenhado por cópias do bloco, uma para cada fatia fina dele, cada uma recortada na sua fatia e
@@ -55,7 +56,14 @@ export interface Faixa {
 
 /** O que a absorção precisa saber da tela. Nada disso muda com a rolagem, só com o tamanho da janela. */
 export interface Cena {
+  /** O buraco negro com a página no topo. */
   alvo: Alvo
+  /**
+   * O caminho dele ao longo da página, até a rolagem `ate`: pelo alto da tela, em linha reta e no
+   * mesmo ritmo, `dx` px para o lado, crescendo até `zoom` vezes o tamanho, com o ponto mais baixo,
+   * `base` raios da sombra abaixo do centro, sempre na mesma altura (veja alvoEm).
+   */
+  caminho: { dx: number; ate: number; zoom: number; base: number }
   faixa: Faixa
   /** A força do puxão com a página rolada até `s`: de 0 (nada é puxado, como no topo da página) a 1. */
   forca(s: number): number
@@ -240,6 +248,18 @@ interface Linha {
 }
 
 const SELETOR = 'main [data-reveal], main .enter'
+
+/**
+ * Onde o buraco negro está, e de que tamanho, com a página rolada até `s`. Ao longo dela ele anda
+ * pelo alto da tela e cresce, cada vez mais perto, sempre no mesmo ritmo, com o ponto mais baixo
+ * dele parado na mesma altura: o resto dele cresce para cima e para os lados.
+ */
+export function alvoEm({ alvo, caminho }: Cena, s: number): Alvo {
+  const t = Math.min(1, Math.max(0, s / Math.max(1, caminho.ate)))
+  const raio = alvo.raio * caminho.zoom ** t
+  const fundo = alvo.y + caminho.base * alvo.raio
+  return { x: alvo.x + caminho.dx * t, y: fundo - caminho.base * raio, raio }
+}
 
 /** O nó é um bloco de conteúdo, ou tem blocos dentro? (Para saber se uma mudança na página pede novas medidas.) */
 export function temBlocos(no: Node): boolean {
@@ -775,8 +795,9 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   let camada: HTMLDivElement | null = null
   /** A animação que mostra a camada a partir do primeiro pixel de rolagem (veja aparecerAoRolar). */
   let entrada: Animation | null = null
-  /** A força com que a máscara da camada foi feita (ela só muda no começo da página). */
+  /** A força e o lugar e o tamanho do buraco negro com que a máscara da camada foi feita. */
   let forcaDaMascara = Number.NaN
+  let furoDaMascara = ''
   /** Algo mudou dentro de um bloco (o React redesenhou): as cópias dele precisam ser refeitas. */
   let sujo = false
   /** Faltou tempo, no último quadro, para preparar todas as cópias da folga. */
@@ -864,17 +885,24 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
 
   /**
    * A máscara da camada: a sombra apaga o que entra nela, e antes disso o conteúdo vai esmaecendo
-   * pelo caminho. Depende só da cena e da força, que muda só no começo da página (em degraus, para
-   * a máscara não mudar a cada quadro).
+   * pelo caminho. Depende da cena, da força, que muda só no começo da página (em degraus, para a
+   * máscara não mudar a cada quadro), e de onde o buraco negro está e de que tamanho (o furo anda e
+   * cresce com ele, em pixels inteiros da tela).
    */
   function ajustarMascara(rolagem: number) {
     if (!camada || !cena) return
     const forca = Math.round(cena.forca(rolagem) * 20) / 20
-    if (forca === forcaDaMascara) return
+    const alvo = alvoEm(cena, rolagem)
+    const x = alinhar(alvo.x)
+    const y = alinhar(alvo.y)
+    const raio = alinhar(alvo.raio)
+    const furo = `${x} ${y} ${raio}`
+    if (forca === forcaDaMascara && furo === furoDaMascara) return
     forcaDaMascara = forca
-    const { alvo, faixa } = cena
-    const furo = `radial-gradient(circle at ${alvo.x}px ${alvo.y}px, transparent ${alvo.raio}px, #000 ${alvo.raio * HORIZONTE + 1}px)`
-    const mascara = `${furo}, ${esmaecimento(faixa, alvo.y - faixa.frente, forca)}`
+    furoDaMascara = furo
+    const { faixa } = cena
+    const sombra = `radial-gradient(circle at ${x}px ${y}px, transparent ${raio}px, #000 ${raio * HORIZONTE + 1}px)`
+    const mascara = `${sombra}, ${esmaecimento(faixa, alvo.y - faixa.frente, forca)}`
     camada.style.maskImage = mascara
     camada.style.webkitMaskImage = mascara
     // a máscara é o que as duas deixam passar
@@ -882,9 +910,21 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     camada.style.maskComposite = 'intersect'
   }
 
-  /** Para onde vai a linha do bloco que estaria na altura `y` da tela, com a força `forca`. */
-  function linhaEm(bloco: Bloco, y: number, forca: number): Linha {
-    const { alvo, faixa } = cena!
+  /**
+   * Onde o bloco mira: o buraco negro anda com a rolagem (veja alvoEm), e o bloco vai até onde ele
+   * está quando o meio do bloco passa pelo meio da faixa. Todas as fatias do bloco miram o mesmo
+   * ponto: as bordas que elas dividem coincidem, e as que cruzam a faixa com a força inteira dividem
+   * os mesmos quadros-chave. No começo e no fim da passagem de um bloco alto o buraco negro já está
+   * um pouco ao lado desse ponto, mas a tira chega a ele por dentro da sombra, onde a máscara a apaga.
+   */
+  function alvoDoBloco(bloco: Bloco): Alvo {
+    const { faixa } = cena!
+    return alvoEm(cena!, bloco.y + bloco.altura / 2 - (faixa.frente + faixa.inicio) / 2)
+  }
+
+  /** Para onde vai a linha do bloco que estaria na altura `y` da tela, com a força `forca`, rumo a `alvo`. */
+  function linhaEm(bloco: Bloco, y: number, forca: number, alvo: Alvo): Linha {
+    const { faixa } = cena!
     const banda = Math.max(1, faixa.inicio - faixa.frente)
     // A linha que chega ao fim da faixa desce até a altura do buraco negro. As de baixo descem
     // menos, na proporção do progresso, e nenhuma passa da que vem antes dela.
@@ -948,12 +988,13 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
 
     const passos = n1 - n0
     const quadros: Keyframe[] = []
+    const alvo = alvoDoBloco(bloco)
     for (let i = 0; i <= passos; i++) {
       const rolagem = (n0 + i) / dpr
       const forca = comum ? 1 : cena!.forca(rolagem)
       const y = bloco.y + de - rolagem
-      const cima = linhaEm(bloco, y, forca)
-      const baixo = linhaEm(bloco, y + altura, forca)
+      const cima = linhaEm(bloco, y, forca, alvo)
+      const baixo = linhaEm(bloco, y + altura, forca, alvo)
       // as duas bordas na mesma linha não formam um trapézio (e a matriz não teria inversa)
       if (baixo.y - cima.y < 0.01) baixo.y = cima.y + 0.01
       quadros.push({ offset: i / passos, easing: 'step-end', transform: trapezio(bloco.largura, altura, cima, baixo) })
@@ -1555,8 +1596,24 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
         nova.alvo.raio === cena.alvo.raio &&
         nova.faixa.frente === cena.faixa.frente &&
         nova.faixa.inicio === cena.faixa.inicio
+      const mesmoCaminho =
+        cena !== null &&
+        nova.caminho.dx === cena.caminho.dx &&
+        nova.caminho.ate === cena.caminho.ate &&
+        nova.caminho.zoom === cena.caminho.zoom &&
+        nova.caminho.base === cena.caminho.base
       cena = nova
-      if (igual) return
+      if (igual && mesmoCaminho) return
+      furoDaMascara = ''
+      if (igual) {
+        // Só o caminho mudou (a página mudou de altura): as cópias continuam, com trajetos novos.
+        for (const bloco of blocos) {
+          bloco.trajetos.clear()
+          for (const tira of [...bloco.tiras, ...bloco.frentes]) if (tira.fatia >= 0) animar(bloco, tira)
+        }
+        animarPendentes()
+        return
+      }
       // tudo muda: as cópias são refeitas no próximo preparar (as que podem aparecer, na hora)
       for (const bloco of blocos) {
         devolver(bloco)

@@ -29,7 +29,9 @@ export function Hero() {
           style={step(1)}
         >
           <div className="crop-marks">
-            <div className="aspect-square overflow-hidden rounded-2xl border border-line bg-surface md:aspect-[4/5] md:rounded-[1.25rem]">
+            <div
+              className="aspect-square overflow-hidden rounded-2xl border border-line bg-surface md:aspect-[4/5] md:rounded-[1.25rem]"
+            >
               <img
                 src={profile640}
                 srcSet={`${profile320} 320w, ${profile480} 480w, ${profile640} 640w, ${profile960} 960w`}
@@ -43,19 +45,26 @@ export function Hero() {
               />
             </div>
           </div>
-          <figcaption className="label mt-4 hidden flex-wrap justify-between gap-x-4 gap-y-1 whitespace-nowrap text-subtle md:flex">
+          <figcaption
+            className="label mt-4 hidden flex-wrap justify-between gap-x-4 gap-y-1 whitespace-nowrap text-subtle md:flex"
+          >
             <span>{t(profile.location)}</span>
             <span>{t(profile.coordinates)}</span>
           </figcaption>
         </figure>
 
         <div className="md:col-span-8 md:col-start-1 md:row-start-1">
-          <p className="enter label flex items-center gap-2.5 text-muted" style={step(0)}>
+          <p
+            className="enter label flex items-center gap-2.5 text-muted"
+            style={step(0)}
+          >
             <span className="status-dot" aria-hidden="true" />
             {t(profile.status)}
           </p>
 
-          <h1 className="mt-6 text-[clamp(2.5rem,11.5vw,4.5rem)] font-medium leading-[0.95] tracking-[-0.045em] md:text-[clamp(3.25rem,7.2vw,5.75rem)]">
+          <h1
+            className="mt-6 text-[clamp(2.5rem,11.5vw,4.5rem)] font-medium leading-[0.95] tracking-[-0.045em] md:text-[clamp(3.25rem,7.2vw,5.75rem)]"
+          >
             <span className="enter block" style={step(1)}>
               {profile.firstName}
             </span>{' '}
@@ -71,7 +80,10 @@ export function Hero() {
             <span className="text-fg">{t(profile.role)}.</span> {t(intro)}
           </p>
 
-          <div className="enter print-hidden mt-10 flex flex-wrap gap-3" style={step(4)}>
+          <div
+            className="enter print-hidden mt-10 flex flex-wrap gap-3"
+            style={step(4)}
+          >
             <a href="#projetos" className={botaoPrimario}>
               {t(ui.hero.verProjetos)}
               <ArrowDown className="size-4" />

@@ -193,6 +193,13 @@ void main() {
     float ci = cos(uInclinacao);
     vec4 disco = vec4(0.0);
     float nevoa = 0.0;
+    // A parte de baixo do disco só aparece por baixo da de cima. A luz dela chega dando a volta por
+    // baixo do buraco negro (o raio cruza o plano do disco de novo, já do outro lado) e forma o arco
+    // que contorna a sombra por baixo; pelas laterais, ela continuaria subindo, rente à sombra, acima
+    // da faixa da frente. Esses raios, os de acima da faixa, cruzam o plano pela primeira vez por
+    // dentro do disco, no vão entre ele e a sombra: deles, só vale o primeiro cruzamento.
+    int cruzamentos = 0;
+    bool porDentro = false;
 
     // Só vale traçar o raio onde o disco ou suas imagens podem aparecer.
     if (bl < 6.5 || (abs(b.x) < R_FORA + 1.0 && abs(b.y) < R_FORA * si + 1.3)) {
@@ -212,7 +219,10 @@ void main() {
         if (pos.y * proximo.y < 0.0) {   // cruzou o plano do disco
           vec3 q = mix(pos, proximo, pos.y / (pos.y - proximo.y));
           float rq = length(q.xz);
-          float a = densidade(rq) * 0.97;
+          cruzamentos++;
+          // por dentro da borda de dentro do disco, até onde ele fica opaco
+          if (cruzamentos == 1) porDentro = rq < R_DENTRO * 1.04;
+          float a = porDentro && cruzamentos > 1 ? 0.0 : densidade(rq) * 0.97;
           if (a > 0.0) {
             float t = emissao(q, rq, atan(q.z, q.x), normalize(vel)) * alimento;
             disco = sobre(disco, uEscuro > 0.5 ? luz(t, a) : nanquim(t, a, sombra));

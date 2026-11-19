@@ -40,7 +40,10 @@
 // --fases (constante, rajadas, mergulho, parado, barra, semBarra, logo), --velocidade (px/s da fase constante), --pagina
 // (caminho dentro do site, por exemplo en/), --css (regras injetadas antes da página, para comparar
 // uma mudança sem mexer no código), --raiz (a pasta de outro checkout do projeto, já com o build, para
-// comparar com uma versão anterior) e --porta.
+// comparar com uma versão anterior), --porta e --escala (a escala da tela emulada, no lugar da de cada
+// tela: com escala diferente de 1, a roda sintética chega ao JavaScript dividida pela escala, mas o
+// navegador rola a distância inteira, e uma rolagem feita pelo JavaScript, como a rolagem suave, anda
+// menos que a do navegador com o mesmo gesto).
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -97,6 +100,7 @@ function lerOpcoes(argv) {
     css: '',
     raiz,
     porta: 4321,
+    escala: 0,
   }
   for (let i = 0; i < argv.length; i++) {
     const nome = argv[i]?.replace(/^--/, '')
@@ -105,7 +109,7 @@ function lerOpcoes(argv) {
     i++
     if (nome === 'cpu') opcoes.cpu = valor.split(',').map(Number)
     else if (nome === 'telas' || nome === 'fases') opcoes[nome] = valor.split(',').filter(Boolean)
-    else if (nome === 'velocidade' || nome === 'porta') opcoes[nome] = Number(valor)
+    else if (nome === 'velocidade' || nome === 'porta' || nome === 'escala') opcoes[nome] = Number(valor)
     else opcoes[nome] = valor
   }
   return opcoes
@@ -326,7 +330,9 @@ async function irPara(pagina, alvo) {
 }
 
 /**
- * Rola com a roda até `ate`, em gestos de `passo` px a `velocidade` px/s, até o prazo.
+ * Rola com a roda até `ate`, em gestos de `passo` px a `velocidade` px/s, até o prazo. Com a rolagem
+ * suave (veja src/lib/buracoNegro/rolagemSuave.ts), a página continua andando depois do gesto: antes
+ * de outro, espera ela parar, senão o destino passaria do ponto.
  */
 async function rolarAte(cdp, pagina, centro, { ate, velocidade, passo = 1200, prazo }) {
   const comeco = Date.now()
@@ -334,11 +340,23 @@ async function rolarAte(cdp, pagina, centro, { ate, velocidade, passo = 1200, pr
   while (s < ate - 2 && Date.now() - comeco < prazo) {
     const distancia = Math.min(passo, ate - s)
     await cdp.send('Input.synthesizeScrollGesture', { ...centro, xDistance: 0, yDistance: -distancia, speed: velocidade, gestureSourceType: 'mouse', preventFling: true })
-    const depois = await pagina.evaluate(() => window.scrollY)
+    const depois = await esperarParar(pagina)
     if (depois <= s + 1) await espera(100)
     s = depois
   }
   return s
+}
+
+/** Espera a página parar de rolar (até uns 6 s) e devolve onde ela parou. */
+async function esperarParar(pagina) {
+  let antes = await pagina.evaluate(() => window.scrollY)
+  for (let i = 0; i < 60; i++) {
+    await espera(100)
+    const agora = await pagina.evaluate(() => window.scrollY)
+    if (Math.abs(agora - antes) < 1) return agora
+    antes = agora
+  }
+  return antes
 }
 
 const FASES = {
@@ -575,6 +593,7 @@ function imprimir(resultados) {
 
 async function principal() {
   const opcoes = lerOpcoes(process.argv.slice(2))
+  if (opcoes.escala > 0) for (const medidas of Object.values(TELAS)) medidas.deviceScaleFactor = opcoes.escala
   if (!existsSync(path.join(opcoes.raiz, 'dist/index.html'))) {
     console.error(`Não há build em ${path.join(opcoes.raiz, 'dist')}. Rode \`npm run build\` antes.`)
     process.exit(1)

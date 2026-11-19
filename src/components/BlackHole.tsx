@@ -6,23 +6,24 @@ import { useEffect, useRef, useState } from 'react'
  * cuspindo de volta o que desce. Também desenha a malha da apresentação, curvada pela gravidade.
  *
  * O código do efeito só é baixado com a página já pronta e só entra depois da animação de
- * entrada. Sem WebGL 2 com aceleração de hardware, fica a malha em CSS (.hero-grid) e nada é
- * absorvido.
+ * entrada. O canvas é criado por ele, dentro deste recipiente: quem desenha nele é um worker, que
+ * fica com o canvas (veja lib/buracoNegro/ponte.ts). Sem WebGL 2 com aceleração de hardware, fica
+ * a malha em CSS (.hero-grid) e nada é absorvido.
  */
 export function BlackHole() {
-  const ref = useRef<HTMLCanvasElement>(null)
+  const ref = useRef<HTMLDivElement>(null)
   const [ativo, setAtivo] = useState(false)
 
   useEffect(() => {
-    const canvas = ref.current
-    if (!canvas) return
+    const recipiente = ref.current
+    if (!recipiente) return
 
     let desligar: (() => void) | undefined
     let cancelado = false
 
     const iniciar = () => {
       void import('../lib/buracoNegro/index.ts').then(({ iniciarBuracoNegro }) => {
-        if (!cancelado) desligar = iniciarBuracoNegro(canvas, setAtivo)
+        if (!cancelado) desligar = iniciarBuracoNegro(recipiente, setAtivo)
       })
     }
 
@@ -42,12 +43,5 @@ export function BlackHole() {
     document.documentElement.toggleAttribute('data-buraco-negro', ativo)
   }, [ativo])
 
-  return (
-    <canvas
-      ref={ref}
-      className="buraco-negro print-hidden"
-      data-ativo={ativo ? '' : undefined}
-      aria-hidden="true"
-    />
-  )
+  return <div ref={ref} className="buraco-negro print-hidden" data-ativo={ativo ? '' : undefined} aria-hidden="true" />
 }

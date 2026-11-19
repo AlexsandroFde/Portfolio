@@ -1,59 +1,11 @@
-import { alvoEm, criarAbsorcao, temBlocos, type Alvo, type Cena as CenaDaAbsorcao, type Faixa, type Folga } from './absorcao.ts'
-import { progressoDoMergulho, quandoVoltar } from './mergulho.ts'
-import { criarRenderizador, type Renderizador, type Rgb, type Rgba } from './renderizador.ts'
+import { criarAbsorcao, temBlocos, type Cena as CenaDaAbsorcao, type Faixa, type Folga } from './absorcao.ts'
+import { definirQueda, quandoMedirMergulho, quandoVoltar, trechoDoMergulho, type Queda } from './mergulho.ts'
+import type { Cores, DoMotor } from './motor.ts'
+import { criarPonte } from './ponte.ts'
+import type { Rgb, Rgba } from './renderizador.ts'
 import { aparecerAoRolar, criarRelogio } from './rolagem.ts'
+import { caminhoDaPagina, raioNoCanto, suave, type Palco } from './trajeto.ts'
 
-/**
- * No topo da página, o buraco negro fica no canto de cima à direita, logo abaixo do cabeçalho, com o
- * centro um pouco para dentro da tela (em frações do raio da sombra): aparece cerca de um terço
- * dele, e o resto do site fica livre. Ao longo da página ele anda pelo alto da tela até o meio dela
- * e cresce (veja cenaDaAbsorcao), e o mergulho, depois do fim, continua dali.
- */
-const CANTO = { x: 0.45, y: 0.45 }
-/**
- * Quantas vezes o buraco negro cresce do topo ao fim da página, cada vez mais perto, com a parte de
- * baixo parada na mesma altura (veja alvoEm, em absorcao.ts).
- */
-const ZOOM_PAGINA = 3
-/**
- * Ângulo da câmera acima do plano do disco, e a rotação da imagem na tela. Quase de lado, como em
- * Interstellar: o disco vira uma faixa fina na altura do centro, cruzando a frente da sombra, e a
- * luz da parte de trás dele dá a volta na sombra por cima e por baixo, em arcos. A faixa do disco
- * fica na altura da faixa de absorção, e o conteúdo vai até ela de lado, sem descer pela página.
- */
-const INCLINACAO = (18 * Math.PI) / 180
-const GIRO = 0
-/**
- * O ponto mais baixo do buraco negro, em raios da sombra abaixo do centro: a borda de baixo do arco
- * de luz que contorna a sombra por baixo, medida no desenho com esta inclinação. É ele que fica
- * parado na mesma altura enquanto o buraco negro cresce ao longo da página (veja alvoEm).
- */
-const BASE = 1.5
-/** Quanto a câmera ainda sobe do começo ao fim da página (rad): o disco se abre um pouco. */
-const SUBIDA = 0.02
-/**
- * Sentido da rotação do disco: o lado esquerdo vem na direção da câmera e brilha mais. No canto da
- * tela é a ponta que fica à vista.
- */
-const SENTIDO = -1
-/** A malha sobe a pouco mais da metade da velocidade da página: fica entre o conteúdo e o buraco negro. */
-const PARALAXE_MALHA = 0.55
-/**
- * Por quanto tempo (ms) depois de cada passo a página ainda conta como rolando. Uma rolagem bem
- * lenta (o botão do meio, quase parado) não muda a posição a cada quadro, e a roda do mouse rola
- * aos trancos: nos dois casos, entre um passo e outro a rolagem continua em andamento.
- */
-const PAUSA_DA_ROLAGEM = 250
-/**
- * Em quanto tempo (s) a atividade acompanha a rolagem, subindo e descendo. Devagar de propósito: a
- * roda do mouse rola aos trancos, e o disco não pode pulsar a cada um deles.
- */
-const ATIVIDADE = { sobe: 0.45, desce: 1.1 }
-/**
- * Duração do ciclo de rotação do disco, em unidades de fase (a constante VOLTAS do shader vezes
- * 2π). A fase anda em laço dentro do ciclo: assim nunca cresce a ponto de perder precisão.
- */
-const CICLO = 4000 * 2 * Math.PI
 /**
  * Com que antecedência (s) as cópias da absorção ficam presas à rolagem, prontas para entrar na
  * faixa. Não basta o quadro ou dois que o JavaScript fica para trás da rolagem: depois de presa, a
@@ -72,47 +24,23 @@ const VELOCIDADE_MAXIMA = 6000
 const AQUECER = [0.75, 2.5, 1.5] as const
 /**
  * Quanto tempo (ms) cada quadro gasta preparando cópias que ainda não vão aparecer. Rolando, pouco:
- * cada cópia custa outro tanto depois, em estilo e pintura, e com o JavaScript ocupado o buraco
- * negro e os vídeos andam aos trancos (a rolagem e a absorção não: correm fora dele). A maior parte
+ * cada cópia custa outro tanto depois, em estilo e pintura, e com o JavaScript ocupado os vídeos
+ * andam aos trancos (a rolagem, a absorção e o buraco negro não: correm fora dele). A maior parte
  * fica para quando a página está parada, que é quando se lê.
  */
 const ORCAMENTO = { rolando: 0.5, parada: 8 }
 /**
- * O mergulho, depois do fim da página (veja mergulho.ts), em frações do trecho dele: o buraco negro
- * desce do alto até o meio da tela em `chegada` e cresce cada vez mais rápido (o progresso elevado a
- * `aceleracao`) até a sombra cobrir a tela toda em `cobre`. Enquanto ele cresce, o meio da tela
- * passa a mirar `mira` raios acima do centro dele: a faixa do disco que cruza a sombra sai de vista
- * por baixo, e só sobra o preto (veja raioQueCobre). `folga` é a margem no tamanho final.
+ * A resolução do mapa dos raios (texels por rs, veja geodesicas.frag) em relação à imagem do buraco
+ * negro no canto, a menor que ele tem na página, e os limites dela. O mapa é traçado uma vez e serve
+ * a todos os tamanhos: o que ele guarda (o gás do disco, a névoa) é macio, e os contornos finos (a
+ * sombra, o anel de luz) são desenhados na resolução da tela.
  */
-const MERGULHO = { chegada: 0.45, aceleracao: 1.4, cobre: 0.92, mira: 0.38, folga: 1.08 }
+const MAPA = { porPixel: 1.4, minima: 24, maxima: 48 }
 /**
- * Onde passa a borda de cima da faixa do disco que cruza a frente da sombra, abaixo do centro, em
- * raios da sombra: a borda de dentro do disco (3 raios de Schwarzschild; a sombra tem 3√3/2), vista
- * pela câmera mais baixa que o ponteiro deixa.
+ * Quanto esperar (ms), na volta ao topo, o motor avisar que o túnel já cobre a tela (veja Queda, em
+ * mergulho.ts): sem o aviso, a janela se abre no véu da página.
  */
-const FAIXA_DO_DISCO = (3 / 2.598) * Math.sin(INCLINACAO - 0.04)
-/**
- * O raio da sombra com que ela cobre a tela inteira (meia largura `w` e meia altura `h`, px), com o
- * meio da tela mirando MERGULHO.mira raios acima do centro dela: os cantos de cima ficam dentro da
- * sombra, e a borda de baixo, acima da faixa do disco.
- */
-function raioQueCobre(w: number, h: number): number {
-  const c = MERGULHO.mira
-  const pelaBorda = h / (c + FAIXA_DO_DISCO)
-  const pelosCantos = (c * h + Math.sqrt(c * c * h * h + (1 - c * c) * (w * w + h * h))) / (1 - c * c)
-  return MERGULHO.folga * Math.max(pelaBorda, pelosCantos)
-}
-/**
- * A resolução do canvas no mergulho (pixels por px CSS). Com o buraco negro cobrindo a tela, cada
- * pixel traça um raio de luz inteiro, umas vinte vezes o trabalho do canto; e lá o desenho é feito
- * de formas grandes e borradas, que não perdem nada com menos pixels. A resolução cai quando o raio
- * da sombra passa de `entra` meias diagonais da tela e só volta abaixo de `sai` (para não trocar a
- * cada pixel de rolagem). Ao longo da página ele não chega a tanto.
- */
-const RESOLUCAO_DO_MERGULHO = [
-  { entra: 0.45, sai: 0.38, escala: 1 },
-  { entra: 0.9, sai: 0.78, escala: 0.6 },
-] as const
+const ESPERA_DO_TUNEL = 500
 
 // Converte qualquer cor CSS em RGBA de 0 a 1 (o canvas 2D normaliza o texto da cor).
 const sonda = document.createElement('canvas').getContext('2d')
@@ -128,24 +56,6 @@ function paraRgba(valor: string): Rgba {
   }
   const [r = 0, g = 0, b = 0, a = 1] = (normal.match(/[\d.]+/g) ?? []).map(Number)
   return [r / 255, g / 255, b / 255, a]
-}
-
-interface Cores {
-  linha: Rgba
-  tinta: Rgb
-  texto: Rgb
-  fundo: Rgb
-  escuro: boolean
-}
-
-/** O buraco negro neste quadro, e de que ângulo ele é visto. */
-interface Cena extends Alvo {
-  /** Ângulo da câmera acima do plano do disco (rad). */
-  inclinacao: number
-  /** Rotação da imagem na tela (rad). */
-  giro: number
-  /** Quanto o buraco negro já cresceu no mergulho (1 fora dele). */
-  zoom: number
 }
 
 /** Cores do tema atual, lidas das variáveis do index.css. */
@@ -183,50 +93,49 @@ function aposEntrada(secao: HTMLElement): Promise<unknown> {
   ])
 }
 
-const suave = (de: number, ate: number, v: number) => {
-  const t = Math.min(1, Math.max(0, (v - de) / (ate - de)))
-  return t * t * (3 - 2 * t)
-}
-
 /**
  * A cortina: cobre a faixa do alto da tela, onde o conteúdo é absorvido, com o que fica atrás dele
  * (o fundo da página e, copiado do canvas a cada desenho, o buraco negro e a malha). Por cima dela
  * só passam as cópias que a absorção desenha (e os títulos fixos das seções): o original continua
  * no lugar, sem máscara nem nada que mude com a rolagem, e some atrás dela exatamente na beira da
- * faixa, que é fixa na tela. Fica entre a página e a camada das cópias.
+ * faixa, que é fixa na tela. Fica entre a página e a camada das cópias. Quem desenha nela, fundo
+ * incluído, é o motor: com a altura da cortina em fração de px CSS, um fundo em CSS passava um
+ * quarto de pixel da borda dela e aparecia como um fio sobre o buraco negro.
  */
 function criarCortina(): HTMLCanvasElement {
   const cortina = document.createElement('canvas')
   cortina.className = 'print-hidden'
   cortina.setAttribute('aria-hidden', 'true')
-  cortina.style.cssText =
-    'position:fixed;left:0;top:0;width:100%;height:0;z-index:1;pointer-events:none;background-color:var(--bg);display:none'
+  cortina.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:0;z-index:1;pointer-events:none;display:none'
   document.body.append(cortina)
   return cortina
 }
 
 /**
- * Liga o buraco negro no canvas do fundo da página. Ele fica no canto de cima à direita, como um
- * objeto muito distante, absorvendo o conteúdo que sobe até o alto da tela e cuspindo de volta o
- * que desce (ver absorcao.ts).
+ * Liga o buraco negro no fundo da página, num canvas criado dentro de `recipiente`. Ele fica no
+ * canto de cima à direita, como um objeto muito distante, absorvendo o conteúdo que sobe até o alto
+ * da tela e cuspindo de volta o que desce (ver absorcao.ts).
+ *
+ * Quem o desenha é o motor (motor.ts), num worker, fora da thread principal (veja ponte.ts): daqui
+ * vão para ele as medidas da página, a rolagem a cada quadro, o ponteiro e o tema. A absorção, que
+ * mexe na página, fica aqui.
  *
  * `aoAtivar` avisa quando o primeiro quadro foi desenhado, e quando o efeito deixa de funcionar.
  * Devolve a função que desliga tudo.
  */
-export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: boolean) => void): () => void {
+export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: boolean) => void): () => void {
   const hero = document.getElementById('topo')
   if (!hero) return () => {}
-
-  let renderizador: Renderizador | null = criarRenderizador(canvas)
-  if (!renderizador) return () => {}
 
   const raiz = document.documentElement
   const movimentoReduzido = window.matchMedia('(prefers-reduced-motion: reduce)')
   const ponteiroFino = window.matchMedia('(hover: hover) and (pointer: fine)')
   const relogio = criarRelogio()
   const absorcao = criarAbsorcao(relogio)
+  const canvas = document.createElement('canvas')
+  canvas.style.cssText = 'display:block;width:100%;height:100%'
+  recipiente.append(canvas)
   const cortina = criarCortina()
-  const pincel = cortina.getContext('2d')
   /** A cortina aparece junto com a camada das cópias, ao primeiro pixel de rolagem. */
   let entradaDaCortina: Animation | null = null
 
@@ -234,54 +143,48 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
   let alturaHero = 0
   let topo = 0                         // altura do cabeçalho fixo
   let largura = 0                      // tamanho do canvas
-  let altura = 0
   let fimDoCaminho = 1                 // rolagem em que o conteúdo acabou e começa o mergulho
   let celula = 64
-  let cores = lerCores()
 
-  // Qualidade: resolução da tela (até 2x). Se o aparelho não der conta, cai para 1x e, se ainda
-  // assim sofrer, o buraco negro fica parado no alto da página (como para quem prefere menos movimento).
-  let escalaLimite = 2
-  let escala = 1
-  /** Quantos degraus de RESOLUCAO_DO_MERGULHO a resolução desceu (0 fora do mergulho). */
-  let degrau = 0
+  // Se a thread principal não der conta da absorção (ou o motor, do desenho), o buraco negro fica
+  // parado no alto da página, como para quem prefere menos movimento.
   let lento = false
-  let preso = false   // canvas preso ao topo da página, sem animação
+  let preso = false   // buraco negro preso ao topo da página, sem animação nem absorção
   let comecou = false
-  let ativo = false
+  /** O motor traçou o mapa dos raios e pode desenhar. */
+  let motorPronto = false
   let desligado = false
 
   let pedido = 0
   let anterior = 0
-  let ultimoDesenho = 0
-  let tempo = 0
-  let fase = 0
   let rolagemAnterior = window.scrollY
   /** Quão rápido a página está rolando (px/s), suavizado: decide com que antecedência preparar as cópias. */
   let velocidade = 0
   // as medidas mudaram: a absorção precisa ser refeita mesmo sem rolagem
   let reabsorver = true
-  // De -1 a 1: positiva enquanto a página rola para baixo (absorve), negativa para cima (cospe).
-  // Segue o sentido da rolagem, e não a velocidade (veja quadro).
-  let atividade = 0
   let sentido = 0          // da última rolagem: 1 para baixo, -1 para cima
-  let ultimaRolagem = -Infinity
-  let ultimoPonteiro = -Infinity
-  // desempenho, medido em janelas de ~1 s de quadros (os intervalos entre eles, em s)
+  // desempenho da thread principal, medido em janelas de ~1 s de quadros (os intervalos entre eles, em s)
   let janelaTempo = 0
   const janela: number[] = []
   let janelasLentas = 0
   let ignorar = 0
 
-  // Paralaxe leve com o mouse: a câmera acompanha o ponteiro.
-  const alvo = { x: 0, y: 0 }
-  const atual = { x: 0, y: 0 }
-
   const parado = () => lento || movimentoReduzido.matches
-  const deveAnimar = () => comecou && !preso && !document.hidden && !desligado
+  const deveAnimar = () => comecou && motorPronto && !preso && !document.hidden && !desligado
 
-  /** Raio da sombra: grande o bastante para a parte que fica à vista não sumir. */
-  const raioNoCanto = () => Math.min(92, Math.max(46, Math.max(largura, window.innerHeight) * 0.058))
+  const ponte = criarPonte(
+    canvas,
+    cortina,
+    {
+      cores: lerCores(),
+      // a imagem no canto é a menor que o buraco negro tem: o mapa fica um pouco mais fino que ela
+      densidade: Math.min(
+        MAPA.maxima,
+        Math.max(MAPA.minima, Math.round((MAPA.porPixel * medirPalco().raioNoCanto * (window.devicePixelRatio || 1)) / 2.598)),
+      ),
+    },
+    (mensagem) => aoMotor(mensagem),
+  )
 
   /**
    * A faixa da tela onde o conteúdo é absorvido: uma tira fina no alto da tela, colada no
@@ -297,35 +200,40 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     }
   }
 
-  /** O buraco negro na tela para a rolagem `s`: onde está, de que tamanho e de que ângulo é visto. */
-  function cena(s: number): Cena {
-    const rolagem = preso ? 0 : s
-    // ao longo da página, pelo alto da tela (o mesmo caminho que a absorção segue)
-    let { x, y, raio } = alvoEm(cenaDaAbsorcao(), rolagem)
-    let zoom = 1
-    // Depois do fim da página, ele desce até o meio da tela e cresce até a sombra cobri-la toda.
-    const p = preso ? 0 : progressoDoMergulho(s)
-    if (p > 0) {
-      const meioX = largura / 2
-      const meioY = window.innerHeight / 2
-      zoom = Math.max(1, raioQueCobre(meioX, meioY) / raio) ** (Math.min(1, p / MERGULHO.cobre) ** MERGULHO.aceleracao)
-      raio *= zoom
-      const ida = suave(0, MERGULHO.chegada, p)
-      const mira = MERGULHO.mira * suave(MERGULHO.chegada, MERGULHO.cobre, p)
-      x += (meioX - x) * ida
-      y += (meioY + mira * raio - y) * ida
+  /** As medidas de que o trajeto do buraco negro depende (veja trajeto.ts), e o raio dele no canto. */
+  function medirPalco(): Palco & { raioNoCanto: number } {
+    const palco: Palco = {
+      largura: largura || recipiente.clientWidth || window.innerWidth,
+      alturaTela: window.innerHeight,
+      topo,
+      fimDoCaminho,
+      alturaHero,
+      celula,
+      mergulho: trechoDoMergulho(),
+      rolagemMaxima: Math.max(0, raiz.scrollHeight - window.innerHeight),
     }
-    // a câmera sobe um pouco ao longo da página (até o fim dela, onde começa o mergulho)
-    const subida = Math.min(1, rolagem / fimDoCaminho)
-    return {
-      x,
-      y,
-      raio,
-      // e acompanha de leve o ponteiro
-      inclinacao: INCLINACAO + subida * SUBIDA - atual.y * 0.07,
-      giro: GIRO + atual.x * 0.05,
-      zoom,
-    }
+    return { ...palco, raioNoCanto: raioNoCanto(palco) }
+  }
+
+  /**
+   * A queda e o túnel da volta ao topo (veja mergulho.ts) ficam com o motor enquanto ele anima o
+   * buraco negro: a entrada é marcada nele, e a promessa se cumpre quando ele avisa que o túnel já
+   * cobre a tela.
+   */
+  let aoCobrir: ((cobriu: boolean) => void) | null = null
+  const queda: Queda = {
+    entrar(inicio, duracao) {
+      aoCobrir?.(false)
+      return new Promise((resolver) => {
+        aoCobrir = resolver
+        ponte.enviar({ tipo: 'entrada', inicio: performance.timeOrigin + inicio, duracao })
+        window.setTimeout(() => {
+          if (aoCobrir !== resolver) return
+          aoCobrir = null
+          resolver(false)
+        }, ESPERA_DO_TUNEL)
+      })
+    },
   }
 
   /** A absorção não age: sem cópias e sem cortina (a página fica como sem o efeito). */
@@ -338,8 +246,11 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
 
   function aplicarModo() {
     preso = parado()
-    canvas.toggleAttribute('data-preso', preso)
-    canvas.style.height = preso ? `${alturaHero}px` : ''
+    recipiente.toggleAttribute('data-preso', preso)
+    recipiente.style.height = preso ? `${alturaHero}px` : ''
+    ponte.enviar({ tipo: 'modo', preso })
+    // parado, o buraco negro não mergulha: a volta ao topo fica com o véu da página
+    definirQueda(preso ? null : queda)
     if (preso) desligarAbsorcao()
     else {
       // invisível com a página no topo desde já, antes de ela aparecer
@@ -351,80 +262,18 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
   }
 
   function ajustarTamanho() {
-    largura = canvas.clientWidth
-    altura = canvas.clientHeight
-    escala = Math.min(window.devicePixelRatio || 1, escalaLimite, RESOLUCAO_DO_MERGULHO[degrau - 1]?.escala ?? Infinity)
-    const w = Math.max(1, Math.round(largura * escala))
-    const h = Math.max(1, Math.round(altura * escala))
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w
-      canvas.height = h
-    }
-    // A cortina tem a resolução do canvas e a altura da faixa menos um pixel da tela. Nesse último
-    // pixel, logo acima da beira, a máscara das cópias já vai sumindo (a beira dela não é um corte
-    // exato); com a cortina ali, ele aparecia como um fio claro sobre o conteúdo. Sem ela, o que
-    // aparece por baixo da cópia é o próprio original, no mesmo lugar.
-    const alturaDaCortina = faixa().inicio - 1 / (window.devicePixelRatio || 1)
-    const hc = Math.max(1, Math.min(h, Math.round(alturaDaCortina * escala)))
-    if (cortina.width !== w || cortina.height !== hc) {
-      cortina.width = w
-      cortina.height = hc
-    }
+    largura = recipiente.clientWidth
+    // A cortina tem a altura da faixa menos um pixel da tela. Nesse último pixel, logo acima da
+    // beira, a máscara das cópias já vai sumindo (a beira dela não é um corte exato); com a cortina
+    // ali, ele aparecia como um fio claro sobre o conteúdo. Sem ela, o que aparece por baixo da
+    // cópia é o próprio original, no mesmo lugar.
+    const dpr = window.devicePixelRatio || 1
+    const alturaDaCortina = faixa().inicio - 1 / dpr
     cortina.style.height = `${alturaDaCortina}px`
-  }
-
-  /**
-   * Desenha um quadro. `rolagem` é o scrollY, se ele já foi lido neste quadro: lido de novo depois
-   * de a absorção mexer na página, ele obrigaria o navegador a refazer o layout ali mesmo.
-   */
-  function desenhar(rolagem?: number): boolean {
-    if (!renderizador?.pronto() || !largura) return false
-
-    const s = preso ? 0 : (rolagem ?? window.scrollY)
-    const b = cena(s)
-    // a resolução do mergulho (mudar o tamanho do canvas apaga o desenho, refeito logo abaixo)
-    const tamanho = b.raio / Math.hypot(largura / 2, window.innerHeight / 2)
-    let novoDegrau = degrau
-    while (novoDegrau < RESOLUCAO_DO_MERGULHO.length && tamanho >= RESOLUCAO_DO_MERGULHO[novoDegrau].entra) novoDegrau++
-    while (novoDegrau > 0 && tamanho < RESOLUCAO_DO_MERGULHO[novoDegrau - 1].sai) novoDegrau--
-    if (novoDegrau !== degrau) {
-      degrau = novoDegrau
-      ajustarTamanho()
-    }
-    // No mergulho, a malha para de subir com a rolagem e cresce junto com o buraco negro, em volta dele.
-    const desloc = Math.min(s, fimDoCaminho) * PARALAXE_MALHA
-    const malhaX = (largura - celula) / 2
-    renderizador.desenhar({
-      largura,
-      altura,
-      centroX: b.x,
-      centroY: b.y,
-      raio: b.raio,
-      celula: celula * b.zoom,
-      malhaX: b.x + (malhaX - b.x) * b.zoom,
-      desloc: desloc * b.zoom + (b.zoom - 1) * b.y,
-      alturaHero,
-      ciclo: fase / CICLO,
-      tempo,
-      inclinacao: b.inclinacao,
-      giro: b.giro,
-      sentido: SENTIDO,
-      atividade,
-      ...cores,
+    ponte.enviar({
+      tipo: 'tamanho',
+      tamanho: { largura, altura: recipiente.clientHeight, cortina: alturaDaCortina, dpr },
     })
-    // O alto do quadro vai também para a cortina, no mesmo quadro (ela cobre a faixa com o que está
-    // atrás da página ali). Uma cópia de imagem na placa de vídeo: desenhar o buraco negro duas
-    // vezes custaria o traçado dos raios em dobro.
-    if (!preso && pincel) {
-      pincel.clearRect(0, 0, cortina.width, cortina.height)
-      pincel.drawImage(canvas, 0, 0, cortina.width, cortina.height, 0, 0, cortina.width, cortina.height)
-    }
-
-    if (!ativo) {
-      ativo = true
-      aoAtivar(true)
-    }
-    return true
   }
 
   /**
@@ -432,17 +281,13 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
    * puxado até o buraco negro, e quanto depende só da rolagem: no topo da página nada é puxado (a
    * apresentação aparece inteira), e a força cresce ao longo do primeiro quarto de tela. O buraco
    * negro começa no canto e, ao longo da página, anda pelo alto da tela até o meio dela, aonde chega
-   * no fim do conteúdo, quando começa o mergulho, e cresce ZOOM_PAGINA vezes, com o ponto mais baixo
-   * (veja BASE) parado logo abaixo da faixa (veja alvoEm): ele se aproxima sem descer pela página,
-   * onde ficaria atrás do texto e o conteúdo teria de descer até ele.
+   * no fim do conteúdo, quando começa o mergulho (veja trajeto.ts): ele se aproxima sem descer pela
+   * página, onde ficaria atrás do texto e o conteúdo teria de descer até ele.
    */
   function cenaDaAbsorcao(): CenaDaAbsorcao {
-    const raio = raioNoCanto()
-    const x = largura - raio * CANTO.x
     const plena = window.innerHeight * 0.25
     return {
-      alvo: { x, y: topo + raio * CANTO.y, raio },
-      caminho: { dx: largura / 2 - x, ate: fimDoCaminho, zoom: ZOOM_PAGINA, base: BASE },
+      ...caminhoDaPagina(medirPalco()),
       faixa: faixa(),
       forca: (s) => suave(0, plena, s),
       plena,
@@ -504,7 +349,7 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
   }
 
   const remedir = () => {
-    if (!comecou) return
+    if (!comecou || !motorPronto || desligado) return
     alturaHero = hero.offsetHeight
     topo = alturaDoCabecalho()
     // o fim do conteúdo: onde começa o espaço vazio depois do rodapé (sem ele, o fim da página)
@@ -516,6 +361,7 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     celula = 4 * Number.parseFloat(getComputedStyle(raiz).fontSize) || 64
     aplicarModo()
     ajustarTamanho()
+    ponte.enviar({ tipo: 'palco', palco: medirPalco() })
     if (!preso) {
       absorcao.definirCena(cenaDaAbsorcao())
       absorcao.medir()
@@ -528,18 +374,23 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
       preparar(window.scrollY)
       absorcao.acompanhar()
     }
-    // mudar o tamanho do canvas apaga o que estava desenhado: redesenha na hora
-    desenhar()
+    enviarRolagem(window.scrollY, performance.now())
     ignorar = 2
   }
 
+  /** A rolagem deste quadro da página vai para o motor (veja rolagemEm, em motor.ts). */
+  function enviarRolagem(s: number, agora: number, salto = false) {
+    ponte.enviar({ tipo: 'rolagem', s, t: performance.timeOrigin + agora, salto })
+  }
+
   /**
-   * Abaixo de 25 quadros por segundo, a qualidade desce um degrau (no segundo, o buraco negro fica
-   * parado de vez). Cada janela de ~1 s é julgada pelo quadro típico, a mediana dos intervalos, e não
-   * pela média: um engasgo isolado não é o aparelho que não dá conta. E engasgos acontecem: quando um
-   * vídeo começa a tocar ou muda de camada, o Windows às vezes leva um ou dois segundos para
-   * reorganizar a composição da tela, e pela média dois desses bastavam para parar o efeito no meio
-   * da página.
+   * Abaixo de 25 quadros por segundo na thread principal, a absorção não dá conta (as cópias chegam
+   * tarde à faixa): o buraco negro fica parado de vez. Cada janela de ~1 s é julgada pelo quadro
+   * típico, a mediana dos intervalos, e não pela média: um engasgo isolado não é o aparelho que não
+   * dá conta. E engasgos acontecem: quando um vídeo começa a tocar ou muda de camada, o Windows às
+   * vezes leva um ou dois segundos para reorganizar a composição da tela, e pela média dois desses
+   * bastavam para parar o efeito no meio da página. O desenho do buraco negro tem o seu próprio
+   * julgamento, no motor.
    */
   function avaliarDesempenho(intervalo: number) {
     // Os primeiros quadros depois de começar ou de mudar de tamanho custam mais, e um intervalo
@@ -555,24 +406,21 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
 
     // a mediana de baixo: numa janela com um engasgo e um quadro normal, vale o normal
     janela.sort((a, b) => a - b)
-    const tipico = janela[Math.floor((janela.length - 1) / 2)]
+    const tipico = janela[Math.floor((janela.length - 1) / 2)] ?? 0
     janela.length = 0
     janelaTempo = 0
     // Abaixo de 10 quadros por segundo não há dúvida. Entre 10 e 25, só duas janelas seguidas contam.
     janelasLentas = tipico > 1 / 25 ? janelasLentas + 1 : 0
     if (janelasLentas < 2 && tipico <= 1 / 10) return
-    janelasLentas = 0
-    if (escala > 1.01) {
-      escalaLimite = 1
-      ajustarTamanho()
-      desenhar()
-      ignorar = 2
-    } else {
-      lento = true
-      aplicarModo()
-      ajustarTamanho()
-      desenhar()
-    }
+    ficarLento()
+  }
+
+  /** O aparelho não dá conta: o buraco negro fica parado no alto da página, sem absorção. */
+  function ficarLento() {
+    if (lento) return
+    lento = true
+    aplicarModo()
+    pausar()
   }
 
   function laco(agora: number) {
@@ -580,7 +428,7 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     try {
       quadro(agora)
     } finally {
-      // um erro num quadro (aparece no console) não pode parar a animação e congelar a absorção
+      // um erro num quadro (aparece no console) não pode parar a absorção
       if (deveAnimar()) pedido = requestAnimationFrame(laco)
     }
   }
@@ -591,11 +439,10 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     const dt = Math.min(intervalo, 0.1)
 
     const s = window.scrollY
+    // primeiro de tudo, a rolagem vai para o motor, que desenha o buraco negro no ritmo da tela
+    enviarRolagem(s, agora)
     const rolou = s !== rolagemAnterior
-    if (rolou) {
-      sentido = Math.sign(s - rolagemAnterior)
-      ultimaRolagem = agora
-    }
+    if (rolou) sentido = Math.sign(s - rolagemAnterior)
     // A velocidade sobe logo (a rolagem que acelera precisa de cópias prontas mais longe já no quadro
     // seguinte) e desce devagar (a roda do mouse rola aos trancos). Um salto (um link do menu, a
     // tecla End) não é velocidade: a amostra tem um teto, senão o quadro do salto preparava cópias
@@ -609,21 +456,6 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     // sem ScrollTimeline, as animações da absorção andam daqui (com ele, o navegador já as andou)
     relogio.acertar(s)
 
-    // A atividade acompanha devagar o sentido da rolagem, e não a velocidade: rolando devagar ou
-    // rápido, com a roda, o botão do meio ou o toque, o disco reage do mesmo jeito.
-    const meta = agora - ultimaRolagem < PAUSA_DA_ROLAGEM ? sentido : 0
-    const constante = Math.abs(meta) > Math.abs(atividade) ? ATIVIDADE.sobe : ATIVIDADE.desce
-    if (dt > 0) atividade += (meta - atividade) * (1 - Math.exp(-dt / constante))
-    // com a página parada, o finzinho da volta já não se vê: corta, e o desenho volta a 30 por segundo
-    if (meta === 0 && Math.abs(atividade) < 0.01) atividade = 0
-
-    tempo = (tempo + dt) % (2 * Math.PI)
-    // enquanto absorve, o disco gira um pouco mais rápido
-    fase = (fase + dt * 2.4 * (1 + 0.6 * Math.max(atividade, 0))) % CICLO
-    const suavizar = 1 - Math.exp(-dt * 2.5)
-    atual.x += (alvo.x - atual.x) * suavizar
-    atual.y += (alvo.y - atual.y) * suavizar
-
     // A absorção anda sozinha com a rolagem; daqui só se preparam as cópias que ela pode trazer: quando
     // a rolagem muda (e enquanto a folga encolhe depois dela), quando faltou tempo no quadro anterior
     // ou quando mudou algo dentro de um bloco.
@@ -635,16 +467,6 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     }
     // o que muda no original sem rolagem (quadros de vídeo, o mouse em cima) chega às cópias
     absorcao.acompanhar()
-
-    // com movimento, um quadro a cada atualização da tela; parado, 30 por segundo bastam
-    const movendo = rolou || atividade !== 0 || agora - ultimoPonteiro < 400
-    if (movendo || agora - ultimoDesenho >= 1000 / 30 - 4) {
-      ultimoDesenho = agora
-      desenhar(s)
-    }
-    // O mergulho pesa mais (o buraco negro chega a cobrir a tela toda) e passa logo: não diz se o
-    // aparelho dá conta do resto.
-    if (progressoDoMergulho(s) > 0) ignorar = Math.max(ignorar, 2)
     avaliarDesempenho(intervalo)
   }
 
@@ -664,14 +486,46 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     pedido = 0
   }
 
-  /** Desenha assim que o shader terminar de compilar; depois anima, se for o caso. */
-  function quandoPronto() {
-    if (desligado || !renderizador) return
-    if (renderizador.pronto()) {
-      remedir()
-      retomar()
-    } else if (!renderizador.falhou()) {
-      requestAnimationFrame(quandoPronto)
+  /** Com o motor pronto e a entrada da apresentação terminada, o efeito começa. */
+  function comecar() {
+    if (!comecou || !motorPronto || desligado) return
+    remedir()
+    retomar()
+  }
+
+  /** O efeito para de vez (ou até o motor voltar): a página fica como sem ele, com a malha em CSS. */
+  function suspender() {
+    motorPronto = false
+    definirQueda(null)
+    aoCobrir?.(false)
+    aoCobrir = null
+    pausar()
+    desligarAbsorcao()
+    raiz.style.removeProperty('--topo-livre')
+    aoAtivar(false)
+  }
+
+  function aoMotor(mensagem: DoMotor) {
+    if (desligado) return
+    switch (mensagem.tipo) {
+      case 'pronto':
+        motorPronto = true
+        comecar()
+        break
+      case 'ativo':
+        aoAtivar(true)
+        break
+      case 'falhou':
+      case 'perdido':
+        suspender()
+        break
+      case 'lento':
+        ficarLento()
+        break
+      case 'cobriu':
+        aoCobrir?.(true)
+        aoCobrir = null
+        break
     }
   }
 
@@ -683,9 +537,11 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
   }
   // a janela, a apresentação ou o resto da página mudaram de tamanho
   const aoRedimensionar = new ResizeObserver(agendarMedida)
-  aoRedimensionar.observe(canvas)
+  aoRedimensionar.observe(recipiente)
   aoRedimensionar.observe(hero)
   aoRedimensionar.observe(document.body)
+  // o trecho do mergulho mudou (o espaço depois do rodapé foi medido de novo)
+  const pararDeOuvirMergulho = quandoMedirMergulho(agendarMedida)
 
   // Blocos trocados na página (o filtro dos projetos recria a lista). Outras mudanças, como o
   // ícone de um vídeo que começou a tocar, não pedem novas medidas (a absorção refaz só as cópias
@@ -695,7 +551,7 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     if (!mudancas.some((m) => [...m.addedNodes, ...m.removedNodes].some(temBlocos))) return
     cancelAnimationFrame(esperaBlocos)
     esperaBlocos = requestAnimationFrame(() => {
-      if (!comecou || preso) return
+      if (!comecou || !motorPronto || preso) return
       absorcao.medir()
       preparar(window.scrollY)
       absorcao.acompanhar()
@@ -704,16 +560,21 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
   const principal = document.querySelector('main')
   if (principal) aoMudarPagina.observe(principal, { childList: true, subtree: true })
 
-  // Troca de tema: redesenha na hora, para a transição circular já pegar as cores novas.
+  // Troca de tema: o motor redesenha já, para a transição circular já pegar as cores novas.
+  let cores = lerCores()
   const aoMudarTema = new MutationObserver(() => {
     const novas = lerCores()
     if (novas.escuro === cores.escuro && novas.tinta.join() === cores.tinta.join()) return
     cores = novas
-    desenhar()
+    ponte.enviar({ tipo: 'cores', cores })
   })
   aoMudarTema.observe(raiz, { attributes: true, attributeFilter: ['class'] })
 
-  const aoMudarVisibilidade = () => (document.hidden ? pausar() : retomar())
+  const aoMudarVisibilidade = () => {
+    ponte.enviar({ tipo: 'visivel', visivel: !document.hidden })
+    if (document.hidden) pausar()
+    else retomar()
+  }
   document.addEventListener('visibilitychange', aoMudarVisibilidade)
 
   // O foco do teclado pode entrar num bloco que está na faixa sem a página rolar: ele sobe por cima
@@ -739,43 +600,31 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     velocidade = 0
     reabsorver = true
     relogio.acertar(rolagemAnterior)
-    desenhar(rolagemAnterior)
+    enviarRolagem(rolagemAnterior, performance.now(), true)
   })
 
   const aoMoverPonteiro = (evento: PointerEvent) => {
-    alvo.x = evento.clientX / window.innerWidth - 0.5
-    alvo.y = evento.clientY / window.innerHeight - 0.5
-    ultimoPonteiro = performance.now()
+    ponte.enviar({
+      tipo: 'ponteiro',
+      x: evento.clientX / window.innerWidth - 0.5,
+      y: evento.clientY / window.innerHeight - 0.5,
+    })
   }
   if (ponteiroFino.matches) window.addEventListener('pointermove', aoMoverPonteiro, { passive: true })
-
-  // Se a placa de vídeo resetar, volta a malha em CSS até o contexto ser restaurado.
-  const aoPerderContexto = (evento: Event) => {
-    evento.preventDefault()
-    pausar()
-    desligarAbsorcao()
-    raiz.style.removeProperty('--topo-livre')
-    renderizador = null
-    ativo = false
-    aoAtivar(false)
-  }
-  const aoRestaurarContexto = () => {
-    renderizador = criarRenderizador(canvas)
-    quandoPronto()
-  }
-  canvas.addEventListener('webglcontextlost', aoPerderContexto)
-  canvas.addEventListener('webglcontextrestored', aoRestaurarContexto)
 
   void aposEntrada(hero).then(() => {
     if (desligado) return
     comecou = true
-    quandoPronto()
+    comecar()
     // as fontes mudam a largura dos textos
     void document.fonts?.ready.then(remedir)
   })
 
   return () => {
     desligado = true
+    definirQueda(null)
+    aoCobrir?.(false)
+    aoCobrir = null
     pausar()
     cancelAnimationFrame(esperaMedida)
     cancelAnimationFrame(esperaBlocos)
@@ -787,15 +636,14 @@ export function iniciarBuracoNegro(canvas: HTMLCanvasElement, aoAtivar: (ativo: 
     document.removeEventListener('focusout', aoMudarFoco)
     movimentoReduzido.removeEventListener('change', aoMudarMovimento)
     pararDeOuvirVolta()
+    pararDeOuvirMergulho()
     window.removeEventListener('pointermove', aoMoverPonteiro)
-    canvas.removeEventListener('webglcontextlost', aoPerderContexto)
-    canvas.removeEventListener('webglcontextrestored', aoRestaurarContexto)
     desligarAbsorcao()
+    ponte.destruir()
+    canvas.remove()
     cortina.remove()
     raiz.style.removeProperty('--topo-livre')
-    canvas.removeAttribute('data-preso')
-    canvas.style.height = ''
-    renderizador?.destruir()
-    renderizador = null
+    recipiente.removeAttribute('data-preso')
+    recipiente.style.height = ''
   }
 }

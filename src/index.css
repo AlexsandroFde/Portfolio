@@ -203,8 +203,9 @@
     transition: opacity 1.6s var(--ease-out-expo);
   }
 
-  /* Buraco negro em WebGL no fundo da página (ver BlackHole.tsx). Ele também desenha a malha
-     da apresentação, curvada pela gravidade: quando entra, a malha em CSS sai. */
+  /* Buraco negro em WebGL no fundo da página (ver BlackHole.tsx), num canvas criado dentro deste
+     recipiente. Ele também desenha a malha da apresentação, curvada pela gravidade: quando entra,
+     a malha em CSS sai. */
   .buraco-negro {
     position: fixed;
     top: 0;

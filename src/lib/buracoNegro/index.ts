@@ -7,26 +7,31 @@ import { aparecerAoRolar, criarRelogio } from './rolagem.ts'
 import { caminhoDaPagina, raioNoCanto, suave, type Palco } from './trajeto.ts'
 
 /**
- * Com que antecedência (s) as cópias da absorção ficam presas à rolagem, prontas para entrar na
+ * Com que antecedência (s) as fatias da absorção ficam presas à rolagem, prontas para entrar na
  * faixa. Não basta o quadro ou dois que o JavaScript fica para trás da rolagem: depois de presa, a
- * cópia ainda precisa ser desenhada pelo navegador, e rolando, com a página toda para desenhar, isso
+ * fatia ainda precisa ser desenhada pelo navegador, e rolando, com a página toda para desenhar, isso
  * leva alguns quadros. Com menos, a faixa ficava vazia logo acima da beira enquanto a página andava.
  */
 const ANTECEDENCIA = 0.3
-/** A folga mínima à frente e atrás (px), com a página parada ou devagar (veja preparar). */
-const FOLGA = { frente: 160, tras: 96 }
+/**
+ * A folga mínima à frente e atrás (px), com a página parada ou devagar (veja preparar). Cada fatia
+ * presa à rolagem é uma animação que o navegador acompanha a cada quadro, mesmo esperando a vez:
+ * com as fatias pré-renderizadas (uma foto já decodificada), elas ficam prontas logo, e a folga
+ * pode ser curta.
+ */
+const FOLGA = { frente: 64, tras: 48 }
 /** A maior velocidade de rolagem (px/s) levada em conta para a antecedência. */
 const VELOCIDADE_MAXIMA = 6000
 /**
- * A quantas telas daqui os blocos já têm as cópias prontas, guardadas: para trás e para a frente,
- * no sentido da rolagem, e para cada lado com a página parada.
+ * A quantas telas daqui os blocos têm a foto refeita primeiro quando o original muda: para trás e
+ * para a frente, no sentido da rolagem, e para cada lado com a página parada.
  */
 const AQUECER = [0.75, 2.5, 1.5] as const
 /**
- * Quanto tempo (ms) cada quadro gasta preparando cópias que ainda não vão aparecer. Rolando, pouco:
- * cada cópia custa outro tanto depois, em estilo e pintura, e com o JavaScript ocupado os vídeos
- * andam aos trancos (a rolagem, a absorção e o buraco negro não: correm fora dele). A maior parte
- * fica para quando a página está parada, que é quando se lê.
+ * Quanto tempo (ms) cada quadro gasta pondo no lugar fatias que ainda não vão aparecer. Rolando,
+ * pouco: com o JavaScript ocupado os vídeos andam aos trancos (a rolagem, a absorção e o buraco
+ * negro não: correm fora dele). A maior parte fica para quando a página está parada, que é quando
+ * se lê.
  */
 const ORCAMENTO = { rolando: 0.5, parada: 8 }
 /**
@@ -96,9 +101,9 @@ function aposEntrada(secao: HTMLElement): Promise<unknown> {
 /**
  * A cortina: cobre a faixa do alto da tela, onde o conteúdo é absorvido, com o que fica atrás dele
  * (o fundo da página e, copiado do canvas a cada desenho, o buraco negro e a malha). Por cima dela
- * só passam as cópias que a absorção desenha (e os títulos fixos das seções): o original continua
+ * só passam as fatias que a absorção desenha (e os títulos fixos das seções): o original continua
  * no lugar, sem máscara nem nada que mude com a rolagem, e some atrás dela exatamente na beira da
- * faixa, que é fixa na tela. Fica entre a página e a camada das cópias. Quem desenha nela, fundo
+ * faixa, que é fixa na tela. Fica entre a página e a camada das fatias. Quem desenha nela, fundo
  * incluído, é o motor: com a altura da cortina em fração de px CSS, um fundo em CSS passava um
  * quarto de pixel da borda dela e aparecia como um fio sobre o buraco negro.
  */
@@ -136,7 +141,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   canvas.style.cssText = 'display:block;width:100%;height:100%'
   recipiente.append(canvas)
   const cortina = criarCortina()
-  /** A cortina aparece junto com a camada das cópias, ao primeiro pixel de rolagem. */
+  /** A cortina aparece junto com a camada das fatias, ao primeiro pixel de rolagem. */
   let entradaDaCortina: Animation | null = null
 
   // medidas (px CSS)
@@ -158,7 +163,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   let pedido = 0
   let anterior = 0
   let rolagemAnterior = window.scrollY
-  /** Quão rápido a página está rolando (px/s), suavizado: decide com que antecedência preparar as cópias. */
+  /** Quão rápido a página está rolando (px/s), suavizado: decide com que antecedência preparar as fatias. */
   let velocidade = 0
   // as medidas mudaram: a absorção precisa ser refeita mesmo sem rolagem
   let reabsorver = true
@@ -189,7 +194,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   /**
    * A faixa da tela onde o conteúdo é absorvido: uma tira fina no alto da tela, colada no
    * cabeçalho. O resto da página não é tocado. As beiras ficam em pixels inteiros da tela: a de
-   * baixo é a beira da cortina, e o original e as cópias se encontram exatamente nela.
+   * baixo é a beira da cortina, e o original e as fatias se encontram exatamente nela.
    */
   const faixa = (): Faixa => {
     const dpr = window.devicePixelRatio || 1
@@ -236,7 +241,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     },
   }
 
-  /** A absorção não age: sem cópias e sem cortina (a página fica como sem o efeito). */
+  /** A absorção não age: sem fatias e sem cortina (a página fica como sem o efeito). */
   function desligarAbsorcao() {
     absorcao.limpar()
     if (entradaDaCortina) relogio.soltar(entradaDaCortina)
@@ -264,9 +269,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   function ajustarTamanho() {
     largura = recipiente.clientWidth
     // A cortina tem a altura da faixa menos um pixel da tela. Nesse último pixel, logo acima da
-    // beira, a máscara das cópias já vai sumindo (a beira dela não é um corte exato); com a cortina
+    // beira, a máscara das fatias já vai sumindo (a beira dela não é um corte exato); com a cortina
     // ali, ele aparecia como um fio claro sobre o conteúdo. Sem ela, o que aparece por baixo da
-    // cópia é o próprio original, no mesmo lugar.
+    // fatia é o próprio original, no mesmo lugar.
     const dpr = window.devicePixelRatio || 1
     const alturaDaCortina = faixa().inicio - 1 / dpr
     cortina.style.height = `${alturaDaCortina}px`
@@ -295,14 +300,14 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   }
 
   /**
-   * Deixa prontas as cópias do conteúdo que a rolagem pode levar à faixa: o desenho de cada posição
+   * Deixa prontas as fatias do conteúdo que a rolagem pode levar à faixa: o desenho de cada posição
    * da página já vai calculado com elas, e quem o mostra, rolando devagar ou rápido, é o navegador.
-   * Devolve quantas cópias novas foram criadas.
+   * Devolve quantas fatias novas foram criadas.
    */
   function preparar(s: number): number {
     if (preso) return 0
     const tela = window.innerHeight
-    // As cópias que podem aparecer ficam presas à rolagem antes (veja ANTECEDENCIA), mais longe no
+    // As fatias que podem aparecer ficam presas à rolagem antes (veja ANTECEDENCIA), mais longe no
     // sentido da rolagem; para trás, o bastante para ela voltar. No começo da página, onde a força
     // ainda cresce, cada fatia tem o seu trajeto, mais caro de calcular: elas ficam prontas antes,
     // enquanto a página está parada no topo.
@@ -317,19 +322,15 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       // o que pode aparecer nos próximos dois quadros não espera
       urgencia: Math.min(24 + velocidade * 0.035, tela * 0.2),
       orcamento: velocidade > 0 ? ORCAMENTO.rolando : ORCAMENTO.parada,
-      // Os blocos a até algumas telas daqui ganham, com o tempo que sobra, todas as cópias que vão
-      // usar, enquanto a rolagem ainda está longe deles: quando ela os trouxer, por mais rápida que
-      // seja, as cópias só mudam de fatia, o que é barato. Criar dezenas de uma vez, quando o bloco
-      // já está chegando, não dava tempo, e a faixa ficava vazia por alguns quadros. Mais telas à
-      // frente, no sentido da rolagem, que atrás.
+      // Os blocos a até algumas telas daqui têm a foto refeita primeiro quando mudam (o tema, o
+      // mouse em cima), enquanto a rolagem ainda está longe deles. Mais telas à frente, no sentido
+      // da rolagem, que atrás.
       aquecer:
         indo > 0
           ? [tela * AQUECER[0], tela * AQUECER[1]]
           : indo < 0
             ? [tela * AQUECER[1], tela * AQUECER[0]]
             : [tela * AQUECER[2], tela * AQUECER[2]],
-      // (no começo da página a folga é maior, mas lá os blocos são baixos: têm menos fatias que isso)
-      folgaMaxima: [FOLGA.tras, FOLGA.frente + tela * 0.9],
     })
   }
 
@@ -368,7 +369,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       // a entrada da cortina é medida em pixels da tela, que mudam com o zoom
       if (entradaDaCortina) relogio.soltar(entradaDaCortina)
       entradaDaCortina = aparecerAoRolar(relogio, cortina)
-      // na hora, e não no próximo quadro: um bloco que mudou de tamanho perdeu as cópias (e as cópias
+      // na hora, e não no próximo quadro: um bloco que mudou de tamanho perdeu as fatias (e as fatias
       // novas precisam já do quadro dos vídeos)
       relogio.acertar(window.scrollY)
       preparar(window.scrollY)
@@ -384,13 +385,17 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   }
 
   /**
-   * Abaixo de 25 quadros por segundo na thread principal, a absorção não dá conta (as cópias chegam
-   * tarde à faixa): o buraco negro fica parado de vez. Cada janela de ~1 s é julgada pelo quadro
-   * típico, a mediana dos intervalos, e não pela média: um engasgo isolado não é o aparelho que não
-   * dá conta. E engasgos acontecem: quando um vídeo começa a tocar ou muda de camada, o Windows às
-   * vezes leva um ou dois segundos para reorganizar a composição da tela, e pela média dois desses
-   * bastavam para parar o efeito no meio da página. O desenho do buraco negro tem o seu próprio
-   * julgamento, no motor.
+   * Abaixo de 12 quadros por segundo na thread principal, a absorção não dá conta (as fatias chegam
+   * tarde à faixa): o buraco negro fica parado de vez. As fatias são presas à rolagem com pelo menos
+   * três décimos de segundo de antecedência (veja FOLGA e ANTECEDENCIA), então um quadro a cada 80 ms
+   * ainda as põe no lugar a tempo. Cada janela de ~1 s é julgada pelo quadro típico, a mediana dos
+   * intervalos, e não pela média: um engasgo isolado não é o aparelho que não dá conta. E engasgos
+   * acontecem: quando um vídeo começa a tocar ou muda de camada, o Windows às vezes leva um ou dois
+   * segundos para reorganizar a composição da tela, e pela média dois desses bastavam para parar o
+   * efeito no meio da página. Nesses segundos a placa de vídeo fica ocupada, e cada quadro da
+   * página que traz fatias novas espera por ela: a thread principal cai para uns 20 quadros por
+   * segundo sem estar ocupada, e com o limite em 25 o efeito parava ao rolar um pouco mais rápido
+   * pelos projetos. O desenho do buraco negro tem o seu próprio julgamento, no motor.
    */
   function avaliarDesempenho(intervalo: number) {
     // Os primeiros quadros depois de começar ou de mudar de tamanho custam mais, e um intervalo
@@ -409,9 +414,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     const tipico = janela[Math.floor((janela.length - 1) / 2)] ?? 0
     janela.length = 0
     janelaTempo = 0
-    // Abaixo de 10 quadros por segundo não há dúvida. Entre 10 e 25, só duas janelas seguidas contam.
-    janelasLentas = tipico > 1 / 25 ? janelasLentas + 1 : 0
-    if (janelasLentas < 2 && tipico <= 1 / 10) return
+    // Abaixo de 6 quadros por segundo não há dúvida. Entre 6 e 12, só duas janelas seguidas contam.
+    janelasLentas = tipico > 1 / 12 ? janelasLentas + 1 : 0
+    if (janelasLentas < 2 && tipico <= 1 / 6) return
     ficarLento()
   }
 
@@ -443,9 +448,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     enviarRolagem(s, agora)
     const rolou = s !== rolagemAnterior
     if (rolou) sentido = Math.sign(s - rolagemAnterior)
-    // A velocidade sobe logo (a rolagem que acelera precisa de cópias prontas mais longe já no quadro
+    // A velocidade sobe logo (a rolagem que acelera precisa de fatias prontas mais longe já no quadro
     // seguinte) e desce devagar (a roda do mouse rola aos trancos). Um salto (um link do menu, a
-    // tecla End) não é velocidade: a amostra tem um teto, senão o quadro do salto preparava cópias
+    // tecla End) não é velocidade: a amostra tem um teto, senão o quadro do salto preparava fatias
     // para a página inteira.
     if (dt > 0) {
       const amostra = Math.min(Math.abs(s - rolagemAnterior) / dt, VELOCIDADE_MAXIMA)
@@ -456,7 +461,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     // sem ScrollTimeline, as animações da absorção andam daqui (com ele, o navegador já as andou)
     relogio.acertar(s)
 
-    // A absorção anda sozinha com a rolagem; daqui só se preparam as cópias que ela pode trazer: quando
+    // A absorção anda sozinha com a rolagem; daqui só se preparam as fatias que ela pode trazer: quando
     // a rolagem muda (e enquanto a folga encolhe depois dela), quando faltou tempo no quadro anterior
     // ou quando mudou algo dentro de um bloco.
     if (rolou || velocidade > 0 || reabsorver || absorcao.pendente()) {
@@ -465,7 +470,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       // uma vez, e esse quadro pesa mais que os de rolar: ele não diz se o aparelho dá conta.
       if (preparar(s) > 6) ignorar = Math.max(ignorar, 2)
     }
-    // o que muda no original sem rolagem (quadros de vídeo, o mouse em cima) chega às cópias
+    // o que muda no original sem rolagem (os quadros dos vídeos) chega às fatias
     absorcao.acompanhar()
     avaliarDesempenho(intervalo)
   }
@@ -544,7 +549,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   const pararDeOuvirMergulho = quandoMedirMergulho(agendarMedida)
 
   // Blocos trocados na página (o filtro dos projetos recria a lista). Outras mudanças, como o
-  // ícone de um vídeo que começou a tocar, não pedem novas medidas (a absorção refaz só as cópias
+  // ícone de um vídeo que começou a tocar, não pedem novas medidas (a absorção refaz só a foto
   // daquele bloco).
   let esperaBlocos = 0
   const aoMudarPagina = new MutationObserver((mudancas) => {

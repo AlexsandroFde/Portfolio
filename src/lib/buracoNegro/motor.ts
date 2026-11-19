@@ -1,6 +1,6 @@
 // O motor do buraco negro: o laço que o desenha, quadro a quadro, no canvas do fundo da página e na
 // cortina (veja index.ts). Roda num worker (veja trabalhador.ts e ponte.ts), fora da thread
-// principal: o que pesa nela (as cópias da absorção, os vídeos, o React) não atrasa nem um quadro
+// principal: o que pesa nela (a absorção, os vídeos, o React) não atrasa nem um quadro
 // do buraco negro, que gira e anda junto com a rolagem como o resto da página, que o navegador rola
 // também fora dela. Sem worker, o mesmo motor roda na thread principal.
 //

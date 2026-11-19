@@ -384,7 +384,7 @@
     animation: none !important;
     transition: none !important;
     /* o trecho de um bloco que o buraco negro está engolindo fica escondido por uma máscara, e as
-       cópias que o desenham não são impressas */
+       fatias que o desenham não são impressas */
     mask-image: none !important;
     -webkit-mask-image: none !important;
   }

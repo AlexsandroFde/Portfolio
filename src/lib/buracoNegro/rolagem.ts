@@ -85,7 +85,7 @@ export function criarRelogio(): Relogio {
 
 /**
  * Deixa o elemento invisível com a página no topo e à vista a partir do segundo pixel da tela de
- * rolagem, junto com a rolagem: é quando a absorção começa (a camada das cópias e a cortina entram
+ * rolagem, junto com a rolagem: é quando a absorção começa (a camada das fatias e a cortina entram
  * juntas, no mesmo quadro).
  */
 export function aparecerAoRolar(relogio: Relogio, elemento: HTMLElement): Animation {

@@ -15,25 +15,27 @@
 // faixa é puxado, e o resto continua no lugar até a sua vez.
 //
 // Uma transformação CSS deforma o elemento inteiro de um jeito só, então o trecho na faixa é
-// desenhado por cópias do bloco, uma para cada fatia fina dele, cada uma recortada na sua fatia e
-// com o seu trapézio. As bordas de fatias vizinhas coincidem, e a tira sai contínua. As cópias
-// ficam numa camada fixa no alto da tela, sem foco, clique ou leitor de tela, por cima de uma
-// cortina (veja index.ts) que cobre a faixa com o fundo e o buraco negro: o original não sai do
+// desenhado em fatias finas, cada uma com o seu trapézio. As bordas de fatias vizinhas coincidem, e
+// a tira sai contínua. Tudo é pré-renderizado: cada bloco tem uma foto (veja fotos.ts), feita uma
+// vez, longe da faixa, e cada fatia é só um retângulo com o pedaço dela da foto, sem nada dentro.
+// As fatias ficam numa camada fixa no alto da tela, sem foco, clique ou leitor de tela, por cima de
+// uma cortina (veja index.ts) que cobre a faixa com o fundo e o buraco negro: o original não sai do
 // lugar nem muda, só passa por trás dela.
 //
-// Quem move as cópias é o navegador, e não o JavaScript: cada uma tem uma animação presa à rolagem
+// Quem move as fatias é o navegador, e não o JavaScript: cada uma tem uma animação presa à rolagem
 // (veja rolagem.ts), com um quadro-chave para cada pixel da tela que a página rola enquanto a fatia
 // atravessa a faixa. A rolagem corre fora do JavaScript, que chega a ficar um quadro ou mais para
 // trás dela; as animações correm junto com ela, na mesma etapa, e a tira nunca se descola do
-// original na beira da cortina, por mais rápida que seja a rolagem. Ao JavaScript resta preparar
-// as cópias com antecedência, enquanto a página se aproxima delas (veja preparar), e fazê-las
-// acompanhar o original em tudo o que muda sem rolagem: o quadro dos vídeos, o mouse em cima, as
-// animações e o que o React redesenhar dentro do bloco. Assim nada se parte entre o original e a
-// tira.
+// original na beira da cortina, por mais rápida que seja a rolagem. Ao JavaScript resta pôr as
+// fatias no lugar com antecedência, enquanto a página se aproxima delas (veja preparar), trocar a
+// foto quando o original muda (o mouse em cima, o tema, o que o React redesenhar) e levar às fatias
+// o quadro atual dos vídeos.
 //
 // Os blocos são os que já têm animação de entrada ([data-reveal] e .enter). As linhas soltas da
-// página (a borda de cima das seções e das listas) entram como blocos de uma fatia só.
+// página (a borda de cima das seções e das listas) entram como blocos de uma fatia só, desenhadas
+// por um modelo da linha (uma linha só não precisa de foto).
 
+import { elementosDe, enquadrar, fotografar, soltarFoto, type Foto, type Fotos } from './fotos.ts'
 import { aparecerAoRolar, type Relogio } from './rolagem.ts'
 import { alvoEm, type Alvo, type Caminho } from './trajeto.ts'
 
@@ -67,19 +69,17 @@ export type Folga = readonly [number, number]
 
 /** Quanto preparar, a cada quadro (veja preparar). */
 export interface Preparo {
-  /** As fatias que aparecem com a página rolada dentro da folga ganham cópia, presa à rolagem. */
+  /** As fatias que aparecem com a página rolada dentro da folga ficam presas à rolagem. */
   folga: Folga
   /** As que podem aparecer até `urgencia` px daqui, na hora (até ORCAMENTO_URGENTE ms). */
   urgencia: number
   /** As outras, com o tempo que sobrar: até `orcamento` ms por quadro. */
   orcamento: number
   /**
-   * Os blocos que aparecem com a página dentro desta faixa ganham com antecedência, escondidas,
-   * todas as cópias que vão usar (os outros, longe, as perdem).
+   * Os blocos que aparecem com a página dentro desta faixa têm a foto refeita primeiro, quando o
+   * original muda; os mais longe, só quando chegarem perto.
    */
   aquecer: Folga
-  /** A maior folga que preparar pode receber: as cópias de cada bloco cobrem esse trecho de uma vez. */
-  folgaMaxima: Folga
 }
 
 export interface Absorcao {
@@ -88,15 +88,15 @@ export interface Absorcao {
   /** Mede os blocos de novo (depois de mudanças no layout). */
   medir(): void
   /**
-   * Prepara as cópias das fatias que a rolagem pode levar à faixa (veja Preparo), com a página
-   * rolada até `rolagem`. Devolve quantas cópias novas foram criadas para fatias.
+   * Põe no lugar as fatias que a rolagem pode levar à faixa (veja Preparo), com a página rolada até
+   * `rolagem`. Devolve quantas fatias novas foram criadas.
    */
   preparar(rolagem: number, preparo: Preparo): number
-  /** Ficou trabalho para o próximo quadro: cópias por preparar, ou algo mudou dentro de um bloco. */
+  /** Ficaram fatias por pôr no lugar para o próximo quadro. */
   pendente(): boolean
-  /** A cada quadro, depois de preparar: leva às cópias o que mudou no original sem rolagem. */
+  /** A cada quadro, depois de preparar: leva às fatias o quadro atual dos vídeos. */
   acompanhar(): void
-  /** Devolve todos os blocos ao normal e apaga as cópias. */
+  /** Devolve todos os blocos ao normal e apaga as fatias e as fotos. */
   limpar(): void
 }
 
@@ -112,7 +112,7 @@ interface Recorte {
 
 interface Video {
   elemento: HTMLVideoElement
-  /** Posição e tamanho dentro do bloco (px CSS). */
+  /** Posição dentro do bloco e tamanho (px CSS). */
   x: number
   y: number
   largura: number
@@ -121,31 +121,21 @@ interface Video {
   recortes: Recorte[]
   /** O quadro atual, recortado como na página, de onde cada tela tira a sua parte. */
   fonte: HTMLCanvasElement | null
-  /** Pixels da fonte (e das telas das cópias) por px CSS. */
+  /** Pixels da fonte (e das telas das fatias) por px CSS. */
   escala: number
-  /** A fonte tem um quadro (sem ele, as cópias mostram o pôster, que fica atrás do vídeo). */
+  /** A fonte tem um quadro (sem ele, as fatias mostram o pôster, que está na foto). */
   pintada: boolean
   /** O tempo do último quadro copiado (onde não há requestVideoFrameCallback). */
   tempo: number
   vigia: number
 }
 
-/**
- * O que a cópia mostra: o bloco (com os vídeos nas telas), só o que fica na frente dos vídeos (veja
- * Frente) ou, na referência, o bloco sem os estados do mouse.
- */
-type Modo = 'copia' | 'frente' | 'referencia'
-
-/** Uma cópia do bloco, recortada numa fatia dele. */
+/** Uma fatia na tela: um retângulo com o seu pedaço da foto do bloco. */
 interface Tira {
   caixa: HTMLDivElement
-  clone: HTMLElement
-  /** Os elementos da cópia, na mesma ordem que os do original (veja elementosDe). */
-  elementos: Element[]
-  /** Para cada vídeo do bloco, a tela onde a cópia mostra a parte dele que cai na sua fatia. */
+  /** Para cada vídeo do bloco, a tela onde a fatia mostra a parte dele que cai nela. */
   telas: (HTMLCanvasElement | undefined)[]
-  modo: Modo
-  /** A fatia que ela mostra, ou -1 (guardada, escondida). */
+  /** A fatia que ela mostra, ou -1 (ainda sem lugar, ou já fora da página). */
   fatia: number
   /** A animação que a leva pela faixa, presa à rolagem. */
   animacao: Animation | null
@@ -153,77 +143,76 @@ interface Tira {
   modelo: KeyframeEffect | null
   /** As telas mudaram de lugar e precisam ser desenhadas de novo. */
   repintar: boolean
-  /** As animações CSS precisam ser acertadas pelas do original (cópia nova). */
-  sincronizar: boolean
-  /** O original mudou depois que o clone foi feito (veja refazer). */
-  velha: boolean
-  /** Guardada fora do trabalho do navegador (veja travar). */
-  travada: boolean
 }
 
 /**
- * O que o original desenha na frente dos vídeos (o botão de pausa). As telas dos vídeos ficam por
- * cima do clone de cada cópia, então nele isso fica escondido, e cópias à parte (as frentes) o
- * mostram por cima das telas.
+ * O que o original desenha na frente dos vídeos (o botão de pausa). Fica fora da foto do bloco, numa
+ * foto à parte, que as telas desenham por cima de cada quadro do vídeo.
  */
 interface Frente {
   /** Os elementos, pela posição (veja elementosDe). */
   elementos: number[]
   /** Os mesmos elementos, no original. */
   nos: Element[]
-  /** O trecho do bloco que eles ocupam (px CSS a partir do alto dele). */
-  de: number
-  ate: number
+  /** O retângulo que eles ocupam, relativo ao bloco (px CSS): só as telas que o cruzam desenham a frente. */
+  x0: number
+  y0: number
+  x1: number
+  y1: number
 }
-
 
 interface Bloco {
   /** O elemento da página, ou, numa linha solta, o modelo dela (fora da página). */
   elemento: HTMLElement
-  /** Uma linha solta (a borda de uma seção ou lista), sem estados, vídeos nem React dentro. */
+  /** Uma linha solta (a borda de uma seção ou lista), sem foto, vídeos nem React dentro. */
   linha: boolean
   // posição e tamanho na página, sem transformações
   x: number
   y: number
   largura: number
   altura: number
+  /**
+   * A grade das fatias (veja enquadrar): o retângulo em pixels inteiros da tela que contém o bloco,
+   * o mesmo da foto. As fatias ficam sempre em pixels inteiros, e a foto cai nelas pixel a pixel.
+   */
+  esquerda: number
+  topo: number
+  larguraDaGrade: number
+  alturaDaGrade: number
+  fase: string
   videos: Video[]
   frente: Frente | null
   tiras: Tira[]
-  /** As cópias que mostram a frente dos vídeos, nas fatias que a têm. */
-  frentes: Tira[]
-  /** O que as cópias precisam saber do original. */
-  molde: Molde
-  /** Os estados do original postos nas cópias agora (veja espelhar): chave (veja sobrescrever) → valor. */
-  espelho: Map<string, string>
-  /** Uma cópia escondida e sem esses estados: mostra como o bloco fica sem eles. */
-  referencia: Tira | null
-  /** O React mudou algo dentro do bloco: as cópias precisam ser refeitas. */
-  sujo: boolean
-  /** Onde o React mudou algo (os nós que a mudança atingiu), desde o último refazer. */
-  mudancas: Node[]
+  foto: Foto | null
+  /** O que fica na frente dos vídeos, sozinho (veja Frente). */
+  fotoDaFrente: HTMLCanvasElement | null
+  /** O original mudou depois da foto: ela precisa ser refeita (a de agora vale até a nova ficar pronta). */
+  velha: boolean
+  /** Só o que fica na frente dos vídeos mudou (o ícone do botão de pausa). */
+  soFrente: boolean
+  /** Só o mouse mudou o bloco: a foto nova pode esperar o bloco chegar perto da faixa. */
+  soMouse: boolean
+  /** Uma foto está sendo feita. */
+  fotografando: boolean
+  /** Quando a última foto falhou (ms): espera um pouco para tentar de novo. */
+  falhou: number
+  /** Quando o mouse mudou o bloco pela última vez (ms): a foto espera as transições acabarem. */
+  mexido: number
+  /** O elemento mais fundo do bloco com o mouse em cima (os outros são os ancestrais dele), ou null. */
+  mouse: Element | null
   /**
    * Os trajetos já calculados (veja trajeto): efeitos com os quadros-chave, sem elemento, de que
-   * cada cópia usa uma cópia.
+   * cada fatia usa uma cópia.
    */
   trajetos: Map<string, KeyframeEffect>
-  /** Com o foco do teclado dentro: fica por cima da cortina, no lugar, e as cópias se escondem. */
+  /** Com o foco do teclado dentro. */
+  focado: boolean
+  /** Por cima da cortina, no lugar, com as fatias escondidas: com o foco dentro, ou ainda sem foto. */
   elevado: boolean
   /** O position e o z-index do estilo do original antes de ele subir. */
   estiloAntes: [string, string]
-  /** A caixa das cópias do bloco, dentro da camada (veja grupoDo). */
+  /** A caixa das fatias do bloco, dentro da camada (veja grupoDo). */
   grupo: HTMLDivElement | null
-}
-
-interface Molde {
-  /** Os estilos que o original herda dos ancestrais (as cópias ficam fora deles). */
-  herdados: [string, string][]
-  /** Os elementos com backdrop-filter, pela posição (veja elementosDe). */
-  desfoques: number[]
-  /** Os elementos com ::before ou ::after desenhado, pelo caminho (medidos só quando espelhar precisa). */
-  pseudos: [string, 'before' | 'after'][] | null
-  /** Há animações CSS sem fim dentro (o ponto que pulsa no status). */
-  animado: boolean
 }
 
 /** Para onde foi puxada uma linha do conteúdo: um segmento horizontal na tela. */
@@ -245,7 +234,7 @@ export function temBlocos(no: Node): boolean {
 /**
  * Altura das fatias (px CSS), arredondada a pixels inteiros da tela (13 px da tela, 10,4 px CSS,
  * numa tela com 125% de escala). Cada uma é um trapézio: finas, a tira fica lisa mesmo onde ela se
- * curva mais (com 12 px já aparecem quinas na borda); cada uma a mais é uma cópia e uma camada.
+ * curva mais (com 12 px já aparecem quinas na borda); cada uma a mais é uma camada.
  */
 const FATIA = 10
 /**
@@ -257,7 +246,7 @@ const ACELERACAO = 2
 /** Largura que uma linha ainda tem ao chegar ao centro do buraco negro (px). */
 const FIO = 1
 /**
- * O conteúdo some ao entrar na sombra do buraco negro: a camada das cópias é transparente dentro
+ * O conteúdo some ao entrar na sombra do buraco negro: a camada das fatias é transparente dentro
  * dela e opaca a partir de HORIZONTE raios do centro (um fio de transição, sobre o anel de luz).
  * Pouco mais que o raio: o que ainda está no lugar, logo abaixo da faixa, nunca chega tão perto.
  */
@@ -267,38 +256,63 @@ const PERSPECTIVA_MAXIMA = 12
 /** Em quantos pontos da faixa a máscara do esmaecimento é medida (entre eles, ela vai em linha reta). */
 const PARADAS = 12
 /**
- * Quanto tempo (ms) um quadro pode gastar, no máximo, criando as cópias que podem aparecer já nos
- * próximos quadros (as outras têm o orçamento que preparar recebe). Cada cópia custa ainda, depois,
- * outro tanto em estilo, layout e pintura. Um quadro longo demais não adianta: enquanto ele roda, a
- * rolagem anda sem o JavaScript e passa das cópias que ele ainda está preparando.
+ * Quanto tempo (ms) um quadro pode gastar, no máximo, pondo no lugar as fatias que podem aparecer
+ * já nos próximos quadros (as outras têm o orçamento que preparar recebe). Um quadro longo demais
+ * não adianta: enquanto ele roda, a rolagem anda sem o JavaScript e passa das fatias que ele ainda
+ * está preparando.
  */
 const ORCAMENTO_URGENTE = 8
 /**
- * Uma cópia que deixou de ser precisa continua pronta enquanto a sua fatia está a até MANTER folgas
- * de aparecer: se a rolagem voltar logo, ela já está lá (e a folga pode oscilar sem que as cópias
- * mudem de fatia o tempo todo).
+ * Uma fatia que deixou de ser precisa continua pronta enquanto está a até MANTER folgas de aparecer:
+ * se a rolagem voltar logo, ela já está lá (e a folga pode oscilar sem que as fatias mudem de lugar
+ * o tempo todo).
  */
 const MANTER = 1.25
 /**
- * Quantas cópias sem fatia um bloco que a rolagem está deixando para trás guarda escondidas, para
- * reaproveitar. Os que ela está para trazer guardam todas as que vão usar (veja completarReserva e
- * enxugarReserva).
- */
-const RESERVA = 4
-/**
- * Onde fica uma cópia guardada: muito acima da camada, fora do recorte dela (nada é desenhado). Com
- * visibility: hidden, que é herdada, guardar e mostrar uma cópia recalculava o estilo do clone
- * inteiro; o translate só mexe na caixa.
+ * Onde fica uma fatia escondida (recém-criada, ou de um bloco por cima da cortina): muito acima da
+ * camada, fora do recorte dela (nada é desenhado).
  */
 const ESCONDIDA = '0 -100000px'
+/**
+ * Quanto a camada das fatias passa da faixa, para baixo (px): a altura de três fatias, onde as
+ * presas à rolagem esperam a sua vez, escondidas pela máscara (veja obterCamada).
+ */
+const ESPERA = 3 * FATIA
+/**
+ * Margem (px de rolagem) além da urgência em que uma fatia já recebe cada quadro dos vídeos: ela
+ * pode aparecer antes de o JavaScript rodar de novo (a urgência já cresce com a velocidade).
+ */
+const PERTO = 12
+/** Quantas fotos são feitas ao mesmo tempo (cada uma espera a imagem carregar, e enquanto isso a outra anda). */
+const FOTOS_AO_MESMO_TEMPO = 2
+/**
+ * Quanto a foto nova espera (ms) depois que o mouse muda o bloco: as transições do original (as
+ * cores, a seta do link) terminam antes, e a foto sai com o estado final, sem pesar no meio delas.
+ */
+const ESPERA_DO_MOUSE = 350
+/**
+ * Quanto tempo (ms) sem rolagem antes de refazer uma foto velha. Refazer custa um documento novo
+ * para o navegador montar (vários ms numa tarefa só), e rolando isso aparece como um tranco: a foto
+ * velha serve até a página parar. Rolando com o botão do meio, os cartões passam por baixo do
+ * cursor, e o vídeo que sai da tela pausa (o ícone do botão muda): sem esta espera, era uma foto
+ * nova a cada poucos segundos, no meio da rolagem.
+ */
+const ESPERA_DA_ROLAGEM = 300
+/** Depois de uma foto que falhou, quanto esperar (ms) para tentar de novo. */
+const NOVA_TENTATIVA = 3000
+
+const temQuadros = typeof HTMLVideoElement !== 'undefined' && 'requestVideoFrameCallback' in HTMLVideoElement.prototype
+const temOcioso = typeof window !== 'undefined' && 'requestIdleCallback' in window
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
 /**
- * O esmaecimento ao longo da distorção, como máscara da camada das cópias (de cima para baixo, em
+ * O esmaecimento ao longo da distorção, como máscara da camada das fatias (de cima para baixo, em
  * px da tela): cada linha do conteúdo fica tão transparente quanto já se estreitou a caminho do
  * buraco negro (veja linhaEm), inteira na borda de baixo da faixa e sumindo perto do centro dele.
  * Basta a altura: a de cada linha na tela diz o quanto ela já foi puxada, qualquer que seja o
  * bloco. Muda só com a faixa (e com a força, no começo da página), não com a rolagem. Abaixo da
- * faixa, onde as cópias esperam (veja obterCamada), nada aparece.
+ * faixa, onde as fatias esperam (veja obterCamada), nada aparece.
  */
 function esmaecimento({ frente, inicio }: Faixa, queda: number, forca: number): string {
   const banda = Math.max(1, inicio - frente)
@@ -311,85 +325,6 @@ function esmaecimento({ frente, inicio }: Faixa, queda: number, forca: number): 
   }
   paradas.push(`transparent ${inicio}px`)
   return `linear-gradient(${paradas.join(',')})`
-}
-/**
- * O que o bloco herda dos ancestrais e muda o desenho do texto: as cópias ficam fora da página e
- * recebem isso de volta. (A cor fica de fora: vem do body, como no original, e acompanha o tema.)
- */
-const HERDADOS = [
-  'font-family',
-  'font-size',
-  'font-weight',
-  'font-style',
-  'font-stretch',
-  'font-variant-ligatures',
-  'font-variant-caps',
-  'font-variant-numeric',
-  'font-variant-east-asian',
-  'font-feature-settings',
-  'font-variation-settings',
-  'font-kerning',
-  'font-optical-sizing',
-  'line-height',
-  'letter-spacing',
-  'word-spacing',
-  'text-align',
-  'text-transform',
-  'text-indent',
-  'text-shadow',
-  'text-rendering',
-  'text-wrap-mode',
-  'text-wrap-style',
-  'white-space-collapse',
-  'word-break',
-  'overflow-wrap',
-  'hyphens',
-  'line-break',
-  'tab-size',
-  'list-style-type',
-  'list-style-position',
-  'direction',
-  'writing-mode',
-  'visibility',
-  '-webkit-font-smoothing',
-  'text-underline-offset',
-  'text-decoration-skip-ink',
-]
-/** O que o mouse em cima (hover, clique) muda no original e as cópias precisam repetir. */
-const ESTADO = ['color', 'background-color', 'border-color', 'opacity', 'translate', 'transform', 'text-decoration-color']
-/** O mesmo, em ::before e ::after (o fundo das linhas de projeto ao passar o mouse). */
-const ESTADO_PSEUDO = ['opacity', 'background-color']
-/** Atributos que o React muda e mudam o desenho do bloco (o resto, como aria-label, não aparece). */
-const ATRIBUTOS_VISIVEIS = ['class', 'src', 'srcset', 'hidden', 'd', 'aria-pressed', 'aria-expanded']
-/**
- * Pseudoelementos não têm estilo inline: os estados deles chegam às cópias por variáveis, e estas
- * regras os aplicam (veja sobrescrever).
- */
-const REGRAS_PSEUDO = (['before', 'after'] as const)
-  .flatMap((pseudo) =>
-    ESTADO_PSEUDO.map((propriedade) => `[data-copias-buraco-negro] [data-${pseudo}-${propriedade}]::${pseudo}{${propriedade}:var(--${pseudo}-${propriedade})!important}`),
-  )
-  .join('')
-/**
- * Quanto a camada das cópias passa da faixa, para baixo (px): a altura de três fatias, onde as
- * cópias presas à rolagem esperam a sua vez, escondidas pela máscara (veja obterCamada).
- */
-const ESPERA = 3 * FATIA
-/** O molde de uma linha solta: nada a herdar nem a acompanhar. */
-const MOLDE_VAZIO: Molde = { herdados: [], desfoques: [], pseudos: [], animado: false }
-/**
- * Margem (px de rolagem) além da urgência em que uma cópia já recebe cada quadro dos vídeos: ela
- * pode aparecer antes de o JavaScript rodar de novo.
- */
-const PERTO = 48
-
-const temQuadros = typeof HTMLVideoElement !== 'undefined' && 'requestVideoFrameCallback' in HTMLVideoElement.prototype
-
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
-
-/** O bloco e tudo dentro dele, na ordem do documento: a mesma no original e nas cópias. */
-function elementosDe(raiz: Element): Element[] {
-  return [raiz, ...raiz.querySelectorAll('*')]
 }
 
 /** Posição e tamanho na página, sem a translação da animação de entrada (se ela ainda estiver no meio). */
@@ -466,8 +401,10 @@ function medirFrente(elemento: HTMLElement, videos: Video[]): Frente | null {
   const caixa = elemento.getBoundingClientRect()
   const indices = new Set<number>()
   const nos: Element[] = []
-  let de = Infinity
-  let ate = -Infinity
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -Infinity
+  let y1 = -Infinity
   for (const video of videos) {
     const r = video.elemento.getBoundingClientRect()
     for (let no: Element = video.elemento; no !== elemento && no.parentElement; no = no.parentElement) {
@@ -482,12 +419,14 @@ function medirFrente(elemento: HTMLElement, videos: Video[]): Frente | null {
         if (q.right <= r.left || q.left >= r.right || q.bottom <= r.top || q.top >= r.bottom) continue
         if (!indices.has(i)) nos.push(irmao)
         indices.add(i)
-        de = Math.min(de, q.top - caixa.top)
-        ate = Math.max(ate, q.bottom - caixa.top)
+        x0 = Math.min(x0, q.left - caixa.left)
+        y0 = Math.min(y0, q.top - caixa.top)
+        x1 = Math.max(x1, q.right - caixa.left)
+        y1 = Math.max(y1, q.bottom - caixa.top)
       }
     }
   }
-  return indices.size ? { elementos: [...indices], nos, de, ate } : null
+  return indices.size ? { elementos: [...indices], nos, x0, y0, x1, y1 } : null
 }
 
 function medirVideos(elemento: HTMLElement): Video[] {
@@ -508,36 +447,6 @@ function medirVideos(elemento: HTMLElement): Video[] {
       vigia: 0,
     }
   })
-}
-
-/** O que as cópias do bloco precisam saber dele (medido junto com o resto, longe da rolagem). */
-function medirMolde(elemento: HTMLElement): Molde {
-  const estilo = getComputedStyle(elemento)
-  const desfoques: number[] = []
-  elementosDe(elemento).forEach((filho, i) => {
-    const valor = getComputedStyle(filho).backdropFilter
-    if (valor && valor !== 'none') desfoques.push(i)
-  })
-  return {
-    herdados: HERDADOS.map((propriedade): [string, string] => [propriedade, estilo.getPropertyValue(propriedade)]).filter(
-      ([, valor]) => valor !== '',
-    ),
-    desfoques,
-    pseudos: null,
-    animado: elemento.getAnimations({ subtree: true }).some((animacao) => animacao.effect?.getComputedTiming().iterations === Infinity),
-  }
-}
-
-/** Os elementos do bloco que desenham ::before ou ::after, pelo caminho (veja comCaminhos). */
-function medirPseudos(elemento: HTMLElement): [string, 'before' | 'after'][] {
-  const pseudos: [string, 'before' | 'after'][] = []
-  for (const [filho, caminho] of comCaminhos(elemento)) {
-    for (const pseudo of ['before', 'after'] as const) {
-      const conteudo = getComputedStyle(filho, `::${pseudo}`).content
-      if (conteudo && conteudo !== 'none' && conteudo !== 'normal') pseudos.push([caminho, pseudo])
-    }
-  }
-  return pseudos
 }
 
 /** Uma borda solta da página: o lado de um elemento que não é bloco nem está dentro de um. */
@@ -594,7 +503,7 @@ function pintarFonte(video: Video): boolean {
   if (elemento.readyState < 2 || !elemento.videoWidth || !elemento.videoHeight) return false
   video.fonte ??= document.createElement('canvas')
   // Tudo fica na placa de vídeo: com o quadro copiado para a memória (willReadFrequently, ou o
-  // vídeo desenhado direto nas telas pequenas das cópias), cada cópia esperaria a placa terminar o
+  // vídeo desenhado direto nas telas pequenas das fatias), cada fatia esperaria a placa terminar o
   // que está fazendo, às vezes por centenas de ms.
   const contexto = video.fonte.getContext('2d')
   if (!contexto) return false
@@ -607,7 +516,7 @@ function pintarFonte(video: Video): boolean {
   const k = Math.max(w / elemento.videoWidth, h / elemento.videoHeight)
   const sw = w / k
   const sh = h / k
-  // os cantos que o original corta ficam transparentes (atrás deles, nas cópias, está o clone)
+  // os cantos que o original corta ficam transparentes (atrás deles, nas fatias, está a foto)
   const { recortes, escala } = video
   if (recortes.length) {
     contexto.clearRect(0, 0, w, h)
@@ -624,114 +533,11 @@ function pintarFonte(video: Video): boolean {
   return true
 }
 
-/** As linhas do vídeo (relativas a ele) que caem entre as linhas `de` e `ate` do bloco, ou null. */
-function trechoDoVideo(video: Video, de: number, ate: number): [number, number] | null {
-  const cima = Math.max(de, video.y) - video.y
-  const baixo = Math.min(ate, video.y + video.altura) - video.y
-  return baixo > cima ? [cima, baixo] : null
-}
-
-/**
- * Põe a tela de uma cópia sobre a parte do vídeo que cai na fatia (ou a esconde), na posição dela
- * dentro da fatia (de `de` a `ate` no bloco). Só estilo: o desenho fica para depois (desenharTela),
- * porque cada desenho depois de uma mudança de estilo obrigaria o navegador a recalcular os estilos
- * ali mesmo.
- */
-function posicionarTela(video: Video, tela: HTMLCanvasElement | undefined, de: number, ate: number) {
-  if (!tela) return
-  const trecho = trechoDoVideo(video, de, ate)
-  if (!trecho) {
-    tela.style.display = 'none'
-    return
-  }
-  const [cima, baixo] = trecho
-  const w = Math.max(1, Math.round(video.largura * video.escala))
-  const h = Math.max(1, Math.round((baixo - cima) * video.escala))
-  if (tela.width !== w || tela.height !== h) {
-    tela.width = w
-    tela.height = h
-  }
-  tela.style.left = `${video.x}px`
-  tela.style.top = `${video.y + cima - de}px`
-  tela.style.width = `${video.largura}px`
-  tela.style.height = `${baixo - cima}px`
-  tela.style.display = ''
-}
-
-/** Copia para a tela de uma cópia a parte do quadro atual que cai na fatia (ou a deixa vazia, com o pôster à vista). */
-function desenharTela(video: Video, tela: HTMLCanvasElement | undefined, de: number, ate: number) {
-  const trecho = trechoDoVideo(video, de, ate)
-  const contexto = trecho && tela?.getContext('2d')
-  if (!trecho || !tela || !contexto) return
-  if (!video.pintada || !video.fonte) {
-    contexto.clearRect(0, 0, tela.width, tela.height)
-    return
-  }
-  const sy = Math.min(video.fonte.height - 1, Math.round(trecho[0] * video.escala))
-  const sh = Math.max(1, Math.min(video.fonte.height - sy, tela.height))
-  // com cantos recortados, o quadro anterior não pode sobrar onde a fonte é transparente
-  if (video.recortes.length) contexto.clearRect(0, 0, tela.width, tela.height)
-  contexto.drawImage(video.fonte, 0, sy, tela.width, sh, 0, 0, tela.width, sh)
-}
-
 function soltarVideo(video: Video) {
   if (video.vigia) video.elemento.cancelVideoFrameCallback(video.vigia)
   video.vigia = 0
   video.fonte = null
   video.pintada = false
-}
-
-/**
- * Os elementos do bloco com o caminho até cada um (as posições entre os irmãos, de pai em filho:
- * "" é o bloco, "0.2" o terceiro filho do primeiro filho), na ordem do documento, a de elementosDe.
- * O caminho de um elemento não muda quando o React troca o que há dentro de outro (o ícone do botão
- * de pausa, por exemplo): os estados do mouse chegam ao elemento certo mesmo nas cópias feitas antes
- * da troca.
- */
-function comCaminhos(raiz: Element): [Element, string][] {
-  const lista: [Element, string][] = [[raiz, '']]
-  const visitar = (pai: Element, prefixo: string) => {
-    let i = 0
-    for (const filho of pai.children) {
-      const caminho = prefixo ? `${prefixo}.${i}` : `${i}`
-      lista.push([filho, caminho])
-      visitar(filho, caminho)
-      i++
-    }
-  }
-  visitar(raiz, '')
-  return lista
-}
-
-/** O elemento no caminho (veja comCaminhos) a partir de `raiz`. */
-function noCaminho(raiz: Element, caminho: string): Element | undefined {
-  let no: Element | undefined = raiz
-  if (caminho) for (const parte of caminho.split('.')) no = no?.children[Number(parte)]
-  return no
-}
-
-/**
- * Põe (ou tira, com `valor` null) um estado do original num elemento da cópia (`raiz` é o clone).
- * A chave é "caminho|propriedade" ou, num pseudoelemento, "caminho|before|propriedade" (via
- * variável e atributo, que as REGRAS_PSEUDO aplicam).
- */
-function sobrescrever(raiz: Element, chave: string, valor: string | null) {
-  const [caminho = '', a, b] = chave.split('|')
-  const elemento = noCaminho(raiz, caminho) as (Element & ElementCSSInlineStyle) | undefined
-  if (!elemento || a === undefined) return
-  if (b === undefined) {
-    if (valor === null) elemento.style.removeProperty(a)
-    else elemento.style.setProperty(a, valor)
-    return
-  }
-  const nome = `${a}-${b}`
-  if (valor === null) {
-    elemento.removeAttribute(`data-${nome}`)
-    elemento.style.removeProperty(`--${nome}`)
-  } else {
-    elemento.setAttribute(`data-${nome}`, '')
-    elemento.style.setProperty(`--${nome}`, valor)
-  }
 }
 
 /**
@@ -774,19 +580,20 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   /** A força e o lugar e o tamanho do buraco negro com que a máscara da camada foi feita. */
   let forcaDaMascara = Number.NaN
   let furoDaMascara = ''
-  /** Algo mudou dentro de um bloco (o React redesenhou): as cópias dele precisam ser refeitas. */
-  let sujo = false
-  /** Faltou tempo, no último quadro, para preparar todas as cópias da folga. */
+  /** Faltou tempo, no último quadro, para pôr no lugar todas as fatias da folga. */
   let incompleto = false
-  /** As cópias que mudaram de fatia e esperam a animação nova (veja animarPendentes). */
+  /** As fatias que mudaram de lugar e esperam a animação nova (veja animarPendentes). */
   const porAnimar: [Bloco, Tira][] = []
-  /** As cópias criadas para a reserva, que serão travadas (veja travar) depois do primeiro layout. */
-  let porTravar: Tira[] = []
-  /** Até quando o quadro pode criar as cópias urgentes (veja ORCAMENTO_URGENTE). */
+  /** Até quando o quadro pode pôr no lugar as fatias urgentes (veja ORCAMENTO_URGENTE). */
   let limiteUrgente = 0
-  /** A rolagem e a urgência do último preparar: os quadros dos vídeos vão primeiro às cópias que estão perto de aparecer. */
+  /** A rolagem e a urgência do último preparar: os quadros dos vídeos vão primeiro às fatias que estão perto de aparecer. */
   let rolagemAtual = 0
   let urgenciaAtual = 0
+  /** A folga e a faixa de aquecer do último preparar (para a ordem das fotos). */
+  let folgaAtual: Folga = [0, 0]
+  let aquecerAtual: Folga = [0, 0]
+  /** Quando a rolagem mudou pela última vez (ms): as fotos velhas esperam ela parar. */
+  let rolouEm = Number.NEGATIVE_INFINITY
   let dpr = window.devicePixelRatio || 1
   /** A altura das fatias em pixels da tela (inteira) e em px CSS: FATIA arredondada a pixels inteiros da tela. */
   let pixelsDaFatia = Math.max(1, Math.round(FATIA * dpr))
@@ -798,35 +605,83 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   let proximoNumero = 0
   /** As linhas soltas medidas, pela chave (número do elemento e lado). */
   let linhas = new Map<string, Bloco>()
+  /** Quantas fotos estão sendo feitas, e a vez marcada para começar outras. */
+  let fotografando = 0
+  let vezDasFotos = 0
+  let esperaDasFotos = 0
+  /** Sobe a cada limpar: as fotos que estavam sendo feitas antes dele não valem mais. */
+  let geracao = 0
+  /** A classe da raiz da página (o tema) com que as fotos foram feitas. */
+  let tema = document.documentElement.className
+  let esperaDoMouse = 0
 
-  const quantasFatias = (bloco: Bloco) => Math.max(1, Math.ceil(bloco.altura / passo - 1e-6))
-  /** O trecho do bloco (px CSS a partir do alto dele) que a fatia mostra. */
+  const quantasFatias = (bloco: Bloco) => Math.max(1, Math.ceil(Math.round(bloco.alturaDaGrade * dpr) / pixelsDaFatia))
+  /** O trecho da grade do bloco (px CSS a partir do alto dela) que a fatia mostra. */
   const trechoDaFatia = (bloco: Bloco, fatia: number): [number, number] => [
     (fatia * pixelsDaFatia) / dpr,
-    Math.min(((fatia + 1) * pixelsDaFatia) / dpr, bloco.altura),
+    Math.min(((fatia + 1) * pixelsDaFatia) / dpr, bloco.alturaDaGrade),
   ]
-  /** Um tamanho (px CSS) arredondado para cima a pixels inteiros da tela. */
-  const emPixels = (v: number) => Math.ceil(v * dpr - 1e-6) / dpr
   // as bordas entre fatias ficam em pixels inteiros da tela: sem a suavização das bordas, não aparecem as emendas
   const alinhar = (v: number) => Math.round(v * dpr) / dpr
 
-  // O React redesenhou algo dentro de um bloco com cópias (o ícone de um vídeo que pausou, o relógio
-  // do contato): as cópias dele são refeitas. Os estilos que este efeito põe no original (atributo
-  // style) e a entrada dos blocos (data-revealed) não contam.
+  /** A grade das fatias do bloco, que é também o enquadramento da foto (veja enquadrar). */
+  function atualizarGrade(bloco: Bloco) {
+    const quadro = enquadrar(bloco.x, bloco.y, bloco.largura, bloco.altura, dpr)
+    bloco.esquerda = quadro.esquerda
+    bloco.topo = quadro.topo
+    bloco.larguraDaGrade = quadro.largura
+    bloco.alturaDaGrade = quadro.altura
+    bloco.fase = quadro.fase
+  }
+
+  // O React redesenhou algo dentro de um bloco (o ícone de um vídeo que pausou, um texto que trocou
+  // de idioma): a foto dele é refeita. Os estilos que este efeito põe no original (atributo style) e
+  // a entrada dos blocos (data-revealed) não contam.
   const vigiaConteudo = new MutationObserver((registros) => {
     for (const { target } of registros) {
-      const bloco = blocos.find((outro) => !outro.linha && outro.tiras.length && outro.elemento.contains(target))
+      const bloco = blocos.find((outro) => !outro.linha && outro.elemento.contains(target))
       if (!bloco) continue
-      bloco.sujo = sujo = true
-      bloco.mudancas.push(target)
+      envelhecer(bloco, { soFrente: bloco.frente?.nos.some((no) => no.contains(target)) ?? false })
     }
   })
 
+  // O tema mudou (a classe da raiz): todas as fotos são refeitas, as mais perto da faixa primeiro.
+  const vigiaTema = new MutationObserver(() => {
+    const novo = document.documentElement.className
+    if (novo === tema) return
+    tema = novo
+    for (const bloco of blocos) if (!bloco.linha) envelhecer(bloco, {})
+  })
+
   /**
-   * A camada das cópias: fixa no alto da tela, acima da cortina e abaixo do cabeçalho. Fixa como a
-   * cortina: as cópias andam pela rolagem com as animações, e não com a página. Ela mostra só a
+   * O mouse entrou ou saiu de um elemento: os blocos em que os elementos com o mouse em cima
+   * mudaram ganham foto nova (com as regras de :hover valendo para eles, veja fotos.ts), depois que
+   * as transições do original acabarem.
+   */
+  const aoMexerMouse = () => {
+    if (!esperaDoMouse) esperaDoMouse = requestAnimationFrame(verMouse)
+  }
+
+  function verMouse() {
+    esperaDoMouse = 0
+    // os elementos com o mouse em cima, do mais de fora ao mais fundo: uma linha de ancestrais
+    const emCima = [...document.querySelectorAll(':hover')]
+    const agora = performance.now()
+    for (const bloco of blocos) {
+      if (bloco.linha) continue
+      const fundo = emCima.includes(bloco.elemento) ? (emCima.findLast((elemento) => bloco.elemento.contains(elemento)) ?? null) : null
+      if (fundo === bloco.mouse) continue
+      bloco.mouse = fundo
+      bloco.mexido = agora
+      envelhecer(bloco, { soMouse: true })
+    }
+  }
+
+  /**
+   * A camada das fatias: fixa no alto da tela, acima da cortina e abaixo do cabeçalho. Fixa como a
+   * cortina: as fatias andam pela rolagem com as animações, e não com a página. Ela mostra só a
    * faixa (o que passa dela fica por conta do original), mas vai um pouco além, até ESPERA abaixo
-   * dela, com essa parte apagada pela máscara (veja esmaecimento): é ali que as cópias presas à
+   * dela, com essa parte apagada pela máscara (veja esmaecimento): é ali que as fatias presas à
    * rolagem esperam a sua vez, logo abaixo da beira. Recortadas fora da camada, o navegador não as
    * desenharia antes de entrarem na faixa, e nos primeiros quadros elas apareciam vazias.
    */
@@ -840,9 +695,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       camada.style.cssText =
         'position:fixed;left:0;top:0;width:100%;overflow:hidden;z-index:40;pointer-events:none;user-select:none;contain:layout style'
       if (cena) camada.style.height = `${cena.faixa.inicio + ESPERA}px`
-      const regras = document.createElement('style')
-      regras.textContent = REGRAS_PSEUDO
-      camada.append(regras)
       document.body.append(camada)
       forcaDaMascara = Number.NaN
       const principal = document.querySelector('main')
@@ -852,9 +704,13 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
           childList: true,
           characterData: true,
           attributes: true,
-          attributeFilter: ATRIBUTOS_VISIVEIS,
+          attributeFilter: ['class', 'src', 'srcset', 'hidden', 'd', 'aria-pressed', 'aria-expanded'],
         })
       }
+      tema = document.documentElement.className
+      vigiaTema.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+      document.addEventListener('pointerover', aoMexerMouse, { passive: true })
+      document.addEventListener('pointerout', aoMexerMouse, { passive: true })
     }
     return camada
   }
@@ -895,10 +751,10 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
    */
   function alvoDoBloco(bloco: Bloco): Alvo {
     const { faixa } = cena!
-    return alvoEm(cena!, bloco.y + bloco.altura / 2 - (faixa.frente + faixa.inicio) / 2)
+    return alvoEm(cena!, bloco.topo + bloco.alturaDaGrade / 2 - (faixa.frente + faixa.inicio) / 2)
   }
 
-  /** Para onde vai a linha do bloco que estaria na altura `y` da tela, com a força `forca`, rumo a `alvo`. */
+  /** Para onde vai a linha da grade do bloco que estaria na altura `y` da tela, com a força `forca`, rumo a `alvo`. */
   function linhaEm(bloco: Bloco, y: number, forca: number, alvo: Alvo): Linha {
     const { faixa } = cena!
     const banda = Math.max(1, faixa.inicio - faixa.frente)
@@ -907,30 +763,31 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     const queda = alvo.y - faixa.frente
     const q = forca * clamp01((faixa.inicio - y) / banda)
     const k = q ** ACELERACAO
-    const centro = bloco.x + bloco.largura / 2
+    const centro = bloco.esquerda + bloco.larguraDaGrade / 2
     const meio = centro + k * (alvo.x - centro)
-    const meia = Math.max(FIO, bloco.largura * (1 - k)) / 2
+    const meia = Math.max(FIO, bloco.larguraDaGrade * (1 - k)) / 2
     return { esquerda: meio - meia, direita: meio + meia, y: alinhar(y + q * q * queda), q }
   }
 
   /**
    * Por onde a fatia passa, em pixels inteiros da tela de rolagem: da rolagem n0 / dpr, a última
-   * em que ela ainda está inteira abaixo da faixa (e a cópia, escondida pela beira da camada), à
-   * n1 / dpr, em que ela foi engolida de vez (no começo da página, não antes de a força chegar a
-   * 1). Contas em inteiros: cada fatia sai exatamente pixelsDaFatia pixels depois da de cima.
+   * em que ela ainda está inteira abaixo da faixa (e escondida pela beira da camada), à n1 / dpr, em
+   * que ela foi engolida de vez (no começo da página, não antes de a força chegar a 1). Contas em
+   * inteiros: cada fatia sai exatamente pixelsDaFatia pixels depois da de cima.
    */
   function grade(bloco: Bloco, fatia: number): [number, number] {
     const { faixa, plena } = cena!
     const [, ate] = trechoDaFatia(bloco, fatia)
-    const n0 = Math.max(0, Math.floor((bloco.y - faixa.inicio) * dpr + 1e-6) + fatia * pixelsDaFatia)
-    const fim = Math.ceil((bloco.y - faixa.frente) * dpr - 1e-6) + Math.ceil(ate * dpr - 1e-6)
+    const topo = Math.round(bloco.topo * dpr)
+    const n0 = Math.max(0, topo + fatia * pixelsDaFatia - Math.round(faixa.inicio * dpr))
+    const fim = topo + Math.round(ate * dpr) - Math.round(faixa.frente * dpr)
     return [n0, Math.max(n0 + 1, fim, Math.ceil(plena * dpr - 1e-6))]
   }
 
   /**
    * O trecho da rolagem em que vale a animação da fatia. Cada quadro-chave vale de meio pixel da
    * tela antes a meio pixel depois da sua rolagem: com a página parada entre dois pixels (o
-   * navegador desenha a página no pixel mais próximo), a cópia fica no mesmo pixel que o original.
+   * navegador desenha a página no pixel mais próximo), a fatia fica no mesmo pixel que o original.
    */
   function trecho(bloco: Bloco, fatia: number): [number, number] {
     const [n0, n1] = grade(bloco, fatia)
@@ -940,7 +797,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   /**
    * Os quadros-chave da fatia: a transformação dela em cada pixel da tela de rolagem da sua
    * passagem pela faixa, sem nada entre um e outro (cada um vale até o próximo). Calculados uma
-   * vez, quando a cópia é preparada; dali em diante, a rolagem só escolhe qual vale.
+   * vez, quando a fatia é posta no lugar; dali em diante, a rolagem só escolhe qual vale.
    *
    * Nada entre um e outro de propósito: o navegador interpolaria a perspectiva do trapézio, e perto
    * do buraco negro, onde a fatia fica muito mais estreita em cima que embaixo, a conta degenera e
@@ -968,205 +825,162 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     for (let i = 0; i <= passos; i++) {
       const rolagem = (n0 + i) / dpr
       const forca = comum ? 1 : cena!.forca(rolagem)
-      const y = bloco.y + de - rolagem
+      const y = bloco.topo + de - rolagem
       const cima = linhaEm(bloco, y, forca, alvo)
       const baixo = linhaEm(bloco, y + altura, forca, alvo)
       // as duas bordas na mesma linha não formam um trapézio (e a matriz não teria inversa)
       if (baixo.y - cima.y < 0.01) baixo.y = cima.y + 0.01
-      quadros.push({ offset: i / passos, easing: 'step-end', transform: trapezio(bloco.largura, altura, cima, baixo) })
+      quadros.push({ offset: i / passos, easing: 'step-end', transform: trapezio(bloco.larguraDaGrade, altura, cima, baixo) })
     }
     const modelo = new KeyframeEffect(null, quadros, { fill: 'both' })
     bloco.trajetos.set(chave, modelo)
     return modelo
   }
 
-  /** O clone do bloco para uma cópia: fora a referência, já com os estados que o original tem agora. */
-  function montarClone(bloco: Bloco, modo: Modo) {
-    const clone = bloco.elemento.cloneNode(true) as HTMLElement
-    const todos = elementosDe(clone)
-    // sem ids repetidos, sem as animações de entrada e sem os estilos que este efeito põe no original
-    for (const elemento of todos) {
-      elemento.removeAttribute('id')
-      elemento.removeAttribute('data-reveal')
-      elemento.removeAttribute('data-revealed')
-      elemento.classList.remove('enter')
-    }
-    // (o estilo do modelo de uma linha solta é o que a desenha)
-    if (!bloco.linha) clone.removeAttribute('style')
-    const { herdados, desfoques } = bloco.molde
-    for (const [propriedade, valor] of herdados) clone.style.setProperty(propriedade, valor)
-    Object.assign(clone.style, {
-      position: 'absolute',
-      left: '0',
-      top: '0',
-      width: `${bloco.largura}px`,
-      height: `${bloco.altura}px`,
-      margin: '0',
-      transform: 'none',
-      transition: 'none',
-      animation: 'none',
-    })
-    // Cada desfoque do fundo seria uma passada a mais na placa de vídeo em cada cópia, a cada quadro
-    // (o botão de pausa dos vídeos tem um): com dezenas de cópias, o site trava. Na tira nem se nota.
-    for (const i of desfoques) {
-      const elemento = todos[i] as (Element & ElementCSSInlineStyle) | undefined
-      elemento?.style.setProperty('backdrop-filter', 'none')
-      elemento?.style.setProperty('-webkit-backdrop-filter', 'none')
-    }
-    for (const imagem of clone.querySelectorAll('img')) {
-      imagem.loading = 'eager'
-      imagem.decoding = 'sync'
-    }
-    // Vídeos: uma cópia de <video> não tocaria junto com o original. Ele vira um espaço vazio do mesmo
-    // tamanho (o pôster continua atrás), e o quadro atual vai para as telas da cópia (veja criarTira).
-    // O <source> passa para o espaço: a ordem dos elementos continua a do original. (Repassar os
-    // quadros a um <video> em cada cópia, com captureStream, sai bem mais caro: a página caía para
-    // uns 20 quadros por segundo.)
-    const copias = [...clone.querySelectorAll('video')]
-    bloco.videos.forEach((video, i) => {
-      const copia = copias[i]
-      if (!copia) return
-      const espaco = document.createElement('div')
-      espaco.className = copia.className
-      espaco.style.cssText = `position:relative;width:${video.largura}px;height:${video.altura}px`
-      espaco.append(...copia.childNodes)
-      copia.replaceWith(espaco)
-    })
-    const elementos = elementosDe(clone)
-    // o que fica na frente dos vídeos aparece só nas frentes, por cima das telas
-    const esconder = (i: number, valor: string) => (elementos[i] as (Element & ElementCSSInlineStyle) | undefined)?.style.setProperty('visibility', valor)
-    if (modo === 'frente') clone.style.visibility = 'hidden'
-    for (const i of bloco.frente?.elementos ?? []) {
-      if (modo === 'frente') esconder(i, 'visible')
-      else if (modo === 'copia') esconder(i, 'hidden')
-    }
-    if (modo !== 'referencia') for (const [chave, valor] of bloco.espelho) sobrescrever(clone, chave, valor)
-    return { clone, elementos }
+  /** O trecho do vídeo (relativo a ele) que cai entre as linhas `de` e `ate` da grade do bloco, ou null. */
+  function trechoDoVideo(bloco: Bloco, video: Video, de: number, ate: number): [number, number] | null {
+    const topo = video.y + bloco.y - bloco.topo
+    const cima = Math.max(de, topo) - topo
+    const baixo = Math.min(ate, topo + video.altura) - topo
+    return baixo > cima ? [cima, baixo] : null
   }
 
   /**
-   * Uma cópia do bloco, ainda sem fatia. O clone fica recortado na fatia por dentro (a janela), e as
-   * telas dos vídeos ficam fora do recorte, por cima dele: um recorte dentro da caixa deformada
-   * obrigaria a placa de vídeo a desenhar à parte, a cada quadro, tudo o que tem camada própria dentro
-   * dele (as telas), e com dezenas de cópias a página travava. Pelo mesmo motivo a caixa não tem
-   * overflow nem contain: paint, e as telas não têm o overflow: clip que o navegador põe em todo
-   * canvas. A tela de cada vídeo cobre só a parte dele que cai na fatia.
+   * Põe a tela de uma fatia sobre a parte do vídeo que cai nela (ou a esconde), na posição dela
+   * dentro da fatia (de `de` a `ate` na grade). Só estilo: o desenho fica para depois (desenharTela),
+   * porque cada desenho depois de uma mudança de estilo obrigaria o navegador a recalcular os
+   * estilos ali mesmo.
    */
-  function criarTira(bloco: Bloco, modo: Modo = 'copia'): Tira {
+  function posicionarTela(bloco: Bloco, video: Video, tela: HTMLCanvasElement | undefined, de: number, ate: number) {
+    if (!tela) return
+    const trecho = trechoDoVideo(bloco, video, de, ate)
+    if (!trecho) {
+      tela.style.display = 'none'
+      return
+    }
+    const [cima, baixo] = trecho
+    const w = Math.max(1, Math.round(video.largura * video.escala))
+    const h = Math.max(1, Math.round((baixo - cima) * video.escala))
+    if (tela.width !== w || tela.height !== h) {
+      tela.width = w
+      tela.height = h
+    }
+    tela.style.left = `${video.x + bloco.x - bloco.esquerda}px`
+    tela.style.top = `${video.y + bloco.y - bloco.topo + cima - de}px`
+    tela.style.width = `${video.largura}px`
+    tela.style.height = `${baixo - cima}px`
+    tela.style.display = ''
+  }
+
+  /**
+   * Desenha na tela de uma fatia a parte do quadro atual que cai nela (ou nada, com o pôster da foto
+   * à vista) e, por cima, o que fica na frente do vídeo.
+   */
+  function desenharTela(bloco: Bloco, video: Video, tela: HTMLCanvasElement | undefined, de: number, ate: number) {
+    const trecho = trechoDoVideo(bloco, video, de, ate)
+    const contexto = trecho && tela?.getContext('2d')
+    if (!trecho || !tela || !contexto) return
+    const [cima, baixo] = trecho
+    const temQuadro = video.pintada && video.fonte !== null
+    // um quadro sem cantos recortados cobre a tela inteira: nada do anterior sobra
+    if (!temQuadro || video.recortes.length) contexto.clearRect(0, 0, tela.width, tela.height)
+    if (temQuadro && video.fonte) {
+      const sy = Math.min(video.fonte.height - 1, Math.round(cima * video.escala))
+      const sh = Math.max(1, Math.min(video.fonte.height - sy, tela.height))
+      contexto.drawImage(video.fonte, 0, sy, tela.width, sh, 0, 0, tela.width, sh)
+    }
+    // a frente, só no pedaço desta tela que ela cobre (nas outras fatias, nada)
+    const { fotoDaFrente, frente } = bloco
+    if (!fotoDaFrente || !frente) return
+    const x0 = Math.max(0, frente.x0 - video.x)
+    const x1 = Math.min(video.largura, frente.x1 - video.x)
+    const y0 = Math.max(cima, frente.y0 - video.y)
+    const y1 = Math.min(baixo, frente.y1 - video.y)
+    if (x1 <= x0 || y1 <= y0) return
+    const gx = video.x + bloco.x - bloco.esquerda
+    const gy = video.y + bloco.y - bloco.topo
+    const k = video.escala
+    contexto.drawImage(
+      fotoDaFrente,
+      (gx + x0) * dpr,
+      (gy + y0) * dpr,
+      (x1 - x0) * dpr,
+      (y1 - y0) * dpr,
+      x0 * k,
+      (y0 - cima) * k,
+      (x1 - x0) * k,
+      (y1 - y0) * k,
+    )
+  }
+
+  /**
+   * Uma fatia do bloco, ainda sem lugar: um retângulo com a foto de fundo (que vem do grupo do
+   * bloco, veja grupoDo), ou, numa linha solta, com o modelo dela dentro. As telas dos vídeos ficam
+   * por cima. Nada recorta nada dentro da caixa deformada: um recorte ali obrigaria a placa de vídeo
+   * a desenhar à parte, a cada quadro, tudo o que tem camada própria dentro dele (as telas), e com
+   * dezenas de fatias a página travava. Pelo mesmo motivo a caixa não tem overflow nem contain:
+   * paint, e as telas não têm o overflow: clip que o navegador põe em todo canvas.
+   */
+  function criarTira(bloco: Bloco): Tira {
     const caixa = document.createElement('div')
-    // nasce guardada (veja ESCONDIDA)
+    // nasce escondida (veja ESCONDIDA)
     caixa.style.cssText = `position:absolute;left:0;top:0;contain:size layout style;transform-origin:0 0;translate:${ESCONDIDA}`
-    // em pixels inteiros da tela, como a altura (veja mostrarFatia)
-    caixa.style.width = `${emPixels(bloco.largura)}px`
-    // as frentes ficam por cima das telas de todas as cópias
-    if (modo === 'frente') caixa.style.zIndex = '1'
-    const janela = document.createElement('div')
-    janela.style.cssText = 'position:absolute;inset:0;overflow:hidden'
-    const { clone, elementos } = montarClone(bloco, modo)
-    janela.append(clone)
-    caixa.append(janela)
-    const telas = bloco.videos.map((): HTMLCanvasElement | undefined => {
-      if (modo !== 'copia') return undefined
+    if (bloco.linha) {
+      const modelo = bloco.elemento.cloneNode(true) as HTMLElement
+      modelo.style.position = 'absolute'
+      caixa.append(modelo)
+    } else {
+      caixa.style.backgroundImage = 'var(--foto)'
+      caixa.style.backgroundRepeat = 'no-repeat'
+    }
+    const telas = bloco.videos.map((): HTMLCanvasElement => {
       const tela = document.createElement('canvas')
       tela.style.cssText = 'position:absolute;overflow:visible;display:none'
       caixa.append(tela)
       return tela
     })
     grupoDo(bloco).append(caixa)
-    return {
-      caixa,
-      clone,
-      elementos,
-      telas,
-      modo,
-      fatia: -1,
-      animacao: null,
-      modelo: null,
-      repintar: false,
-      sincronizar: bloco.molde.animado,
-      velha: false,
-      travada: false,
-    }
+    return { caixa, telas, fatia: -1, animacao: null, modelo: null, repintar: false }
   }
 
-  /**
-   * O React mudou algo dentro do bloco (o ícone de um vídeo que pausou, o relógio do contato): as
-   * cópias ficam velhas e cada uma ganha um clone novo, no mesmo lugar (veja renovar). As que podem
-   * aparecer logo, na hora; as outras, aos poucos, dentro do orçamento de cada quadro: um cartão tem
-   * dezenas de cópias, e refazer todas de uma vez travava a rolagem a cada vídeo que pausava.
-   */
-  function refazer(bloco: Bloco) {
-    // O que mais muda é o ícone do botão de pausa, que fica na frente do vídeo. As cópias comuns o
-    // escondem (veja Frente), e o caminho dos outros elementos não muda (veja comCaminhos): para
-    // elas, nada mudou. Só as frentes precisam do clone novo.
-    const frente = bloco.frente
-    const soNaFrente =
-      frente !== null && bloco.mudancas.length > 0 && bloco.mudancas.every((alvo) => frente.nos.some((no) => no.contains(alvo)))
-    bloco.mudancas = []
-    soltarReferencia(bloco)
-    // a estrutura pode ter mudado: os estados do mouse e o que fica na frente dos vídeos são medidos de novo
-    bloco.espelho.clear()
-    bloco.molde = medirMolde(bloco.elemento)
-    bloco.frente = medirFrente(bloco.elemento, bloco.videos)
-    for (const tira of soNaFrente ? bloco.frentes : [...bloco.tiras, ...bloco.frentes]) tira.velha = true
-  }
-
-  /**
-   * Um clone novo para a cópia velha, no mesmo lugar. As telas dos vídeos, fora do clone, continuam
-   * com o quadro, e a animação, na caixa, continua valendo.
-   */
-  function renovar(bloco: Bloco, tira: Tira) {
-    const novo = montarClone(bloco, tira.modo)
-    novo.clone.style.top = tira.clone.style.top
-    tira.clone.replaceWith(novo.clone)
-    Object.assign(tira, novo, { sincronizar: bloco.molde.animado, velha: false })
-  }
-
-  /**
-   * Renova as cópias velhas do bloco: as que estão a até `urgencia` px de aparecer primeiro (com o
-   * tempo das urgentes), as outras enquanto houver tempo no quadro. Devolve se ainda ficou alguma.
-   */
-  function renovarVelhas(bloco: Bloco, rolagem: number, urgencia: number, limite: number): boolean {
-    let ficou = false
-    for (const tira of [...bloco.tiras, ...bloco.frentes]) {
-      if (!tira.velha) continue
-      const perto = tira.fatia >= 0 && distancia(bloco, tira.fatia, rolagem) <= urgencia
-      if (performance.now() < (perto ? limiteUrgente : limite)) renovar(bloco, tira)
-      else ficou = true
-    }
-    return ficou
-  }
-
-  /** Põe a cópia na fatia: o clone na posição dela e as telas dos vídeos sobre a parte que cai nela. */
+  /** Põe a fatia no lugar: o pedaço da foto que ela mostra e as telas dos vídeos sobre a parte que cai nela. */
   function mostrarFatia(bloco: Bloco, tira: Tira, fatia: number) {
     tira.fatia = fatia
     const [de, ate] = trechoDaFatia(bloco, fatia)
-    // A caixa tem pixels inteiros da tela (a última fatia do bloco, mais baixa, sobra um pouco: o
-    // trapézio é o da altura dela, veja trajeto). Com uma fração de pixel, a camada da cópia
-    // passaria meio pixel da borda de baixo, uma linha apagada sobre o que vem embaixo dela.
-    tira.caixa.style.height = `${emPixels(ate - de)}px`
-    tira.caixa.style.translate = bloco.elevado ? ESCONDIDA : ''
-    destravar(tira)
-    tira.clone.style.top = `${-de}px`
+    const { style } = tira.caixa
+    style.width = `${bloco.larguraDaGrade}px`
+    style.height = `${ate - de}px`
+    style.translate = bloco.elevado ? ESCONDIDA : ''
+    if (bloco.linha) {
+      const modelo = tira.caixa.firstElementChild as HTMLElement | null
+      if (modelo) {
+        modelo.style.left = `${bloco.x - bloco.esquerda}px`
+        modelo.style.top = `${bloco.y - bloco.topo - de}px`
+      }
+    } else {
+      // a foto cobre a grade inteira, pixel a pixel (veja fotos.ts)
+      style.backgroundSize = `${bloco.larguraDaGrade}px ${bloco.alturaDaGrade}px`
+      style.backgroundPosition = `0 ${-de}px`
+    }
     bloco.videos.forEach((video, i) => {
       const tela = tira.telas[i]
       if (!tela) return
-      if (trechoDoVideo(video, de, ate)) vigiar(bloco, video, i)
-      posicionarTela(video, tela, de, ate)
+      if (trechoDoVideo(bloco, video, de, ate)) vigiar(bloco, video, i)
+      posicionarTela(bloco, video, tela, de, ate)
     })
     tira.repintar = tira.telas.some(Boolean)
   }
 
-  /** Marca a cópia para ser presa à rolagem, no trajeto da sua fatia (veja animarPendentes). */
+  /** Marca a fatia para ser presa à rolagem, no trajeto do seu lugar (veja animarPendentes). */
   function animar(bloco: Bloco, tira: Tira) {
     porAnimar.push([bloco, tira])
   }
 
   /**
-   * Prende à rolagem as cópias marcadas, todas juntas, depois de todas as mudanças na página: para
+   * Prende à rolagem as fatias marcadas, todas juntas, depois de todas as mudanças na página: para
    * pôr uma animação no trecho certo da rolagem, o navegador precisa do layout em dia, e cada
-   * animação criada entre uma mudança e outra o obrigava a refazê-lo na hora. A cópia que passa a
-   * outra fatia do mesmo bloco, com o mesmo modelo, só muda o trecho da animação que já tinha (bem
+   * animação criada entre uma mudança e outra o obrigava a refazê-lo na hora. A fatia que passa a
+   * outro lugar do mesmo bloco, com o mesmo modelo, só muda o trecho da animação que já tinha (bem
    * mais barato que criar outra).
    */
   function animarPendentes() {
@@ -1187,37 +1001,32 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     porAnimar.length = 0
   }
 
-  /** A cópia volta à reserva do bloco, escondida e solta da rolagem. */
-  function guardar(tira: Tira) {
-    tira.fatia = -1
-    tira.caixa.style.translate = ESCONDIDA
+  /**
+   * A fatia que a rolagem não pode trazer logo sai da página, com a animação. Guardá-la escondida
+   * para reaproveitar não compensava: criar uma é barato (um retângulo), e cada fatia parada na
+   * página pesava em todo quadro em que o navegador repinta algo (ele passa por todas as camadas).
+   */
+  function descartar(bloco: Bloco, tira: Tira) {
     if (tira.animacao) relogio.soltar(tira.animacao)
     tira.animacao = null
     tira.modelo = null
-    travar(tira)
-  }
-
-  /**
-   * A cópia guardada sai do trabalho do navegador: com content-visibility: hidden, nada dentro dela
-   * é recalculado nem pintado a cada quadro, mas o layout que ela já tem fica guardado. Sem isso, as
-   * centenas de cópias à espera pesavam em todo quadro da rolagem, mesmo escondidas.
-   */
-  function travar(tira: Tira) {
-    if (tira.travada) return
-    tira.travada = true
-    tira.caixa.style.contentVisibility = 'hidden'
-  }
-
-  function destravar(tira: Tira) {
-    if (!tira.travada) return
-    tira.travada = false
-    tira.caixa.style.contentVisibility = ''
+    tira.fatia = -1
+    tira.caixa.remove()
+    const i = bloco.tiras.indexOf(tira)
+    if (i >= 0) bloco.tiras.splice(i, 1)
   }
 
   /** Quão longe (px de rolagem) a fatia está de aparecer, com a página em `rolagem` (0: pode estar à vista). */
   function distancia(bloco: Bloco, fatia: number, rolagem: number): number {
     const [de, ate] = trecho(bloco, fatia)
     return de > rolagem ? de - rolagem : ate < rolagem ? rolagem - ate : 0
+  }
+
+  /** Quão longe (px de rolagem) alguma fatia do bloco está de aparecer (0: pode estar à vista). */
+  function distanciaDoBloco(bloco: Bloco, rolagem: number): number {
+    const comeco = trecho(bloco, 0)[0]
+    const fim = trecho(bloco, quantasFatias(bloco) - 1)[1]
+    return comeco > rolagem ? comeco - rolagem : fim < rolagem ? rolagem - fim : 0
   }
 
   /**
@@ -1235,8 +1044,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     const ultima = quantasFatias(bloco) - 1
     // um intervalo que certamente contém todas, conferido uma a uma em seguida
     const primeira =
-      rolagem - folga[0] <= plena + 1 ? 0 : Math.max(0, Math.floor((rolagem - folga[0] + faixa.frente - bloco.y) / passo) - 2)
-    const derradeira = Math.min(ultima, Math.floor((rolagem + folga[1] + faixa.inicio - bloco.y) / passo) + 2)
+      rolagem - folga[0] <= plena + 1 ? 0 : Math.max(0, Math.floor((rolagem - folga[0] + faixa.frente - bloco.topo) / passo) - 2)
+    const derradeira = Math.min(ultima, Math.floor((rolagem + folga[1] + faixa.inicio - bloco.topo) / passo) + 2)
     const lista: [number, number][] = []
     for (let fatia = primeira; fatia <= derradeira; fatia++) {
       if (alcancavel(bloco, fatia, rolagem, folga)) lista.push([fatia, distancia(bloco, fatia, rolagem)])
@@ -1245,26 +1054,17 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   }
 
   /**
-   * Põe as cópias (`tiras`, do bloco) nas fatias (`fatias`, com a distância de cada uma): as que já
-   * mostram uma delas continuam nela; as outras passam às que faltam, das mais longe para as mais
-   * perto; e só então se criam cópias novas. Fatias a até `urgencia` px de aparecer ganham cópia na
-   * hora; as outras, só enquanto houver tempo no quadro (até `limite`). Devolve quantas cópias
-   * foram criadas.
+   * Põe as fatias do bloco nos lugares (`fatias`, com a distância de cada um): as que já mostram um
+   * deles continuam nele; as outras passam aos que faltam, das mais longe para as mais perto; e só
+   * então se criam fatias novas. Lugares a até `urgencia` px de aparecer ganham fatia na hora; os
+   * outros, só enquanto houver tempo no quadro (até `limite`). Devolve quantas fatias foram criadas.
    */
-  function distribuir(
-    bloco: Bloco,
-    tiras: Tira[],
-    fatias: [number, number][],
-    rolagem: number,
-    folga: Folga,
-    urgencia: number,
-    modo: Modo,
-    limite: number,
-  ): number {
+  function distribuir(bloco: Bloco, fatias: [number, number][], rolagem: number, folga: Folga, urgencia: number, limite: number): number {
     let novas = 0
+    const { tiras } = bloco
     const precisas = new Set(fatias.map(([fatia]) => fatia))
     const longe = (tira: Tira) => (tira.fatia < 0 ? Infinity : distancia(bloco, tira.fatia, rolagem))
-    // da mais perto à mais longe: as últimas (pop) são as primeiras a mudar de fatia
+    // da mais perto à mais longe: as últimas (pop) são as primeiras a mudar de lugar
     const livres = tiras.filter((tira) => !precisas.has(tira.fatia)).sort((a, b) => longe(a) - longe(b))
     const cobertas = new Set(tiras.map((tira) => tira.fatia))
     for (const [fatia, d] of fatias) {
@@ -1275,92 +1075,42 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
           incompleto = true
           continue
         }
-        tira = criarTira(bloco, modo)
+        tira = criarTira(bloco)
         tiras.push(tira)
         novas++
       }
-      if (tira.velha) renovar(bloco, tira)
       mostrarFatia(bloco, tira, fatia)
       animar(bloco, tira)
     }
-    // As que sobraram continuam prontas se a rolagem pode trazê-las de volta logo; as outras voltam
-    // à reserva (veja completarReserva).
-    for (const tira of livres) if (tira.fatia >= 0 && !alcancavel(bloco, tira.fatia, rolagem, folga, MANTER)) guardar(tira)
+    // As que sobraram continuam prontas se a rolagem pode trazê-las de volta logo; as outras saem.
+    for (const tira of livres) if (tira.fatia < 0 || !alcancavel(bloco, tira.fatia, rolagem, folga, MANTER)) descartar(bloco, tira)
     return novas
   }
 
-  /** Quantas cópias um bloco de `fatias` fatias usa ao mesmo tempo, no máximo, com a folga `folga`. */
-  function copiasDoBloco(fatias: number, folga: Folga): number {
-    const { faixa } = cena!
-    return Math.min(fatias, Math.ceil((MANTER * (folga[0] + folga[1]) + faixa.inicio - faixa.frente) / passo) + 2)
-  }
-
-  /**
-   * Completa o bloco até `alvo` cópias, criando as que faltam escondidas e sem animação (uma cópia
-   * guardada não pesa na placa de vídeo nem na rolagem), enquanto houver tempo no quadro. Devolve
-   * se ficou faltando alguma.
-   */
-  function completarReserva(bloco: Bloco, tiras: Tira[], alvo: number, modo: Modo, limite: number): boolean {
-    while (tiras.length < alvo) {
-      if (performance.now() > limite) return true
-      const tira = criarTira(bloco, modo)
-      tiras.push(tira)
-      // travada só no próximo preparar, depois do primeiro layout (que fica guardado)
-      porTravar.push(tira)
-    }
-    return false
-  }
-
-  /**
-   * Apaga as cópias guardadas além de `guardadas` (as que mostram uma fatia ficam). Só para os
-   * blocos que a rolagem deixou para trás: os que ela está para trazer só ganham cópias, senão
-   * cada mudança de velocidade apagava e refazia dezenas delas.
-   */
-  function enxugarReserva(tiras: Tira[], guardadas: number) {
-    let sobra = tiras.filter((tira) => tira.fatia < 0).length - guardadas
-    for (let i = tiras.length - 1; i >= 0 && sobra > 0; i--) {
-      const tira = tiras[i]
-      if (tira && tira.fatia < 0) {
-        descartar(tiras, tira)
-        sobra--
-      }
-    }
-  }
-
-  /** Apaga a cópia de vez. */
-  function descartar(tiras: Tira[], tira: Tira) {
-    if (tira.animacao) relogio.soltar(tira.animacao)
-    tira.animacao = null
-    // (sem fatia, ela não ganha a animação que esperava, se esperava uma)
-    tira.fatia = -1
-    tira.caixa.remove()
-    tiras.splice(tiras.indexOf(tira), 1)
-  }
-
-  /** As cópias que mostram o vídeo agora. */
+  /** As fatias que mostram o vídeo agora. */
   function tirasDoVideo(bloco: Bloco, video: Video): Tira[] {
-    return bloco.tiras.filter((tira) => tira.fatia >= 0 && trechoDoVideo(video, ...trechoDaFatia(bloco, tira.fatia)))
+    return bloco.tiras.filter((tira) => tira.fatia >= 0 && trechoDoVideo(bloco, video, ...trechoDaFatia(bloco, tira.fatia)))
   }
 
   /**
-   * A cópia pode aparecer nos próximos quadros. As outras, preparadas com antecedência, ainda estão
+   * A fatia pode aparecer nos próximos quadros. As outras, postas com antecedência, ainda estão
    * escondidas abaixo da faixa (ou já foram engolidas): não precisam de cada quadro dos vídeos.
    */
   const pertoDeAparecer = (bloco: Bloco, tira: Tira) => distancia(bloco, tira.fatia, rolagemAtual) <= urgenciaAtual + PERTO
 
   /**
-   * Copia o quadro da fonte para as cópias que mostram o vídeo e estão perto de aparecer: todas as
+   * Copia o quadro da fonte para as fatias que mostram o vídeo e estão perto de aparecer: todas as
    * que aparecem ficam sempre no mesmo quadro. As outras recebem o quadro quando chegarem perto.
    */
   function pintarTodas(bloco: Bloco, video: Video, i: number) {
     for (const tira of tirasDoVideo(bloco, video)) {
-      if (pertoDeAparecer(bloco, tira)) desenharTela(video, tira.telas[i], ...trechoDaFatia(bloco, tira.fatia))
+      if (pertoDeAparecer(bloco, tira)) desenharTela(bloco, video, tira.telas[i], ...trechoDaFatia(bloco, tira.fatia))
       else tira.repintar = true
     }
   }
 
   /**
-   * A cada quadro novo do vídeo (onde o navegador avisa), as cópias recebem esse mesmo quadro no
+   * A cada quadro novo do vídeo (onde o navegador avisa), as fatias recebem esse mesmo quadro no
    * mesmo momento em que o original o mostra: não há uma linha em que a imagem pule de um quadro
    * para outro.
    */
@@ -1375,43 +1125,37 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     video.vigia = video.elemento.requestVideoFrameCallback(aoQuadro)
   }
 
-  function soltarReferencia(bloco: Bloco) {
-    bloco.referencia?.caixa.remove()
-    bloco.referencia = null
-  }
-
   function apagarTiras(bloco: Bloco) {
-    for (const tira of [...bloco.tiras, ...bloco.frentes]) {
+    for (const tira of bloco.tiras) {
       if (tira.animacao) relogio.soltar(tira.animacao)
       tira.animacao = null
       tira.fatia = -1
     }
     bloco.tiras = []
-    bloco.frentes = []
-    soltarReferencia(bloco)
     bloco.grupo?.remove()
     bloco.grupo = null
-    bloco.espelho.clear()
     for (const video of bloco.videos) soltarVideo(video)
   }
 
   /**
-   * As cópias de cada bloco ficam juntas, numa caixa só delas dentro da camada. A cada quadro o
-   * navegador olha de novo só as caixas em que algo mudou: com centenas de cópias soltas na camada,
-   * cada mudança numa delas o fazia percorrer todas, a cada quadro, no estilo, no layout e na pintura.
+   * As fatias de cada bloco ficam juntas, numa caixa só delas dentro da camada, que leva a foto do
+   * bloco (numa variável, para as fatias): trocar a foto é mudar uma propriedade só. A cada quadro o
+   * navegador olha de novo só as caixas em que algo mudou.
    */
   function grupoDo(bloco: Bloco): HTMLDivElement {
     if (!bloco.grupo) {
       bloco.grupo = document.createElement('div')
       bloco.grupo.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;contain:layout style'
+      if (bloco.foto) bloco.grupo.style.setProperty('--foto', `url("${bloco.foto.url}")`)
       obterCamada().append(bloco.grupo)
     }
     return bloco.grupo
   }
 
   /**
-   * O bloco com o foco do teclado fica por cima da cortina, no lugar (quem navega pelo teclado
-   * precisa vê-lo), e as cópias dele se escondem, até o foco sair.
+   * O bloco fica por cima da cortina, no lugar, e as fatias dele se escondem: com o foco do teclado
+   * dentro (quem navega pelo teclado precisa vê-lo), ou quando as fatias precisam aparecer e a foto
+   * ainda não está pronta (sem ela, o conteúdo sumiria na beira da faixa).
    */
   function elevar(bloco: Bloco, sim: boolean) {
     if (bloco.linha || bloco.elevado === sim) return
@@ -1424,95 +1168,177 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     } else {
       ;[estilo.position, estilo.zIndex] = bloco.estiloAntes
     }
-    for (const tira of [...bloco.tiras, ...bloco.frentes]) {
-      if (tira.fatia >= 0) tira.caixa.style.translate = sim ? ESCONDIDA : ''
-    }
+    for (const tira of bloco.tiras) if (tira.fatia >= 0) tira.caixa.style.translate = sim ? ESCONDIDA : ''
+  }
+
+  /** O original mudou: a foto do bloco precisa ser refeita (veja tirarFotos). */
+  function envelhecer(bloco: Bloco, { soFrente = false, soMouse = false }: { soFrente?: boolean; soMouse?: boolean }) {
+    if (bloco.linha) return
+    bloco.soFrente = bloco.velha ? bloco.soFrente && soFrente : soFrente
+    bloco.soMouse = bloco.velha ? bloco.soMouse && soMouse : soMouse
+    bloco.velha = true
+    agendarFotos(false)
   }
 
   /**
-   * O mouse em cima (hover, e o clique) muda o original, mas não as cópias: ninguém está com o
-   * mouse em cima delas. Enquanto o bloco está assim (e até ele voltar, com as transições), as
-   * propriedades de ESTADO em que o original difere de uma cópia sem estados (a referência) são
-   * postas em todas as cópias, a cada quadro: elas acompanham até as transições do original.
+   * Marca a vez de começar fotos: num tempo ocioso da página ou, se alguma fatia precisa de uma
+   * foto que ainda não existe, já. A cada quadro (`doQuadro`), só se ninguém está esperando uma
+   * volta já marcada (veja tirarFotos): senão cada quadro da rolagem olharia todos os blocos à toa.
    */
-  function espelhar(bloco: Bloco) {
-    if (!bloco.espelho.size && !bloco.elemento.matches(':hover')) {
-      soltarReferencia(bloco)
+  function agendarFotos(urgente: boolean, doQuadro = false) {
+    if (!cena || !camada) return
+    if (urgente) {
+      if (vezDasFotos && temOcioso) cancelIdleCallback(vezDasFotos)
+      else if (vezDasFotos) clearTimeout(vezDasFotos)
+      vezDasFotos = 0
+      tirarFotos()
       return
     }
-    bloco.referencia ??= criarTira(bloco, 'referencia')
-    bloco.molde.pseudos ??= medirPseudos(bloco.elemento)
-    // a referência acabou de ser clonada: a mesma estrutura do original, elemento a elemento
-    const referencia = bloco.referencia.elementos
-    const raizDaReferencia = bloco.referencia.clone
-    const originais = comCaminhos(bloco.elemento)
-    const mudancas: [string, string | null][] = []
-    const comparar = (chave: string, valor: string, sem: string) => {
-      const atual = bloco.espelho.get(chave)
-      if (valor === sem) {
-        if (atual === undefined) return
-        bloco.espelho.delete(chave)
-        mudancas.push([chave, null])
-      } else if (valor !== atual) {
-        bloco.espelho.set(chave, valor)
-        mudancas.push([chave, valor])
+    if (vezDasFotos || (doQuadro && esperaDasFotos)) return
+    vezDasFotos = temOcioso ? requestIdleCallback(tirarFotos, { timeout: 500 }) : window.setTimeout(tirarFotos, 60)
+  }
+
+  /**
+   * Qual bloco fotografar (o de menor prioridade), ou null. Primeiro os que não têm foto, dos mais
+   * perto da faixa aos mais longe: todos ganham a sua, com o tempo que sobra, antes de a rolagem os
+   * trazer. Depois os de foto velha que estão na faixa de aquecer (os que o mouse mudou, só quando
+   * chegam perto da faixa, e depois de as transições acabarem). Devolve também quando vale olhar de
+   * novo, se algum espera.
+   */
+  function escolher(agora: number, rolagem: number): { bloco: Bloco | null; esperar: number } {
+    let melhor: Bloco | null = null
+    let menor = Infinity
+    let esperar = Infinity
+    const perto = Math.max(folgaAtual[0], folgaAtual[1]) + window.innerHeight * 0.5
+    for (const bloco of blocos) {
+      if (bloco.linha || bloco.fotografando) continue
+      if (agora - bloco.falhou < NOVA_TENTATIVA) {
+        esperar = Math.min(esperar, NOVA_TENTATIVA - (agora - bloco.falhou))
+        continue
+      }
+      const d = distanciaDoBloco(bloco, rolagem)
+      let prioridade: number
+      if (!bloco.foto) prioridade = d
+      else if (!bloco.velha) continue
+      else {
+        // a foto velha serve até as transições do mouse acabarem e a página parar de rolar
+        const espera = Math.max(ESPERA_DO_MOUSE - (agora - bloco.mexido), ESPERA_DA_ROLAGEM - (agora - rolouEm))
+        if (espera > 0) {
+          esperar = Math.min(esperar, espera)
+          continue
+        }
+        const [acima, abaixo] = aquecerAtual
+        const alcance = bloco.soMouse ? perto : Math.max(acima, abaixo, perto)
+        if (d > alcance) continue
+        // as que já têm uma foto (velha) vão depois das que não têm nenhuma
+        prioridade = d + 1e6
+      }
+      if (prioridade < menor) {
+        menor = prioridade
+        melhor = bloco
       }
     }
-    originais.forEach(([original, caminho], i) => {
-      const copia = referencia[i]
-      if (!copia) return
-      const eo = getComputedStyle(original)
-      const ec = getComputedStyle(copia)
-      for (const propriedade of ESTADO) {
-        // a posição do bloco é da conta das tiras (o original pode estar no meio da entrada)
-        if (i === 0 && (propriedade === 'translate' || propriedade === 'transform')) continue
-        comparar(`${caminho}|${propriedade}`, eo.getPropertyValue(propriedade), ec.getPropertyValue(propriedade))
-      }
-    })
-    for (const [caminho, pseudo] of bloco.molde.pseudos) {
-      const original = noCaminho(bloco.elemento, caminho)
-      const copia = noCaminho(raizDaReferencia, caminho)
-      if (!original || !copia) continue
-      const eo = getComputedStyle(original, `::${pseudo}`)
-      const ec = getComputedStyle(copia, `::${pseudo}`)
-      for (const propriedade of ESTADO_PSEUDO) {
-        comparar(`${caminho}|${pseudo}|${propriedade}`, eo.getPropertyValue(propriedade), ec.getPropertyValue(propriedade))
-      }
+    return { bloco: melhor, esperar }
+  }
+
+  function tirarFotos() {
+    vezDasFotos = 0
+    if (!cena || !camada) return
+    // As medidas e as fotos dependem das fontes: antes de elas carregarem, as fotos sairiam erradas.
+    if (document.fonts && document.fonts.status !== 'loaded') {
+      void document.fonts.ready.then(() => agendarFotos(false))
+      return
     }
-    // (as velhas recebem os estados ao ganhar o clone novo: a estrutura delas pode ser outra)
-    for (const tira of [...bloco.tiras, ...bloco.frentes]) {
-      if (!tira.velha) for (const [chave, valor] of mudancas) sobrescrever(tira.clone, chave, valor)
+    const agora = performance.now()
+    const rolagem = window.scrollY
+    let esperar = Infinity
+    while (fotografando < FOTOS_AO_MESMO_TEMPO) {
+      const escolha = escolher(agora, rolagem)
+      esperar = escolha.esperar
+      if (!escolha.bloco) break
+      tirarFoto(escolha.bloco)
+    }
+    window.clearTimeout(esperaDasFotos)
+    esperaDasFotos = 0
+    if (Number.isFinite(esperar)) {
+      esperaDasFotos = window.setTimeout(() => {
+        esperaDasFotos = 0
+        agendarFotos(false)
+      }, esperar + 20)
     }
   }
 
-  /** As animações CSS das cópias novas (que começam do zero) passam a andar junto com as do original. */
-  function sincronizarAnimacoes(bloco: Bloco, tiras: Tira[]) {
-    const chaveDe = (animacao: Animation, posicoes: Map<Element, number>) => {
-      const efeito = animacao.effect
-      if (!(animacao instanceof CSSAnimation) || !(efeito instanceof KeyframeEffect) || !efeito.target) return null
-      const posicao = posicoes.get(efeito.target)
-      return posicao === undefined ? null : `${posicao}|${efeito.pseudoElement ?? ''}|${animacao.animationName}`
+  /** Faz a foto do bloco (ou só a da frente dos vídeos, se só ela mudou) e a põe nas fatias. */
+  function tirarFoto(bloco: Bloco) {
+    const minhaGeracao = geracao
+    const soFrente = bloco.foto !== null && bloco.velha && bloco.soFrente && bloco.foto.fase === bloco.fase
+    bloco.fotografando = true
+    bloco.velha = false
+    bloco.soFrente = false
+    bloco.soMouse = false
+    fotografando++
+    // a estrutura pode ter mudado (o React trocou o ícone do botão): a frente é medida de novo
+    bloco.frente = medirFrente(bloco.elemento, bloco.videos)
+    const fase = bloco.fase
+    fotografar({
+      elemento: bloco.elemento,
+      x: bloco.x,
+      y: bloco.y,
+      largura: bloco.largura,
+      altura: bloco.altura,
+      dpr,
+      frente: bloco.frente?.elementos ?? [],
+      foto: !soFrente,
+      fotoDaFrente: bloco.frente !== null,
+      urgente: () => bloco.elevado || bloco.tiras.some((tira) => tira.fatia >= 0),
+    })
+      .then((fotos) => {
+        if (minhaGeracao !== geracao || !blocos.includes(bloco)) {
+          soltarFoto(fotos.foto)
+          return
+        }
+        aplicarFotos(bloco, fotos, soFrente)
+        // o bloco mudou de lugar no meio da foto: ela serve até a próxima
+        if (bloco.fase !== fase) envelhecer(bloco, {})
+      })
+      .catch(() => {
+        bloco.falhou = performance.now()
+        if (bloco.foto) bloco.velha = true
+      })
+      .finally(() => {
+        bloco.fotografando = false
+        if (minhaGeracao === geracao) {
+          fotografando--
+          agendarFotos(false)
+        }
+      })
+  }
+
+  /** As fotos novas vão para as fatias: a do bloco no grupo, a da frente nas telas dos vídeos. */
+  function aplicarFotos(bloco: Bloco, { foto, frente }: Fotos, soFrente: boolean) {
+    if (!soFrente && foto) {
+      const antiga = bloco.foto
+      bloco.foto = foto
+      bloco.grupo?.style.setProperty('--foto', `url("${foto.url}")`)
+      soltarFoto(antiga)
     }
-    const originais = new Map(elementosDe(bloco.elemento).map((elemento, i): [Element, number] => [elemento, i]))
-    const tempos = new Map<string, number>()
-    for (const animacao of bloco.elemento.getAnimations({ subtree: true })) {
-      const chave = chaveDe(animacao, originais)
-      if (chave && animacao.currentTime !== null) tempos.set(chave, Number(animacao.currentTime))
-    }
-    for (const tira of tiras) {
-      const posicoes = new Map(tira.elementos.map((elemento, i): [Element, number] => [elemento, i]))
-      for (const animacao of tira.clone.getAnimations({ subtree: true })) {
-        const chave = chaveDe(animacao, posicoes)
-        const tempo = chave === null ? undefined : tempos.get(chave)
-        if (tempo !== undefined) animacao.currentTime = tempo
-      }
-      tira.sincronizar = false
-    }
+    bloco.fotoDaFrente = frente
+    bloco.videos.forEach((video, i) => pintarTodas(bloco, video, i))
+    // sem foto, as fatias não apareciam (o bloco estava por cima da cortina): agora aparecem
+    if (bloco.elevado && !bloco.focado) elevar(bloco, false)
   }
 
   function devolver(bloco: Bloco) {
-    if (bloco.tiras.length || bloco.frentes.length || bloco.referencia || bloco.grupo) apagarTiras(bloco)
+    if (bloco.tiras.length || bloco.grupo) apagarTiras(bloco)
     elevar(bloco, false)
+  }
+
+  /** O bloco saiu da página: as fatias e as fotos vão embora. */
+  function esquecer(bloco: Bloco) {
+    devolver(bloco)
+    soltarFoto(bloco.foto)
+    bloco.foto = null
+    bloco.fotoDaFrente = null
   }
 
   /** Os títulos fixos das seções param no alto da tela, dentro da faixa: ficam por cima da cortina. */
@@ -1531,33 +1357,58 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
 
   function novoBloco(elemento: HTMLElement, medida: { x: number; y: number; largura: number; altura: number }, linha: boolean): Bloco {
     const videos = linha ? [] : medirVideos(elemento)
-    return {
+    const bloco: Bloco = {
       elemento,
       linha,
       ...medida,
+      esquerda: 0,
+      topo: 0,
+      larguraDaGrade: 0,
+      alturaDaGrade: 0,
+      fase: '',
       videos,
       frente: linha ? null : medirFrente(elemento, videos),
       tiras: [],
-      frentes: [],
-      molde: linha ? MOLDE_VAZIO : medirMolde(elemento),
-      espelho: new Map(),
-      referencia: null,
-      sujo: false,
-      mudancas: [],
+      foto: null,
+      fotoDaFrente: null,
+      velha: false,
+      soFrente: false,
+      soMouse: false,
+      fotografando: false,
+      falhou: Number.NEGATIVE_INFINITY,
+      mexido: Number.NEGATIVE_INFINITY,
+      mouse: null,
       trajetos: new Map(),
+      focado: false,
       elevado: false,
       estiloAntes: ['', ''],
       grupo: null,
     }
+    atualizarGrade(bloco)
+    return bloco
   }
 
-  /** O bloco mudou de lugar na página (sem mudar de tamanho): as cópias continuam, com os trajetos refeitos. */
+  /**
+   * O bloco mudou de lugar na página (sem mudar de tamanho): as fatias continuam, com os trajetos
+   * refeitos. A foto continua valendo se ele caiu na mesma fração de pixel da tela; senão ela é
+   * refeita, e até lá serve a antiga.
+   */
   function mover(bloco: Bloco, x: number, y: number) {
     if (bloco.x === x && bloco.y === y) return
     bloco.x = x
     bloco.y = y
+    atualizarGrade(bloco)
     bloco.trajetos.clear()
-    for (const tira of [...bloco.tiras, ...bloco.frentes]) if (tira.fatia >= 0) animar(bloco, tira)
+    const quantas = quantasFatias(bloco)
+    for (const tira of [...bloco.tiras]) {
+      if (tira.fatia < 0 || tira.fatia >= quantas) {
+        descartar(bloco, tira)
+        continue
+      }
+      mostrarFatia(bloco, tira, tira.fatia)
+      animar(bloco, tira)
+    }
+    if (bloco.foto && bloco.foto.fase !== bloco.fase) envelhecer(bloco, {})
   }
 
   return {
@@ -1582,20 +1433,29 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       if (igual && mesmoCaminho) return
       furoDaMascara = ''
       if (igual) {
-        // Só o caminho mudou (a página mudou de altura): as cópias continuam, com trajetos novos.
+        // Só o caminho mudou (a página mudou de altura): as fatias continuam, com trajetos novos.
         for (const bloco of blocos) {
           bloco.trajetos.clear()
-          for (const tira of [...bloco.tiras, ...bloco.frentes]) if (tira.fatia >= 0) animar(bloco, tira)
+          for (const tira of bloco.tiras) if (tira.fatia >= 0) animar(bloco, tira)
         }
         animarPendentes()
         return
       }
-      // tudo muda: as cópias são refeitas no próximo preparar (as que podem aparecer, na hora)
+      // tudo muda: as fatias são refeitas no próximo preparar (as que podem aparecer, na hora)
       for (const bloco of blocos) {
         devolver(bloco)
         bloco.trajetos.clear()
       }
-      dpr = novoDpr
+      if (novoDpr !== dpr) {
+        // as fotos são feitas nos pixels da tela: com outra escala, todas são refeitas
+        dpr = novoDpr
+        for (const bloco of blocos) {
+          soltarFoto(bloco.foto)
+          bloco.foto = null
+          bloco.fotoDaFrente = null
+          atualizarGrade(bloco)
+        }
+      }
       pixelsDaFatia = Math.max(1, Math.round(FATIA * dpr))
       passo = pixelsDaFatia / dpr
       obterCamada().style.height = `${nova.faixa.inicio + ESPERA}px`
@@ -1604,11 +1464,11 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       forcaDaMascara = Number.NaN
     },
 
-    pendente: () => sujo || incompleto,
+    pendente: () => incompleto,
 
     medir() {
-      // As medidas ignoram o efeito (o original nunca sai do lugar): as cópias continuam valendo
-      // enquanto o bloco tem o mesmo tamanho.
+      // As medidas ignoram o efeito (o original nunca sai do lugar): as fatias e a foto continuam
+      // valendo enquanto o bloco tem o mesmo tamanho.
       const antes = new Map(blocos.filter((bloco) => !bloco.linha).map((bloco) => [bloco.elemento, bloco]))
       const elementos = [...document.querySelectorAll<HTMLElement>(SELETOR)]
       const titulos = new Set<HTMLElement>()
@@ -1629,14 +1489,9 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
           const anterior = antes.get(elemento)
           if (anterior && anterior.largura === medida.largura && anterior.altura === medida.altura) {
             mover(anterior, medida.x, medida.y)
-            anterior.molde = medirMolde(elemento)
-            const frente = medirFrente(elemento, anterior.videos)
-            // o que fica na frente dos vídeos mudou: as cópias são refeitas
-            if (String(frente?.elementos) !== String(anterior.frente?.elementos)) anterior.sujo = sujo = true
-            anterior.frente = frente
             return anterior
           }
-          if (anterior) devolver(anterior)
+          if (anterior) esquecer(anterior)
           return novoBloco(elemento, medida, false)
         })
         // elementos ocultos neste tamanho de tela não têm o que absorver
@@ -1674,124 +1529,67 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
 
       // o que deixou de ser bloco (um título que passou a ficar fixo, por exemplo) volta ao normal
       const atuais = new Set(novos)
-      for (const bloco of antes.values()) if (!atuais.has(bloco)) devolver(bloco)
+      for (const bloco of antes.values()) if (!atuais.has(bloco)) esquecer(bloco)
       blocos = [...novos, ...linhas.values()]
       // os blocos que mudaram de lugar ganham trajetos novos
       animarPendentes()
+      // os blocos novos ganham foto (os mais perto da faixa primeiro)
+      agendarFotos(false)
     },
 
-    preparar(rolagem, { folga, urgencia, orcamento, aquecer: [acima, abaixo], folgaMaxima }) {
+    preparar(rolagem, { folga, urgencia, orcamento, aquecer: [acima, abaixo] }) {
       incompleto = false
       if (!cena) return 0
       const agora = performance.now()
       const limite = agora + orcamento
       limiteUrgente = agora + Math.max(orcamento, ORCAMENTO_URGENTE)
+      if (rolagem !== rolagemAtual) rolouEm = agora
       rolagemAtual = rolagem
       urgenciaAtual = urgencia
+      folgaAtual = folga
+      aquecerAtual = [acima, abaixo]
       entrada ??= aparecerAoRolar(relogio, obterCamada())
       ajustarMascara(rolagem)
-      // as cópias da reserva criadas no quadro anterior já têm layout: saem do trabalho do navegador
-      for (const tira of porTravar) if (tira.fatia < 0 && tira.caixa.isConnected) travar(tira)
-      porTravar = []
-      if (sujo) {
-        sujo = false
-        for (const bloco of blocos) {
-          if (!bloco.sujo) continue
-          // o conteúdo mudou: as cópias ficam velhas e ganham clones novos (veja refazer)
-          if (bloco.tiras.length || bloco.frentes.length) refazer(bloco)
-          bloco.sujo = false
-        }
-      }
       // O foco de um clique (num botão, num link) não conta, só o do teclado: senão o bloco clicado
       // nunca seria absorvido.
       const focado = document.activeElement
       const doTeclado = focado instanceof Element && focado !== document.body && focado.matches(':focus-visible') ? focado : null
       let novas = 0
-      /** Os blocos que a rolagem está para trazer à faixa, com a distância de cada um. */
-      const quentes: [Bloco, number][] = []
+      let semFoto = false
+      /** Algum bloco espera uma foto (nova ou refeita). */
+      let falta = false
       for (const bloco of blocos) {
-        if (!bloco.linha) elevar(bloco, doTeclado !== null && bloco.elemento.contains(doTeclado))
         const quantas = quantasFatias(bloco)
         // o trecho da rolagem em que alguma fatia do bloco pode estar na faixa
         const comeco = trecho(bloco, 0)[0]
         const fim = trecho(bloco, quantas - 1)[1]
-        const longe = comeco > rolagem ? comeco - rolagem : fim < rolagem ? rolagem - fim : 0
-        const quente = fim >= rolagem - acima && comeco <= rolagem + abaixo
         const fatias = fim >= rolagem - folga[0] && comeco <= rolagem + folga[1] ? fatiasDaFolga(bloco, rolagem, folga) : []
-        if (fatias.length) {
-          novas += distribuir(bloco, bloco.tiras, fatias, rolagem, folga, urgencia, 'copia', limite)
-          // as fatias com algo na frente dos vídeos ganham também uma frente
-          const { frente: naFrente } = bloco
-          novas += distribuir(
-            bloco,
-            bloco.frentes,
-            naFrente
-              ? fatias.filter(([fatia]) => {
-                  const [de, ate] = trechoDaFatia(bloco, fatia)
-                  return de < naFrente.ate && ate > naFrente.de
-                })
-              : [],
-            rolagem,
-            folga,
-            urgencia,
-            'frente',
-            limite,
-          )
-          if (renovarVelhas(bloco, rolagem, urgencia, limite)) incompleto = true
-        } else {
-          // as cópias que a rolagem não pode trazer logo voltam à reserva
-          for (const tira of [...bloco.tiras, ...bloco.frentes]) {
-            if (tira.fatia >= 0 && !alcancavel(bloco, tira.fatia, rolagem, folga, MANTER)) guardar(tira)
-          }
+        if (!bloco.linha) {
+          bloco.focado = doTeclado !== null && bloco.elemento.contains(doTeclado)
+          const precisa = fatias.length > 0 && !bloco.foto
+          if (precisa) semFoto = true
+          if (!bloco.fotografando && (!bloco.foto || bloco.velha)) falta = true
+          elevar(bloco, bloco.focado || precisa)
         }
-        if (quente) {
-          quentes.push([bloco, longe])
-          continue
-        }
-        // Fora da faixa de aquecer, as cópias guardadas sobram: cada uma é um clone do bloco inteiro.
-        // Só um pouco mais longe (um quarto da faixa) elas são apagadas, para um bloco na beira não
-        // ganhar e perder cópias a cada passo da rolagem.
-        const ativo = bloco.tiras.some((tira) => tira.fatia >= 0) || bloco.frentes.some((tira) => tira.fatia >= 0)
-        const margem = (acima + abaixo) / 4
-        const esquecido = fim < rolagem - acima - margem || comeco > rolagem + abaixo + margem
-        if (ativo) {
-          enxugarReserva(bloco.tiras, RESERVA)
-          enxugarReserva(bloco.frentes, RESERVA)
-        } else if (esquecido && (bloco.tiras.length || bloco.frentes.length || bloco.referencia)) {
-          devolver(bloco)
-        }
-      }
-      // Com o tempo que sobrou no quadro, os blocos que estão para chegar ganham, escondidas, todas
-      // as cópias que vão usar, dos mais perto aos mais longe: quando a rolagem os trouxer, as cópias
-      // só mudam de fatia, e nenhum quadro precisa fazer dezenas de uma vez.
-      quentes.sort((a, b) => a[1] - b[1])
-      for (const [bloco] of quentes) {
-        const quantas = quantasFatias(bloco)
-        if (completarReserva(bloco, bloco.tiras, copiasDoBloco(quantas, folgaMaxima), 'copia', limite)) incompleto = true
-        const { frente: naFrente } = bloco
-        const naFrenteQuantas = naFrente ? Math.ceil((naFrente.ate - naFrente.de) / passo) + 1 : 0
-        if (completarReserva(bloco, bloco.frentes, Math.min(naFrenteQuantas, copiasDoBloco(quantas, folgaMaxima)), 'frente', limite)) {
-          incompleto = true
+        if (fatias.length) novas += distribuir(bloco, fatias, rolagem, folga, urgencia, limite)
+        else {
+          // as fatias que a rolagem não pode trazer logo saem
+          for (const tira of [...bloco.tiras]) if (tira.fatia < 0 || !alcancavel(bloco, tira.fatia, rolagem, folga, MANTER)) descartar(bloco, tira)
+          // sem fatias, o grupo do bloco sai também (a foto fica, para quando ele voltar)
+          if (!bloco.tiras.length && bloco.grupo) apagarTiras(bloco)
         }
       }
       animarPendentes()
+      if (falta) agendarFotos(semFoto, true)
       return novas
     },
 
     acompanhar() {
+      // Vídeos: as telas já foram postas no lugar (posicionarTela) junto com o resto do estilo; aqui
+      // só o desenho. Sem requestVideoFrameCallback, o quadro novo é descoberto aqui; e até o vídeo
+      // ter o primeiro quadro (ele só carrega quando aparece na tela), tenta a cada vez.
       for (const bloco of blocos) {
-        // só os blocos com alguma cópia que pode aparecer (os outros têm as cópias guardadas, prontas)
-        const ativo = bloco.tiras.some((tira) => tira.fatia >= 0) || bloco.frentes.some((tira) => tira.fatia >= 0)
-        if (bloco.linha || (!ativo && !bloco.espelho.size)) continue
-        espelhar(bloco)
-        if (!ativo) continue
-        if (bloco.molde.animado) {
-          const novas = [...bloco.tiras, ...bloco.frentes].filter((tira) => tira.sincronizar && tira.fatia >= 0)
-          if (novas.length) sincronizarAnimacoes(bloco, novas)
-        }
-        // Vídeos: as telas já foram postas no lugar (posicionarTela) junto com o resto do estilo;
-        // aqui só o desenho. Sem requestVideoFrameCallback, o quadro novo é descoberto aqui; e até o
-        // vídeo ter o primeiro quadro (ele só carrega quando aparece na tela), tenta a cada vez.
+        if (!bloco.videos.length || !bloco.tiras.some((tira) => tira.fatia >= 0)) continue
         bloco.videos.forEach((video, i) => {
           const tinha = video.pintada
           const tempo = video.elemento.currentTime
@@ -1804,7 +1602,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
           }
           for (const tira of bloco.tiras) {
             if (tira.repintar && tira.fatia >= 0 && pertoDeAparecer(bloco, tira)) {
-              desenharTela(video, tira.telas[i], ...trechoDaFatia(bloco, tira.fatia))
+              desenharTela(bloco, video, tira.telas[i], ...trechoDaFatia(bloco, tira.fatia))
             }
           }
         })
@@ -1814,16 +1612,30 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     },
 
     limpar() {
-      for (const bloco of blocos) devolver(bloco)
+      geracao++
+      fotografando = 0
+      if (vezDasFotos && temOcioso) cancelIdleCallback(vezDasFotos)
+      else if (vezDasFotos) window.clearTimeout(vezDasFotos)
+      vezDasFotos = 0
+      window.clearTimeout(esperaDasFotos)
+      esperaDasFotos = 0
+      cancelAnimationFrame(esperaDoMouse)
+      esperaDoMouse = 0
+      for (const bloco of blocos) {
+        esquecer(bloco)
+        bloco.fotografando = false
+        bloco.velha = false
+      }
       fixarPorCima(new Set())
       vigiaConteudo.disconnect()
+      vigiaTema.disconnect()
+      document.removeEventListener('pointerover', aoMexerMouse)
+      document.removeEventListener('pointerout', aoMexerMouse)
       if (entrada) relogio.soltar(entrada)
       entrada = null
       camada?.remove()
       camada = null
       porAnimar.length = 0
-      porTravar = []
-      sujo = false
       incompleto = false
     },
   }

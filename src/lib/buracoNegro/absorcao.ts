@@ -35,14 +35,7 @@
 // página (a borda de cima das seções e das listas) entram como blocos de uma fatia só.
 
 import { aparecerAoRolar, type Relogio } from './rolagem.ts'
-
-/** O buraco negro na tela (px CSS). */
-export interface Alvo {
-  x: number
-  y: number
-  /** Raio da sombra. */
-  raio: number
-}
+import { alvoEm, type Alvo, type Caminho } from './trajeto.ts'
 
 /**
  * A faixa da tela em que o conteúdo é absorvido: ele começa a ser puxado quando sobe até `inicio`
@@ -54,16 +47,11 @@ export interface Faixa {
   inicio: number
 }
 
-/** O que a absorção precisa saber da tela. Nada disso muda com a rolagem, só com o tamanho da janela. */
-export interface Cena {
-  /** O buraco negro com a página no topo. */
-  alvo: Alvo
-  /**
-   * O caminho dele ao longo da página, até a rolagem `ate`: pelo alto da tela, em linha reta e no
-   * mesmo ritmo, `dx` px para o lado, crescendo até `zoom` vezes o tamanho, com o ponto mais baixo,
-   * `base` raios da sombra abaixo do centro, sempre na mesma altura (veja alvoEm).
-   */
-  caminho: { dx: number; ate: number; zoom: number; base: number }
+/**
+ * O que a absorção precisa saber da tela. Nada disso muda com a rolagem, só com o tamanho da janela.
+ * O caminho do buraco negro ao longo da página é o mesmo que o motor desenha (veja trajeto.ts).
+ */
+export interface Cena extends Caminho {
   faixa: Faixa
   /** A força do puxão com a página rolada até `s`: de 0 (nada é puxado, como no topo da página) a 1. */
   forca(s: number): number
@@ -248,18 +236,6 @@ interface Linha {
 }
 
 const SELETOR = 'main [data-reveal], main .enter'
-
-/**
- * Onde o buraco negro está, e de que tamanho, com a página rolada até `s`. Ao longo dela ele anda
- * pelo alto da tela e cresce, cada vez mais perto, sempre no mesmo ritmo, com o ponto mais baixo
- * dele parado na mesma altura: o resto dele cresce para cima e para os lados.
- */
-export function alvoEm({ alvo, caminho }: Cena, s: number): Alvo {
-  const t = Math.min(1, Math.max(0, s / Math.max(1, caminho.ate)))
-  const raio = alvo.raio * caminho.zoom ** t
-  const fundo = alvo.y + caminho.base * alvo.raio
-  return { x: alvo.x + caminho.dx * t, y: fundo - caminho.base * raio, raio }
-}
 
 /** O nó é um bloco de conteúdo, ou tem blocos dentro? (Para saber se uma mudança na página pede novas medidas.) */
 export function temBlocos(no: Node): boolean {

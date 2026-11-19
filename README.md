@@ -24,7 +24,10 @@ npm run dev       # servidor de desenvolvimento em http://localhost:5173/Portfol
 npm run build     # gera o site e o currículo em PDF em dist/
 npm run preview   # serve o build em http://localhost:4173/Portfolio/
 npm run lint      # análise estática
+npm run medir     # mede a fluidez das animações no build (veja scripts/medir-animacao.mjs)
 ```
+
+`npm run medir` abre o build num Chrome ou Edge instalado, sem janela, e percorre a página em tela de desktop e de celular, sem limitação e com a CPU 4 e 6 vezes mais lenta: rolando numa velocidade fixa, em rajadas, no mergulho e parado nos projetos. Para cada caso, registra o intervalo entre quadros (p50, p95, p99, quantos passam de 16,7 e de 33 ms), as tarefas longas, o tempo de estilo, layout e pintura por quadro, os layouts forçados pelo JavaScript, os quadros do compositor perdidos ou sem rasterizar, o ritmo do motor do buraco negro e se o modo lento foi ativado. Os números vão para `medicoes/<rótulo>.json`. Com `--css`, compara uma mudança de estilo sem mexer no código; com `--raiz`, mede o build de outro checkout (uma versão anterior, por exemplo). As opções estão no começo do script.
 
 ## Onde editar o conteúdo
 

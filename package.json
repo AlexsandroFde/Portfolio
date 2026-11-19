@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs",
     "preview": "vite preview",
     "lint": "oxlint",
+    "medir": "node scripts/medir-animacao.mjs",
     "images": "node scripts/optimize-images.mjs"
   },
   "dependencies": {

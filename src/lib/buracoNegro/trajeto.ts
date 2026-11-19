@@ -91,7 +91,7 @@ export function alvoEm({ alvo, caminho }: Caminho, s: number): Alvo {
 export interface Palco {
   /** Largura do canvas. */
   largura: number
-  /** Altura da janela (window.innerHeight). */
+  /** Altura da tela grande (100lvh), que não muda com a barra do navegador (veja alturaDaTela, em index.ts). */
   alturaTela: number
   /** Até onde vai o cabeçalho fixo, a partir do alto da tela. */
   topo: number

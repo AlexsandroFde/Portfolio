@@ -155,6 +155,16 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   canvas.style.cssText = 'display:block;width:100%;height:100%'
   recipiente.append(canvas)
   /**
+   * A régua da tela: um elemento fixo e invisível com a altura da tela grande (100lvh), a da tela
+   * com a barra do navegador escondida, a mesma do recipiente solto (veja index.css). Preso no alto
+   * da página, o recipiente fica com a altura da apresentação, e a régua não (veja alturaDaTela).
+   */
+  const regua = document.createElement('div')
+  regua.setAttribute('aria-hidden', 'true')
+  regua.setAttribute('data-regua-da-tela', '')
+  regua.style.cssText = 'position:fixed;top:0;left:0;width:0;height:100vh;height:100lvh;visibility:hidden;pointer-events:none'
+  recipiente.append(regua)
+  /**
    * A cortina: cobre a faixa do alto da tela, onde o conteúdo é absorvido, com o que fica atrás dele
    * (o fundo da página e, copiado do canvas a cada desenho, o buraco negro e a malha). Por cima dela
    * só passam as fatias que a absorção desenha (e os títulos fixos das seções): o original continua
@@ -180,6 +190,15 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   let largura = 0                      // tamanho do canvas
   let fimDoCaminho = 1                 // rolagem em que o conteúdo acabou e começa o mergulho
   let celula = 64
+  /**
+   * A altura da tela para a faixa, a força do puxão e o trajeto: a da tela grande (veja regua), e não
+   * a da janela. No celular, a barra do navegador some e volta conforme a rolagem, e a janela muda de
+   * altura junto: com ela mudavam a faixa, a força e o raio do buraco negro, e a absorção era refeita
+   * do zero no meio da rolagem, com a página presa pelo limite até as fatias ficarem prontas de novo.
+   * A tela grande só muda quando a janela muda de verdade (o celular girou, a janela do computador
+   * mudou de tamanho).
+   */
+  let alturaDaTela = regua.offsetHeight || window.innerHeight
 
   // Se a thread principal não der conta da absorção (ou o motor, do desenho), o buraco negro fica
   // parado no alto da página, como para quem prefere menos movimento.
@@ -232,7 +251,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     const pixel = (v: number) => Math.round(v * dpr) / dpr
     return {
       frente: pixel(topo + 6),
-      inicio: pixel(topo + Math.min(140, Math.max(96, window.innerHeight * 0.14))),
+      inicio: pixel(topo + Math.min(140, Math.max(96, alturaDaTela * 0.14))),
     }
   }
 
@@ -240,13 +259,13 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
    * A rolagem a partir da qual o puxão tem a força toda: no topo da página nada é puxado (a
    * apresentação aparece inteira), e a força cresce ao longo do primeiro quarto de tela.
    */
-  const rolagemPlena = () => window.innerHeight * 0.25
+  const rolagemPlena = () => alturaDaTela * 0.25
 
   /** As medidas de que o trajeto do buraco negro depende (veja trajeto.ts), e o raio dele no canto. */
   function medirPalco(): Palco & { raioNoCanto: number } {
     const palco: Palco = {
       largura: largura || recipiente.clientWidth || window.innerWidth,
-      alturaTela: window.innerHeight,
+      alturaTela: alturaDaTela,
       topo,
       fimDoCaminho,
       alturaHero,
@@ -358,7 +377,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
    */
   function preparar(s: number): number {
     if (preso) return 0
-    const tela = window.innerHeight
+    const tela = alturaDaTela
     // As fatias que podem aparecer ficam presas à rolagem antes (veja ANTECEDENCIA), mais longe no
     // sentido da rolagem; para trás, o bastante para ela voltar. Abaixo da faixa fica sempre pronta
     // pelo menos a reserva, mesmo subindo: a página não desce além do que está pronto (veja RESERVA).
@@ -408,6 +427,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   const remedir = () => {
     if (!comecou || !motorPronto || desligado) return
     alturaHero = hero.offsetHeight
+    alturaDaTela = regua.offsetHeight || window.innerHeight
     topo = alturaDoCabecalho()
     // o fim do conteúdo: onde começa o espaço vazio depois do rodapé (sem ele, o fim da página)
     const espaco = document.querySelector<HTMLElement>('.mergulho')
@@ -700,6 +720,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     limite.destruir()
     ponte.destruir()
     canvas.remove()
+    regua.remove()
     cortina.remove()
     tampa.remove()
     raiz.style.removeProperty('--topo-livre')

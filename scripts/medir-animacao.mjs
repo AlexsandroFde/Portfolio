@@ -412,13 +412,14 @@ async function doTopo({ pagina }) {
 }
 
 /**
- * Do topo, e com o fundo do buraco negro na altura da tela sem a barra: num celular ele usa a tela
- * grande (100lvh), que não muda com a barra; na emulação, mudaria junto com a janela.
+ * Do topo, e com o que tem a altura da tela grande (100lvh) na altura da tela sem a barra: o fundo do
+ * buraco negro e a régua da tela (veja src/lib/buracoNegro/index.ts). Num celular, a tela grande não
+ * muda com a barra; na emulação, mudaria junto com a janela.
  */
 async function prepararBarra({ pagina, tela }) {
   await pagina.evaluate((altura) => {
     const estilo = document.createElement('style')
-    estilo.textContent = `.buraco-negro { height: ${altura}px !important }`
+    estilo.textContent = `.buraco-negro, [data-regua-da-tela] { height: ${altura}px !important }`
     document.head.append(estilo)
   }, TELAS[tela].height + BARRA)
   await irPara(pagina, 0)

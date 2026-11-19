@@ -1,0 +1,507 @@
+{
+  "quando": "2026-11-19T16:34:32.589Z",
+  "commit": "24e3b5b",
+  "navegador": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  "opcoes": {
+    "rotulo": "item-2-antes-barra-2",
+    "cpu": [
+      1,
+      4,
+      6
+    ],
+    "telas": [
+      "celular"
+    ],
+    "fases": [
+      "barra",
+      "semBarra"
+    ],
+    "velocidade": 1500,
+    "pagina": "",
+    "css": "",
+    "raiz": "C:/Users/ALEXSA~1/AppData/Local/Temp/claude/2f3651045f002d37/3042790e-1fcd-481d-b901-73f7539ff102/scratchpad/prototipo",
+    "porta": 4321
+  },
+  "resultados": [
+    {
+      "tela": "celular",
+      "cpu": 1,
+      "efeitoAtivo": true,
+      "fases": {
+        "barra": {
+          "duracao": 3.9,
+          "velocidadeAtingida": 923,
+          "quadrosDaPagina": {
+            "quadros": 278,
+            "p50": 13.4,
+            "p95": 40,
+            "p99": 66.7,
+            "maior": 79.6,
+            "acima16": 101,
+            "acima33": 22
+          },
+          "tarefasLongas": {
+            "quantas": 2,
+            "totalMs": 139,
+            "maiorMs": 72
+          },
+          "quadrosLongos": {
+            "quantos": 7,
+            "bloqueioMs": 20,
+            "scripts": [
+              "me"
+            ]
+          },
+          "trace": {
+            "quadrosDaPrincipal": 216,
+            "porQuadro": {
+              "estilo": {
+                "media": 1.32,
+                "p95": 2.91
+              },
+              "layout": {
+                "media": 0.16,
+                "p95": 0.5
+              },
+              "pintura": {
+                "media": 0.53,
+                "p95": 1.1
+              }
+            },
+            "forcados": {
+              "layouts": 72,
+              "estilos": 366,
+              "ms": 113.4,
+              "funcoes": {
+                "ye buracoNegro-Dw6uAFy2.js": 223,
+                "e main-CNoNdUwx.js": 163,
+                "oe buracoNegro-Dw6uAFy2.js": 18,
+                "$ buracoNegro-Dw6uAFy2.js": 12,
+                "de buracoNegro-Dw6uAFy2.js": 7,
+                "re buracoNegro-Dw6uAFy2.js": 4
+              }
+            },
+            "compositor": {
+              "total": 442,
+              "apresentados": 350,
+              "parciais": 73,
+              "perdidos": 19,
+              "semRaster": 150
+            },
+            "motor": {
+              "quadros": 282,
+              "p50": 13.3,
+              "p95": 14.1,
+              "p99": 27,
+              "maior": 32.9,
+              "acima16": 10,
+              "acima33": 0
+            },
+            "gpuOcupada": 24.5,
+            "rasterMsPorSegundo": 11168.4
+          }
+        },
+        "semBarra": {
+          "duracao": 3.8,
+          "velocidadeAtingida": 936,
+          "quadrosDaPagina": {
+            "quadros": 338,
+            "p50": 13.4,
+            "p95": 26.7,
+            "p99": 26.8,
+            "maior": 40.5,
+            "acima16": 57,
+            "acima33": 2
+          },
+          "tarefasLongas": {
+            "quantas": 0,
+            "totalMs": 0,
+            "maiorMs": 0
+          },
+          "quadrosLongos": {
+            "quantos": 0,
+            "bloqueioMs": 0,
+            "scripts": []
+          },
+          "trace": {
+            "quadrosDaPrincipal": 281,
+            "porQuadro": {
+              "estilo": {
+                "media": 0.74,
+                "p95": 1.63
+              },
+              "layout": {
+                "media": 0.11,
+                "p95": 0.28
+              },
+              "pintura": {
+                "media": 0.41,
+                "p95": 0.76
+              }
+            },
+            "forcados": {
+              "layouts": 29,
+              "estilos": 455,
+              "ms": 65.1,
+              "funcoes": {
+                "ye buracoNegro-Dw6uAFy2.js": 281,
+                "e main-CNoNdUwx.js": 193,
+                "oe buracoNegro-Dw6uAFy2.js": 9,
+                "$ buracoNegro-Dw6uAFy2.js": 1
+              }
+            },
+            "compositor": {
+              "total": 380,
+              "apresentados": 363,
+              "parciais": 10,
+              "perdidos": 7,
+              "semRaster": 294
+            },
+            "motor": {
+              "quadros": 288,
+              "p50": 13.3,
+              "p95": 13.7,
+              "p99": 14.2,
+              "maior": 14.5,
+              "acima16": 0,
+              "acima33": 0
+            },
+            "gpuOcupada": 17.5,
+            "rasterMsPorSegundo": 9292.3
+          }
+        }
+      },
+      "marcos": {
+        "primeiraPintura": 152,
+        "maiorPintura": 1540,
+        "absorcaoComecou": 1482,
+        "buracoNegroAtivo": 1513
+      },
+      "modoLento": false
+    },
+    {
+      "tela": "celular",
+      "cpu": 4,
+      "efeitoAtivo": true,
+      "fases": {
+        "barra": {
+          "duracao": 4,
+          "velocidadeAtingida": 527,
+          "quadrosDaPagina": {
+            "quadros": 142,
+            "p50": 26.7,
+            "p95": 66.7,
+            "p99": 253.4,
+            "maior": 400.2,
+            "acima16": 115,
+            "acima33": 42
+          },
+          "tarefasLongas": {
+            "quantas": 7,
+            "totalMs": 1029,
+            "maiorMs": 406
+          },
+          "quadrosLongos": {
+            "quantos": 9,
+            "bloqueioMs": 572,
+            "scripts": [
+              "ve",
+              "ve | me",
+              "me",
+              "$"
+            ]
+          },
+          "trace": {
+            "quadrosDaPrincipal": 100,
+            "porQuadro": {
+              "estilo": {
+                "media": 8.95,
+                "p95": 25.4
+              },
+              "layout": {
+                "media": 0.72,
+                "p95": 2.64
+              },
+              "pintura": {
+                "media": 2.86,
+                "p95": 6.33
+              }
+            },
+            "forcados": {
+              "layouts": 38,
+              "estilos": 166,
+              "ms": 354.2,
+              "funcoes": {
+                "ye buracoNegro-Dw6uAFy2.js": 108,
+                "e main-CNoNdUwx.js": 51,
+                "$ buracoNegro-Dw6uAFy2.js": 12,
+                "de buracoNegro-Dw6uAFy2.js": 7,
+                "oe buracoNegro-Dw6uAFy2.js": 7,
+                "me buracoNegro-Dw6uAFy2.js": 6
+              }
+            },
+            "compositor": {
+              "total": 369,
+              "apresentados": 157,
+              "parciais": 158,
+              "perdidos": 54,
+              "semRaster": 76
+            },
+            "motor": {
+              "quadros": 296,
+              "p50": 13.3,
+              "p95": 13.6,
+              "p99": 26.7,
+              "maior": 27,
+              "acima16": 5,
+              "acima33": 0
+            },
+            "gpuOcupada": 14.2,
+            "rasterMsPorSegundo": 5265.2
+          }
+        },
+        "semBarra": {
+          "duracao": 3.9,
+          "velocidadeAtingida": 648,
+          "quadrosDaPagina": {
+            "quadros": 190,
+            "p50": 26.6,
+            "p95": 53.4,
+            "p99": 80.1,
+            "maior": 106.7,
+            "acima16": 125,
+            "acima33": 38
+          },
+          "tarefasLongas": {
+            "quantas": 4,
+            "totalMs": 281,
+            "maiorMs": 83
+          },
+          "quadrosLongos": {
+            "quantos": 5,
+            "bloqueioMs": 40,
+            "scripts": [
+              "ve",
+              "$"
+            ]
+          },
+          "trace": {
+            "quadrosDaPrincipal": 149,
+            "porQuadro": {
+              "estilo": {
+                "media": 4.22,
+                "p95": 13.39
+              },
+              "layout": {
+                "media": 0.43,
+                "p95": 1.19
+              },
+              "pintura": {
+                "media": 2.09,
+                "p95": 5
+              }
+            },
+            "forcados": {
+              "layouts": 13,
+              "estilos": 209,
+              "ms": 138.5,
+              "funcoes": {
+                "ye buracoNegro-Dw6uAFy2.js": 150,
+                "e main-CNoNdUwx.js": 68,
+                "oe buracoNegro-Dw6uAFy2.js": 4
+              }
+            },
+            "compositor": {
+              "total": 313,
+              "apresentados": 169,
+              "parciais": 109,
+              "perdidos": 35,
+              "semRaster": 155
+            },
+            "motor": {
+              "quadros": 288,
+              "p50": 13.3,
+              "p95": 13.7,
+              "p99": 26.7,
+              "maior": 26.8,
+              "acima16": 5,
+              "acima33": 0
+            },
+            "gpuOcupada": 13.7,
+            "rasterMsPorSegundo": 5250.7
+          }
+        }
+      },
+      "marcos": {
+        "primeiraPintura": 300,
+        "maiorPintura": 2020,
+        "absorcaoComecou": 1912,
+        "buracoNegroAtivo": 2026
+      },
+      "modoLento": false
+    },
+    {
+      "tela": "celular",
+      "cpu": 6,
+      "efeitoAtivo": true,
+      "fases": {
+        "barra": {
+          "duracao": 4.3,
+          "velocidadeAtingida": 316,
+          "quadrosDaPagina": {
+            "quadros": 148,
+            "p50": 13.4,
+            "p95": 106.6,
+            "p99": 480.2,
+            "maior": 506.6,
+            "acima16": 47,
+            "acima33": 36
+          },
+          "tarefasLongas": {
+            "quantas": 16,
+            "totalMs": 2299,
+            "maiorMs": 498
+          },
+          "quadrosLongos": {
+            "quantos": 16,
+            "bloqueioMs": 1123,
+            "scripts": [
+              "re | e | ve",
+              "ve",
+              "ve | me",
+              "TimerHandler:setTimeout | ve"
+            ]
+          },
+          "trace": {
+            "quadrosDaPrincipal": 90,
+            "porQuadro": {
+              "estilo": {
+                "media": 12,
+                "p95": 55.64
+              },
+              "layout": {
+                "media": 0.67,
+                "p95": 2.69
+              },
+              "pintura": {
+                "media": 3.48,
+                "p95": 11.59
+              }
+            },
+            "forcados": {
+              "layouts": 26,
+              "estilos": 140,
+              "ms": 568.9,
+              "funcoes": {
+                "ye buracoNegro-Dw6uAFy2.js": 95,
+                "e main-CNoNdUwx.js": 23,
+                "$ buracoNegro-Dw6uAFy2.js": 22,
+                "de buracoNegro-Dw6uAFy2.js": 7,
+                "re buracoNegro-Dw6uAFy2.js": 4,
+                "me buracoNegro-Dw6uAFy2.js": 4
+              }
+            },
+            "compositor": {
+              "total": 356,
+              "apresentados": 110,
+              "parciais": 150,
+              "perdidos": 96,
+              "semRaster": 73
+            },
+            "motor": {
+              "quadros": 323,
+              "p50": 13.3,
+              "p95": 13.7,
+              "p99": 13.9,
+              "maior": 14.4,
+              "acima16": 0,
+              "acima33": 0
+            },
+            "gpuOcupada": 12.5,
+            "rasterMsPorSegundo": 3400.8
+          }
+        },
+        "semBarra": {
+          "duracao": 4.1,
+          "velocidadeAtingida": 511,
+          "quadrosDaPagina": {
+            "quadros": 136,
+            "p50": 26.7,
+            "p95": 93.3,
+            "p99": 106.7,
+            "maior": 106.9,
+            "acima16": 98,
+            "acima33": 52
+          },
+          "tarefasLongas": {
+            "quantas": 22,
+            "totalMs": 1563,
+            "maiorMs": 95
+          },
+          "quadrosLongos": {
+            "quantos": 18,
+            "bloqueioMs": 172,
+            "scripts": [
+              "ve",
+              "IntersectionObserverCallback | _h | ve",
+              "$",
+              "_h | e | ve"
+            ]
+          },
+          "trace": {
+            "quadrosDaPrincipal": 106,
+            "porQuadro": {
+              "estilo": {
+                "media": 7.53,
+                "p95": 26.63
+              },
+              "layout": {
+                "media": 0.7,
+                "p95": 1.86
+              },
+              "pintura": {
+                "media": 3.71,
+                "p95": 9.5
+              }
+            },
+            "forcados": {
+              "layouts": 9,
+              "estilos": 146,
+              "ms": 177,
+              "funcoes": {
+                "ye buracoNegro-Dw6uAFy2.js": 107,
+                "e main-CNoNdUwx.js": 46,
+                "oe buracoNegro-Dw6uAFy2.js": 2
+              }
+            },
+            "compositor": {
+              "total": 357,
+              "apresentados": 153,
+              "parciais": 140,
+              "perdidos": 64,
+              "semRaster": 64
+            },
+            "motor": {
+              "quadros": 299,
+              "p50": 13.3,
+              "p95": 13.8,
+              "p99": 26.8,
+              "maior": 27.6,
+              "acima16": 7,
+              "acima33": 0
+            },
+            "gpuOcupada": 12,
+            "rasterMsPorSegundo": 3991.2
+          }
+        }
+      },
+      "marcos": {
+        "primeiraPintura": 300,
+        "maiorPintura": 2260,
+        "absorcaoComecou": 2109,
+        "buracoNegroAtivo": 2268
+      },
+      "modoLento": false
+    }
+  ]
+}

@@ -20,6 +20,7 @@
 // movimento reduzido, o topo só aparece com um fade.
 
 import { ENTRADA, pontosDaEntrada } from './entrada.ts'
+import { alturaDaPagina } from './limite.ts'
 import { criarRelogio } from './rolagem.ts'
 
 /** Em que parte do mergulho (de 0 a 1) o véu preto começa a entrar e cobre a tela toda. */
@@ -150,7 +151,8 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
 
   function medir() {
     const inicio = espaco.getBoundingClientRect().top + window.scrollY
-    const fim = Math.max(inicio + 1, raiz.scrollHeight - window.innerHeight)
+    // (a altura de verdade: com o limite da rolagem, a página parece acabar nele, veja limite.ts)
+    const fim = Math.max(inicio + 1, alturaDaPagina() - window.innerHeight)
     const mudou = trecho?.inicio !== inicio || trecho.fim !== fim
     trecho = { inicio, fim }
     const [de, ate] = trechoDe(trecho, VEU.de, VEU.ate)
@@ -269,11 +271,12 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
     // sem ScrollTimeline, o véu anda daqui
     relogio.acertar(s)
     if (voltando || !trecho || s <= trecho.inicio) return
-    if (s >= raiz.scrollHeight - window.innerHeight - MARGEM) voltar()
+    if (s >= alturaDaPagina() - window.innerHeight - MARGEM) voltar()
   }
 
+  // a página mudou de tamanho: o conteúdo, e não o body, que muda de altura com o limite da rolagem
   const aoRedimensionar = new ResizeObserver(medir)
-  aoRedimensionar.observe(document.body)
+  for (const parte of document.querySelectorAll('main, footer')) aoRedimensionar.observe(parte)
   aoRedimensionar.observe(espaco)
   // a altura da tela muda sem mudar o tamanho da página (a barra do navegador no celular)
   window.addEventListener('resize', medir)

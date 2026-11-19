@@ -1,37 +1,44 @@
 // O mergulho: a página não acaba no rodapé. A rolagem continua por um espaço vazio: primeiro uma
-// tela, até não sobrar nada da página à vista; depois, no trecho do mergulho, o buraco negro desce
-// até o meio da tela e cresce até a sombra dele preencher a tela inteira. Aí estamos dentro dele: a
-// página volta ao topo, e no escuro abre-se uma janela redonda, por onde aparece o site, pequeno e
-// distante, que vem chegando até ocupar a tela. Dentro do buraco negro está o topo do site, e a
-// rolagem recomeça: um laço sem fim.
+// tela, até não sobrar nada da página à vista; depois, no trecho do mergulho, cai-se no buraco negro.
+// Ele desce até o meio da tela e cresce até a sombra dele preencher a tela inteira, e a vista é a de
+// quem cai (veja queda.frag): o espaço em volta se torce num redemoinho, as coisas correm para fora em
+// rastros, a luz se separa em cores, a visão se fecha num túnel, e o cabeçalho é puxado para dentro.
+// Aí estamos dentro dele: a página volta ao topo, e no escuro acende-se um ponto de luz que se abre
+// numa janela redonda, por onde o site vem lá do fundo, por um túnel de luz, girando e crescendo até
+// ocupar a tela (veja entrada.ts). Dentro do buraco negro está o topo do site, e a rolagem recomeça:
+// um laço sem fim.
 //
 // Como a absorção, o mergulho depende só da posição da rolagem: rolando devagar ou rápido, cada
-// posição mostra a mesma imagem, e rolando para cima ele volta atrás. O buraco negro lê em
-// progressoDoMergulho o quanto já se mergulhou (veja cena, em index.ts); o preto do fim é um véu
-// por cima de tudo, preso à rolagem, que cobre também o cabeçalho e o que sobrar do disco. Só a
+// posição mostra a mesma imagem, e rolando para cima ele volta atrás. O trajeto do buraco negro
+// recebe o trecho do mergulho (veja trechoDoMergulho e posicaoEm, em trajeto.ts); o preto do fim é um
+// véu por cima de tudo, preso à rolagem, que cobre também o cabeçalho e o que sobrar do disco. Só a
 // volta ao topo anda no tempo: lá dentro, no topo, não há mais para onde rolar.
 //
-// A janela é um furo no véu, e não um desenho do buraco negro: assim ela não pesa no desenho dele
-// (cada instrução a mais no shader custa em todos os pixels, o tempo todo), e a volta funciona até
-// sem WebGL. Com o movimento reduzido, o topo só aparece com um fade.
+// Na volta, o navegador anima o cabeçalho e o conteúdo, e o motor do buraco negro desenha atrás deles
+// o túnel e a janela (veja definirQueda), os dois a partir do mesmo instante e pela mesma curva. Sem
+// o motor (sem WebGL, ou num aparelho lento), a janela é um furo no véu, e o site chega igual. Com o
+// movimento reduzido, o topo só aparece com um fade.
 
+import { ENTRADA, pontosDaEntrada } from './entrada.ts'
 import { criarRelogio } from './rolagem.ts'
 
 /** Em que parte do mergulho (de 0 a 1) o véu preto começa a entrar e cobre a tela toda. */
 const VEU = { de: 0.8, ate: 0.96 }
 /**
- * A entrada no buraco negro (ms), e de que tamanho o site aparece lá dentro, no escuro (fração do
- * tamanho normal): bem pequeno, muito distante.
+ * Em que parte do mergulho o cabeçalho é puxado para o buraco negro: ele desce um pouco, se estica
+ * na direção dele e some, antes de a queda apertar.
  */
-const ENTRADA = { duracao: 2000, deLonge: 0.05 }
-/** Em quantos passos a entrada é descrita para o navegador (entre eles, em linha reta). */
-const PASSOS_DA_ENTRADA = 16
+const CABECALHO = { de: 0.06, ate: 0.5 }
 /**
- * A janela: aparece aos poucos, na primeira fração `abre` da entrada, e envolve sempre a tela do
- * site, com `folga` de margem (em meias diagonais da tela dele). A borda brilha como o anel de luz
- * em volta da sombra, e a luz se espalha `brilho` px no escuro.
+ * A janela, sem o motor: a borda brilha como o anel de luz em volta da sombra, e a luz se espalha
+ * `brilho` px no escuro.
  */
-const JANELA = { abre: 0.12, folga: 1.1, brilho: 18 }
+const JANELA = { brilho: 18 }
+/**
+ * Com que antecedência (ms) a entrada é marcada: o motor, no worker, precisa receber o aviso antes do
+ * primeiro quadro dela.
+ */
+const ANTECEDENCIA_DA_ENTRADA = 50
 /** A volta com o movimento reduzido (ms): só o fade do véu. A rolagem fica travada durante ele. */
 const FADE = 600
 /** A curva desse fade: rápida no começo e assentando devagar. */
@@ -46,13 +53,30 @@ interface Trecho {
   fim: number
 }
 
-let trecho: Trecho | null = null
-const ouvintes = new Set<() => void>()
+/**
+ * Quem desenha a queda e o túnel da volta: o motor do buraco negro (veja index.ts). `entrar` marca a
+ * entrada para começar no instante `inicio` (ms da linha do tempo da página) e durar `duracao` ms, e
+ * avisa (true) quando o túnel já cobre a tela; com false, o motor não respondeu a tempo.
+ */
+export interface Queda {
+  entrar(inicio: number, duracao: number): Promise<boolean>
+}
 
-/** Quanto já se mergulhou com a página rolada até `s`: 0 até o começo do trecho, 1 no fim dele. */
-export function progressoDoMergulho(s: number): number {
-  if (!trecho) return 0
-  return Math.min(1, Math.max(0, (s - trecho.inicio) / (trecho.fim - trecho.inicio)))
+let trecho: Trecho | null = null
+let queda: Queda | null = null
+const ouvintes = new Set<() => void>()
+const medidos = new Set<() => void>()
+const quedas = new Set<() => void>()
+
+/** O trecho da rolagem em que se mergulha, ou null se o mergulho não está no ar. */
+export function trechoDoMergulho(): Trecho | null {
+  return trecho && { ...trecho }
+}
+
+/** Chama `ouvinte` sempre que o trecho do mergulho muda. Devolve a função que para de chamar. */
+export function quandoMedirMergulho(ouvinte: () => void): () => void {
+  medidos.add(ouvinte)
+  return () => medidos.delete(ouvinte)
 }
 
 /**
@@ -64,14 +88,11 @@ export function quandoVoltar(ouvinte: () => void): () => void {
   return () => ouvintes.delete(ouvinte)
 }
 
-/**
- * O tamanho do site lá dentro (fração do normal), com a entrada em `u` (de 0 a 1): ele vem de muito
- * longe, crescendo devagar no começo, depressa no meio e assentando no fim, como quem se aproxima.
- * Medido em escala logarítmica: cada dobra de tamanho conta igual, perto ou longe.
- */
-function escalaLaDentro(u: number): number {
-  const t = Math.min(1, Math.max(0, u))
-  return ENTRADA.deLonge ** (1 - t * t * (3 - 2 * t))
+/** O motor do buraco negro passa a desenhar a queda e o túnel da volta (ou deixa de, com null). */
+export function definirQueda(nova: Queda | null) {
+  if (nova === queda) return
+  queda = nova
+  for (const ouvinte of quedas) ouvinte()
 }
 
 /**
@@ -93,18 +114,50 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   document.body.append(veu)
   const efeito = new KeyframeEffect(veu, [{ opacity: 0 }, { opacity: 1 }], { fill: 'both' })
   let escurecer: Animation | null = null
+  /** O cabeçalho sendo puxado para dentro, preso à rolagem (só com o motor desenhando a queda). */
+  let puxar: Animation | null = null
 
   let voltando = false
   let seguranca = 0
 
+  /** O trecho da rolagem, de `de` a `ate` (frações do mergulho). */
+  const trechoDe = ({ inicio, fim }: Trecho, de: number, ate: number): [number, number] => [inicio + (fim - inicio) * de, inicio + (fim - inicio) * ate]
+
+  /** O cabeçalho só é puxado com a queda no ar e sem o movimento reduzido. */
+  function ajustarCabecalho() {
+    const deve = queda !== null && !movimentoReduzido.matches && cabecalho !== null && trecho !== null
+    if (!deve) {
+      if (puxar) relogio.soltar(puxar)
+      puxar = null
+      return
+    }
+    const [de, ate] = trechoDe(trecho!, CABECALHO.de, CABECALHO.ate)
+    if (puxar) {
+      relogio.mover(puxar, de, ate)
+      return
+    }
+    const efeitoDoCabecalho = new KeyframeEffect(
+      cabecalho,
+      [
+        { transform: 'none', opacity: 1 },
+        { transform: 'translateY(8px) scale(0.98, 1.2)', opacity: 0.5, offset: 0.55 },
+        { transform: 'translateY(20px) scale(0.95, 1.5)', opacity: 0 },
+      ],
+      { fill: 'both', easing: 'ease-in' },
+    )
+    puxar = relogio.animar(efeitoDoCabecalho, de, ate)
+  }
+
   function medir() {
     const inicio = espaco.getBoundingClientRect().top + window.scrollY
     const fim = Math.max(inicio + 1, raiz.scrollHeight - window.innerHeight)
+    const mudou = trecho?.inicio !== inicio || trecho.fim !== fim
     trecho = { inicio, fim }
-    const de = inicio + (fim - inicio) * VEU.de
-    const ate = inicio + (fim - inicio) * VEU.ate
+    const [de, ate] = trechoDe(trecho, VEU.de, VEU.ate)
     if (escurecer) relogio.mover(escurecer, de, ate)
     else escurecer = relogio.animar(efeito, de, ate)
+    ajustarCabecalho()
+    if (mudou) for (const ouvinte of medidos) ouvinte()
   }
 
   /** A volta terminou (ou foi interrompida): a rolagem volta a andar. */
@@ -121,50 +174,78 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   }
 
   /**
-   * Dentro do buraco negro, com a tela toda preta: no meio do véu abre-se a janela, e por ela
-   * aparece o site, lá dentro, vindo de longe. O cabeçalho e o conteúdo crescem a partir do meio da
-   * tela, de muito pequenos até o tamanho normal (veja escalaLaDentro), e a janela cresce junto,
-   * sempre em volta deles, até sair da tela. O buraco negro já voltou ao canto, atrás do site, e
-   * aparece pela janela quando ela chega lá.
+   * O cabeçalho e o conteúdo vêm lá do fundo, a partir do meio da tela: muito pequenos, crescendo até
+   * o tamanho normal (veja entrada.ts), a partir do instante `inicio`. Só a primeira tela do site
+   * aparece, e não o resto da página, abaixo dela. Devolve a promessa de quando terminam.
    */
-  function entrar() {
-    pular()
-    const meiaDiagonal = Math.hypot(window.innerWidth / 2, window.innerHeight / 2)
-    const passos = Array.from({ length: PASSOS_DA_ENTRADA + 1 }, (_, i) => i / PASSOS_DA_ENTRADA)
-    const escalas = passos.map((u) => ({ offset: u, transform: `scale(${escalaLaDentro(u)})` }))
+  function trazerOSite(inicio: number): Promise<unknown> {
+    const quadros = pontosDaEntrada().map(({ u, escala }) => ({ offset: u, transform: `scale(${escala})` }))
+    const chegadas: Promise<unknown>[] = []
     for (const parte of [cabecalho, principal]) {
       if (!parte) continue
       // com a página no topo, as duas começam no canto de cima da tela: o meio dela, nas medidas delas
       parte.style.transformOrigin = `${window.innerWidth / 2}px ${window.innerHeight / 2}px`
-      // lá dentro aparece só a primeira tela do site, e não o resto da página, abaixo dela
       if (parte === principal) parte.style.clipPath = `inset(0 0 calc(100% - ${window.innerHeight}px) 0)`
+      // (fill: o site já fica lá no fundo até o instante de começar)
+      const animacao = parte.animate(quadros, { duration: ENTRADA.duracao, easing: 'linear', fill: 'both' })
+      animacao.startTime = inicio
       const limpar = () => {
+        animacao.cancel()
         parte.style.removeProperty('transform-origin')
         parte.style.removeProperty('clip-path')
       }
-      parte.animate(escalas, { duration: ENTRADA.duracao, easing: 'linear' }).finished.then(limpar, limpar)
+      chegadas.push(animacao.finished.then(limpar, limpar))
     }
+    return Promise.all(chegadas)
+  }
 
-    // O véu fica preto (por cima da animação que o prende à rolagem, que no topo o apaga), com o
-    // furo da janela e a borda dela brilhando.
+  /**
+   * Sem o motor: no meio do véu abre-se a janela, um furo nele, e a borda dela brilha, em volta do
+   * site e no mesmo passo que ele, a partir do instante `inicio`.
+   */
+  function abrirJanela(inicio: number) {
+    const meiaDiagonal = Math.hypot(window.innerWidth / 2, window.innerHeight / 2)
     const borda = 'color-mix(in srgb, var(--accent), white 65%)'
     const brilho = 'color-mix(in srgb, var(--accent) 30%, transparent)'
     const furo = 'radial-gradient(circle at 50% 50%, transparent calc(var(--janela) - 1px), #000 var(--janela))'
     veu.style.maskImage = furo
     veu.style.webkitMaskImage = furo
     veu.style.backgroundImage = `radial-gradient(circle at 50% 50%, transparent calc(var(--janela) - 1px), ${borda} var(--janela), ${brilho} calc(var(--janela) + 2px), transparent calc(var(--janela) + ${JANELA.brilho}px))`
-    const raios = passos.map((u) => {
-      const abertura = Math.min(1, u / JANELA.abre)
-      const raio = escalaLaDentro(u) * meiaDiagonal * JANELA.folga * abertura * abertura * (3 - 2 * abertura)
-      return { offset: u, opacity: 1, '--janela': `${raio}px` }
-    })
-    const limparVeu = () => {
+    const raios = pontosDaEntrada().map(({ u, janela }) => ({ offset: u, opacity: 1, '--janela': `${janela * meiaDiagonal}px` }))
+    const animacao = veu.animate(raios, { duration: ENTRADA.duracao, easing: 'linear', fill: 'both' })
+    animacao.startTime = inicio
+    const limpar = () => {
+      animacao.cancel()
       veu.style.removeProperty('mask-image')
       veu.style.removeProperty('-webkit-mask-image')
       veu.style.removeProperty('background-image')
-      terminar()
     }
-    veu.animate(raios, { duration: ENTRADA.duracao, easing: 'linear' }).finished.then(limparVeu, limparVeu)
+    animacao.finished.then(limpar, limpar)
+  }
+
+  /**
+   * Dentro do buraco negro, com a tela toda preta: o site vem lá do fundo (veja trazerOSite). Com o
+   * motor no ar, ele desenha o túnel atrás do site, e o véu da página, que segura o preto até ali,
+   * sai assim que o túnel está na tela. Sem ele (ou se ele não responder a tempo), a janela se abre no
+   * próprio véu. O buraco negro já voltou ao canto, atrás do site, e aparece pela janela quando ela
+   * chega lá.
+   */
+  function entrar() {
+    pular()
+    const inicio = (document.timeline.currentTime as number) + ANTECEDENCIA_DA_ENTRADA
+    void trazerOSite(inicio).then(terminar)
+    // o véu segura o preto (por cima da animação que o prende à rolagem, que no topo o apaga)
+    const segurar = veu.animate([{ opacity: 1 }, { opacity: 1 }], { duration: ENTRADA.duracao * 2, fill: 'both' })
+    const motor = queda
+    if (!motor) {
+      segurar.cancel()
+      abrirJanela(inicio)
+      return
+    }
+    void motor.entrar(inicio, ENTRADA.duracao).then((cobriu) => {
+      segurar.cancel()
+      if (!cobriu) abrirJanela(inicio)
+    })
   }
 
   function voltar() {
@@ -197,6 +278,8 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   // a altura da tela muda sem mudar o tamanho da página (a barra do navegador no celular)
   window.addEventListener('resize', medir)
   window.addEventListener('scroll', aoRolar, { passive: true })
+  movimentoReduzido.addEventListener('change', ajustarCabecalho)
+  quedas.add(ajustarCabecalho)
   medir()
   // a página pode ter aberto já no fim (o navegador devolve a rolagem de antes)
   aoRolar()
@@ -204,10 +287,14 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   return () => {
     window.removeEventListener('resize', medir)
     window.removeEventListener('scroll', aoRolar)
+    movimentoReduzido.removeEventListener('change', ajustarCabecalho)
+    quedas.delete(ajustarCabecalho)
     aoRedimensionar.disconnect()
     if (escurecer) relogio.soltar(escurecer)
+    if (puxar) relogio.soltar(puxar)
     veu.remove()
     terminar()
     trecho = null
+    for (const ouvinte of medidos) ouvinte()
   }
 }

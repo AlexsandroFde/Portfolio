@@ -628,6 +628,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   let fotografando = 0
   let vezDasFotos = 0
   let esperaDasFotos = 0
+  /** A vez das fotos que não podem esperar, logo depois do quadro (veja agendarFotos). */
+  let vezUrgente = 0
   /** Sobe a cada limpar: as fotos que estavam sendo feitas antes dele não valem mais. */
   let geracao = 0
   /** A classe da raiz da página (o tema) com que as fotos foram feitas. */
@@ -1283,19 +1285,26 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
 
   /**
    * Marca a vez de começar fotos: num tempo ocioso da página ou, se alguma fatia precisa de uma
-   * foto que ainda não existe, já. A cada quadro (`doQuadro`), só se ninguém está esperando uma
-   * volta já marcada (veja tirarFotos): senão cada quadro da rolagem olharia todos os blocos à toa.
+   * foto que ainda não existe, logo depois do quadro. A cada quadro (`doQuadro`), só se ninguém está
+   * esperando uma volta já marcada (veja tirarFotos): senão cada quadro da rolagem olharia todos os
+   * blocos à toa.
    */
   function agendarFotos(urgente: boolean, doQuadro = false) {
     if (!cena || !camada) return
     if (urgente) {
-      if (vezDasFotos && temOcioso) cancelIdleCallback(vezDasFotos)
-      else if (vezDasFotos) clearTimeout(vezDasFotos)
-      vezDasFotos = 0
-      tirarFotos()
+      // Logo depois do quadro, e não dentro dele: a foto mede o bloco (veja tirarFoto), e no meio do
+      // quadro, depois de ele mexer nas fatias, isso obrigava o navegador a refazer o layout na hora.
+      // Uma tarefa marcada daqui roda assim que o navegador termina de desenhar o quadro.
+      vezUrgente ||= window.setTimeout(() => {
+        vezUrgente = 0
+        if (vezDasFotos && temOcioso) cancelIdleCallback(vezDasFotos)
+        else if (vezDasFotos) clearTimeout(vezDasFotos)
+        vezDasFotos = 0
+        tirarFotos()
+      }, 0)
       return
     }
-    if (vezDasFotos || (doQuadro && esperaDasFotos)) return
+    if (vezDasFotos || vezUrgente || (doQuadro && esperaDasFotos)) return
     vezDasFotos = temOcioso ? requestIdleCallback(tirarFotos, { timeout: 500 }) : window.setTimeout(tirarFotos, 60)
   }
 
@@ -1765,6 +1774,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       if (vezDasFotos && temOcioso) cancelIdleCallback(vezDasFotos)
       else if (vezDasFotos) window.clearTimeout(vezDasFotos)
       vezDasFotos = 0
+      window.clearTimeout(vezUrgente)
+      vezUrgente = 0
       window.clearTimeout(esperaDasFotos)
       esperaDasFotos = 0
       cancelAnimationFrame(esperaDoMouse)

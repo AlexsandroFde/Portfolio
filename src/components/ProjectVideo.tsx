@@ -5,10 +5,16 @@ import { ui } from '../i18n/interface.ts'
 import { cx } from '../lib/cx.ts'
 import { Pause, Play } from './icons.tsx'
 
+/** O navegador pede economia de dados (o modo econômico dele ou do sistema)? Nem todos contam. */
+function economizaDados(): boolean {
+  return (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
+}
+
 /**
  * Vídeo curto do projeto, sem som e em loop (faz o papel de um GIF, com uma
  * fração do tamanho). Só baixa e toca quando aparece na tela e pausa ao sair
- * dela. Para quem prefere menos movimento, fica no pôster até a pessoa tocar.
+ * dela. Para quem prefere menos movimento, ou pede economia de dados (os
+ * vídeos somam uns 4 MB), fica no pôster até a pessoa tocar.
  */
 export function ProjectVideo({ video, className }: { video: Video; className?: string }) {
   const t = useT()
@@ -22,7 +28,7 @@ export function ProjectVideo({ video, className }: { video: Video; className?: s
     if (!el) return
     el.muted = true // (o atributo muted não sai no HTML pré-renderizado; sem ele o navegador não deixa tocar sozinho)
 
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || economizaDados()) return
     if (!('IntersectionObserver' in window)) return
 
     const observer = new IntersectionObserver(

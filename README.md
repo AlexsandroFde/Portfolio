@@ -72,7 +72,7 @@ O PDF é impresso por um Chrome ou Edge instalado na máquina, que o build encon
 
 ### Vídeos dos projetos
 
-Um projeto pode ter um vídeo curto (campo `video` em `src/data/projects.ts`): um MP4 sem som, em 16:9, que toca em loop como um GIF. Ele só é baixado quando aparece na tela, pausa ao sair dela, tem botão de pausar e não toca sozinho para quem ativou "reduzir movimento" no sistema. Para manter o site leve, vale exportar em 1280x720, 30 fps e uns 15 segundos (H.264, CRF entre 26 e 28), junto com um quadro em WebP para o pôster.
+Um projeto pode ter um vídeo curto (campo `video` em `src/data/projects.ts`): um MP4 sem som, em 16:9, que toca em loop como um GIF. Ele só é baixado quando aparece na tela, pausa ao sair dela, tem botão de pausar e não toca sozinho para quem ativou "reduzir movimento" no sistema nem para quem pede economia de dados ao navegador (o modo econômico dele ou do sistema): esses ficam no pôster até tocar no botão, e percorrer os projetos deixa de baixar os uns 4 MB dos vídeos. Para manter o site leve, vale exportar em 1280x720, 30 fps e uns 15 segundos (H.264, CRF entre 26 e 28), junto com um quadro em WebP para o pôster.
 
 ### Buraco negro do fundo
 

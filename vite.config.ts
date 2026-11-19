@@ -13,6 +13,8 @@ const pagina = (arquivo: string) => fileURLToPath(new URL(arquivo, import.meta.u
 export default defineConfig({
   base,
   plugins: [react(), tailwindcss()],
+  // O worker do buraco negro (src/lib/buracoNegro/trabalhador.ts) é um módulo, como o resto do site.
+  worker: { format: 'es' },
   define: {
     __BUILD_YEAR__: new Date().getFullYear(),
   },

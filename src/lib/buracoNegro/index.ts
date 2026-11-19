@@ -5,6 +5,7 @@ import type { Cores, DoMotor } from './motor.ts'
 import { criarPonte } from './ponte.ts'
 import type { Rgb, Rgba } from './renderizador.ts'
 import { aparecerAoRolar, criarRelogio } from './rolagem.ts'
+import { criarRolagemSuave } from './rolagemSuave.ts'
 import { caminhoDaPagina, raioNoCanto, type Palco } from './trajeto.ts'
 
 /**
@@ -135,6 +136,8 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   // o conteúdo absorvido (veja criarRelogio).
   const relogio = criarRelogio(document.querySelector('main'))
   const absorcao = criarAbsorcao(relogio)
+  /** A roda e o dedo movem a página com a aceleração limitada, enquanto a absorção age (veja rolagemSuave.ts). */
+  const rolagemSuave = criarRolagemSuave()
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'display:block;width:100%;height:100%'
   recipiente.append(canvas)
@@ -296,9 +299,13 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     entradas = []
   }
 
-  /** A absorção não age: sem fatias, cortina nem tampa (a página fica como sem o efeito). */
+  /**
+   * A absorção não age: sem fatias, cortina nem tampa (a página fica como sem o efeito), e a rolagem
+   * volta a ser a do navegador.
+   */
   function desligarAbsorcao() {
     absorcao.limpar()
+    rolagemSuave.ligar(false)
     soltarEntradas()
     cortina.style.display = 'none'
     tampa.style.display = 'none'
@@ -317,6 +324,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       if (!entradas.length) prenderEntradas()
       cortina.style.display = ''
       tampa.style.display = ''
+      rolagemSuave.ligar(true)
     }
     reabsorver = true
     ajustarAncoras()
@@ -490,6 +498,8 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   }
 
   function quadro(agora: number) {
+    // a página anda o passo da rolagem suave antes de qualquer leitura da rolagem neste quadro
+    rolagemSuave.quadro(agora)
     const intervalo = anterior ? (agora - anterior) / 1000 : 0
     anterior = agora
     const dt = Math.min(intervalo, 0.1)
@@ -649,6 +659,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   // A volta ao topo, no fim do mergulho, não é o leitor rolando para cima: sem jatos nem
   // velocidade, e o topo já desenhado para quando ele aparecer.
   const pararDeOuvirVolta = quandoVoltar(() => {
+    rolagemSuave.sincronizar()
     rolagemAnterior = window.scrollY
     velocidade = 0
     reabsorver = true
@@ -692,6 +703,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     pararDeOuvirMergulho()
     window.removeEventListener('pointermove', aoMoverPonteiro)
     desligarAbsorcao()
+    rolagemSuave.destruir()
     ponte.destruir()
     canvas.remove()
     regua.remove()

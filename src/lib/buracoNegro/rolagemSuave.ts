@@ -10,7 +10,9 @@
 // aparelho, levava o conteúdo à faixa antes de as fatias dele estarem prontas. Num quadro lento, a
 // página anda menos (veja PASSO_MAXIMO), em vez de saltar.
 //
-// O teclado, os links do menu e a busca do navegador continuam com a rolagem do navegador: quando a
+// Os links para outro ponto da página (o menu, os botões da apresentação), clicados com o mouse ou o
+// dedo, também vão pela rolagem suave, um pouco mais rápida (veja VELOCIDADE_DO_LINK). O teclado
+// (inclusive o Enter num link) e a busca do navegador continuam com a rolagem do navegador: quando a
 // página vai para outro lugar sem passar por aqui, o destino passa a ser onde ela está.
 
 /**
@@ -21,16 +23,21 @@ const ACELERACAO = 6
 /** A maior velocidade da página (telas por segundo). */
 const VELOCIDADE = 3
 /**
+ * A maior velocidade indo a um link (telas por segundo): com a da roda, voltar ao topo do fim da
+ * página levava uns 4 s. A aceleração é a mesma.
+ */
+const VELOCIDADE_DO_LINK = 8
+/**
  * A frenagem para chegar ao destino usa só esta fração da aceleração máxima: com ela toda, os passos
  * de um quadro ficavam para trás da curva de frenagem, e a página chegava ainda rápida e parava de vez.
  */
 const FREIO = 0.75
 /**
  * Em quanto tempo (s), mais ou menos, a página alcança o destino sem pressa: o de um tranco da roda,
- * e o do embalo do dedo, que vai adiante a velocidade com que ele sai da tela vezes este tempo (e
- * perde velocidade aos poucos, como o embalo do navegador).
+ * o de um link e o do embalo do dedo, que vai adiante a velocidade com que ele sai da tela vezes
+ * este tempo (e perde velocidade aos poucos, como o embalo do navegador).
  */
-const CHEGADA = { roda: 0.12, embalo: 0.4 }
+const CHEGADA = { roda: 0.12, link: 0.15, embalo: 0.4 }
 /** As posições do dedo que contam para a velocidade com que ele sai da tela: as dos últimos ms. */
 const JANELA_DO_DEDO = 80
 /** O maior intervalo (s) que um quadro conta: num quadro mais lento, a página anda menos. */
@@ -61,8 +68,12 @@ export function criarRolagemSuave(): RolagemSuave {
   /** A altura da tela e a maior rolagem possível, medidas quando precisam (veja medir). */
   let tela = window.innerHeight
   let maxima = Number.NaN
-  /** Em quanto tempo a página alcança o destino, conforme quem o mudou por último (veja CHEGADA). */
+  /**
+   * Em quanto tempo a página alcança o destino e a maior velocidade dela (telas por segundo), conforme
+   * quem mudou o destino por último (veja CHEGADA e VELOCIDADE_DO_LINK).
+   */
   let chegada = CHEGADA.roda
+  let velocidadeMaxima = VELOCIDADE
   /** O dedo na tela: qual, onde estava e as últimas posições dele ([instante (ms), y]). */
   let dedo: { id: number; y: number } | null = null
   const amostras: [number, number][] = []
@@ -84,9 +95,33 @@ export function criarRolagemSuave(): RolagemSuave {
 
   /** O destino anda `quanto` px a partir de onde a página está indo. */
   function mover(quanto: number) {
-    // parada, ela pode ter sido rolada pelo navegador (o teclado, um link) desde a última vez
+    // parada, ela pode ter sido rolada pelo navegador (o teclado, a busca) desde a última vez
     if (parada()) pararEm(window.scrollY)
     destino = Math.min(maiorRolagem(), Math.max(0, destino + quanto))
+    velocidadeMaxima = VELOCIDADE
+  }
+
+  /**
+   * Um link para outro ponto desta página, clicado com o mouse ou o dedo: a página vai até o alvo pela
+   * rolagem suave, parando onde o navegador pararia (logo abaixo da faixa, pelo scroll-padding-top).
+   * Pelo teclado (o Enter num link, que chega sem cliques contados), fica a rolagem do navegador, que
+   * também leva para lá o ponto de partida do Tab.
+   */
+  const aoClicar = (evento: MouseEvent) => {
+    if (!ligada || evento.defaultPrevented || evento.button !== 0 || evento.detail === 0) return
+    if (evento.metaKey || evento.ctrlKey || evento.shiftKey || evento.altKey) return
+    const link = evento.target instanceof Element ? evento.target.closest<HTMLAnchorElement>('a[href]') : null
+    if (!link || !link.hash || link.origin !== location.origin || link.pathname !== location.pathname) return
+    const alvo = document.getElementById(decodeURIComponent(link.hash.slice(1)))
+    if (!alvo || travada()) return
+    evento.preventDefault()
+    // o endereço muda como mudaria com o link (e o voltar do navegador volta para onde estava)
+    if (location.hash !== link.hash) history.pushState(null, '', link.hash)
+    const recuo = (Number.parseFloat(getComputedStyle(raiz).scrollPaddingTop) || 0) + (Number.parseFloat(getComputedStyle(alvo).scrollMarginTop) || 0)
+    if (parada()) pararEm(window.scrollY)
+    destino = Math.min(maiorRolagem(), Math.max(0, alvo.getBoundingClientRect().top + window.scrollY - recuo))
+    chegada = CHEGADA.link
+    velocidadeMaxima = VELOCIDADE_DO_LINK
   }
 
   /** Um elemento por dentro do alvo rola na direção `dy` por conta própria (uma lista com rolagem)? */
@@ -159,6 +194,7 @@ export function criarRolagemSuave(): RolagemSuave {
 
   const passivo = { passive: true }
   window.addEventListener('wheel', aoRolarRoda, { passive: false })
+  document.addEventListener('click', aoClicar, { capture: true })
   window.addEventListener('pointerdown', aoTocar, passivo)
   window.addEventListener('pointermove', aoArrastar, passivo)
   window.addEventListener('pointerup', aoSoltar, passivo)
@@ -203,12 +239,13 @@ export function criarRolagemSuave(): RolagemSuave {
         // A velocidade que leva ao destino no tempo de chegada, mas não mais que a máxima nem que a
         // velocidade da qual ainda dá para frear até lá (veja FREIO), e mudando no máximo a aceleração.
         const aceleracao = ACELERACAO * tela
-        const desejada = Math.sign(falta) * Math.min(Math.abs(falta) / chegada, VELOCIDADE * tela, Math.sqrt(2 * FREIO * aceleracao * Math.abs(falta)))
+        const desejada = Math.sign(falta) * Math.min(Math.abs(falta) / chegada, velocidadeMaxima * tela, Math.sqrt(2 * FREIO * aceleracao * Math.abs(falta)))
         const mudanca = aceleracao * dt
         velocidade += Math.min(mudanca, Math.max(-mudanca, desejada - velocidade))
         atual += velocidade * dt
-        // chegou (no último passo, o que sobra é menos de um pixel)
-        if (falta >= 0 ? atual >= destino : atual <= destino) {
+        // Chegou: passou do ponto no último passo, ou falta menos de um pixel (perto do destino, a
+        // velocidade cai devagar, e o último pixel levava mais de um segundo).
+        if ((falta >= 0 ? atual >= destino : atual <= destino) || Math.abs(destino - atual) < 1) {
           atual = destino
           velocidade = 0
         }
@@ -224,6 +261,7 @@ export function criarRolagemSuave(): RolagemSuave {
     destruir() {
       vigia.disconnect()
       window.removeEventListener('wheel', aoRolarRoda)
+      document.removeEventListener('click', aoClicar, { capture: true })
       window.removeEventListener('pointerdown', aoTocar)
       window.removeEventListener('pointermove', aoArrastar)
       window.removeEventListener('pointerup', aoSoltar)

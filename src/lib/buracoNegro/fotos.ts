@@ -58,6 +58,12 @@ export interface Pedido {
    * fora das duas fotos, e as fatias os mostram vivos (veja Vivo, em absorcao.ts).
    */
   vivos: number[]
+  /**
+   * O elemento mais fundo do bloco com o mouse em cima, ou null: ele e os ancestrais dele ficam com
+   * as regras de :hover valendo na foto. É o estado do mouse quando a foto foi pedida, e não o da
+   * hora em que ela sai: a foto fica guardada com ele (veja variantes, em absorcao.ts).
+   */
+  mouse: Element | null
   /** Quais fotos fazer. */
   foto: boolean
   fotoDaFrente: boolean
@@ -297,7 +303,7 @@ function vez(urgente: boolean): Promise<void> {
  * em px CSS esticado na hora de desenhar sairia borrado.
  */
 async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): Promise<string> {
-  const { elemento, x, y, largura, altura, dpr, frente, vivos } = pedido
+  const { elemento, x, y, largura, altura, dpr, frente, vivos, mouse } = pedido
   const quadro = enquadrar(x, y, largura, altura, dpr)
   const w = Math.round(quadro.largura * dpr)
   const h = Math.round(quadro.altura * dpr)
@@ -307,7 +313,7 @@ async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): 
   originais.forEach((original, i) => {
     const copia = copias[i]
     if (!copia) return
-    if (original.matches(':hover')) copia.setAttribute(MOUSE, '')
+    if (mouse && original.contains(mouse)) copia.setAttribute(MOUSE, '')
     // sem ids repetidos e sem as animações de entrada
     copia.removeAttribute('id')
     copia.removeAttribute('data-reveal')

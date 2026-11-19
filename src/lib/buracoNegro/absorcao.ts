@@ -181,7 +181,16 @@ interface Bloco {
   frente: Frente | null
   vivos: Vivo[]
   tiras: Tira[]
+  /** A foto que as fatias mostram. */
   foto: Foto | null
+  /**
+   * As fotos do conteúdo de agora, uma para cada estado do mouse sobre o bloco em que uma foi feita
+   * (veja chaveDoMouse), a que está à vista entre elas: o mouse que sai do bloco, ou volta a um
+   * estado já visto, troca a foto na hora, mesmo rolando.
+   */
+  variantes: Map<string, Foto>
+  /** O estado do mouse da foto à vista. */
+  chave: string
   /** O que fica na frente dos vídeos, sozinho (veja Frente). */
   fotoDaFrente: HTMLCanvasElement | null
   /** O original mudou depois da foto: ela precisa ser refeita (a de agora vale até a nova ficar pronta). */
@@ -294,6 +303,8 @@ const ESPERA_DO_MOUSE = 350
 const ESPERA_DA_ROLAGEM = 300
 /** Depois de uma foto que falhou, quanto esperar (ms) para tentar de novo. */
 const NOVA_TENTATIVA = 3000
+/** Quantas fotos do mesmo bloco, para estados diferentes do mouse, ficam guardadas (veja variantes). */
+const VARIANTES = 4
 
 const temOcioso = typeof window !== 'undefined' && 'requestIdleCallback' in window
 
@@ -457,6 +468,21 @@ function sincronizar(original: Element, copia: Element) {
     })
 }
 
+/**
+ * Uma chave para o estado do mouse sobre o bloco: o caminho, de filho em filho, da raiz até o
+ * elemento mais fundo com o mouse em cima ('' sem o mouse).
+ */
+function chaveDoMouse(raiz: Element, fundo: Element | null): string {
+  if (!fundo) return ''
+  const caminho: number[] = []
+  for (let no: Element | null = fundo; no && no !== raiz; no = no.parentElement) {
+    const pai: Element | null = no.parentElement
+    if (!pai) break
+    caminho.push(Array.prototype.indexOf.call(pai.children, no))
+  }
+  return `/${caminho.reverse().join('/')}`
+}
+
 /** Uma borda solta da página: o lado de um elemento que não é bloco nem está dentro de um. */
 interface Borda {
   fonte: HTMLElement
@@ -616,8 +642,9 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
 
   /**
    * O mouse entrou ou saiu de um elemento: os blocos em que os elementos com o mouse em cima
-   * mudaram ganham foto nova (com as regras de :hover valendo para eles, veja fotos.ts), depois que
-   * as transições do original acabarem.
+   * mudaram trocam de foto, na hora, se já há uma para esse estado (veja variantes), ou ganham foto
+   * nova (com as regras de :hover valendo para eles, veja fotos.ts), depois que as transições do
+   * original acabarem.
    */
   const aoMexerMouse = () => {
     if (!esperaDoMouse) esperaDoMouse = requestAnimationFrame(verMouse)
@@ -634,7 +661,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       if (fundo === bloco.mouse) continue
       bloco.mouse = fundo
       bloco.mexido = agora
-      envelhecer(bloco, { soMouse: true })
+      if (!trocarPelaVariante(bloco)) envelhecer(bloco, { soMouse: true })
     }
   }
 
@@ -1150,6 +1177,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   /** O original mudou: a foto do bloco precisa ser refeita (veja tirarFotos). */
   function envelhecer(bloco: Bloco, { soFrente = false, soMouse = false }: { soFrente?: boolean; soMouse?: boolean }) {
     if (bloco.linha) return
+    if (!soFrente && !soMouse) esquecerVariantes(bloco)
     bloco.soFrente = bloco.velha ? bloco.soFrente && soFrente : soFrente
     bloco.soMouse = bloco.velha ? bloco.soMouse && soMouse : soMouse
     bloco.velha = true
@@ -1197,8 +1225,11 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       if (!bloco.foto) prioridade = d
       else if (!bloco.velha) continue
       else {
-        // a foto velha serve até as transições do mouse acabarem e a página parar de rolar
-        const espera = Math.max(ESPERA_DO_MOUSE - (agora - bloco.mexido), ESPERA_DA_ROLAGEM - (agora - rolouEm))
+        // A foto velha serve até as transições do mouse acabarem e a página parar de rolar. Só a de
+        // um bloco que o mouse mudou e que pode estar à vista na faixa não espera a rolagem: a tira
+        // mostraria o estado de antes até a página parar.
+        const aVista = bloco.soMouse && d === 0
+        const espera = Math.max(ESPERA_DO_MOUSE - (agora - bloco.mexido), aVista ? 0 : ESPERA_DA_ROLAGEM - (agora - rolouEm))
         if (espera > 0) {
           esperar = Math.min(esperar, espera)
           continue
@@ -1248,6 +1279,10 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   function tirarFoto(bloco: Bloco) {
     const minhaGeracao = geracao
     const soFrente = bloco.foto !== null && bloco.velha && bloco.soFrente && bloco.foto.fase === bloco.fase
+    // só o mouse mudou desde a última: ela é mais um estado dele, e as outras continuam valendo
+    const soMouse = bloco.foto !== null && bloco.velha && bloco.soMouse
+    const { mouse } = bloco
+    const chave = chaveDoMouse(bloco.elemento, mouse)
     bloco.fotografando = true
     bloco.velha = false
     bloco.soFrente = false
@@ -1265,6 +1300,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       dpr,
       frente: bloco.frente?.elementos ?? [],
       vivos: bloco.vivos.map((vivo) => vivo.indice),
+      mouse,
       foto: !soFrente,
       fotoDaFrente: bloco.frente !== null,
       urgente: () => bloco.elevado || bloco.tiras.some((tira) => tira.fatia >= 0),
@@ -1274,7 +1310,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
           soltarFoto(fotos.foto)
           return
         }
-        aplicarFotos(bloco, fotos, soFrente)
+        aplicarFotos(bloco, fotos, soFrente, chave, soMouse)
         // o bloco mudou de lugar no meio da foto: ela serve até a próxima
         if (bloco.fase !== fase) envelhecer(bloco, {})
       })
@@ -1291,13 +1327,63 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       })
   }
 
-  /** As fotos novas vão para as fatias: a do bloco no grupo, a da frente nas telas dos vídeos. */
-  function aplicarFotos(bloco: Bloco, { foto, frente }: Fotos, soFrente: boolean) {
+  /** A foto vai para as fatias (pelo grupo do bloco). */
+  function mostrarFoto(bloco: Bloco, foto: Foto, chave: string) {
+    bloco.foto = foto
+    bloco.chave = chave
+    bloco.grupo?.style.setProperty('--foto', `url("${foto.url}")`)
+  }
+
+  /**
+   * Mostra a foto já feita para o estado atual do mouse sobre o bloco, se houver uma (veja
+   * variantes). Devolve se havia.
+   */
+  function trocarPelaVariante(bloco: Bloco): boolean {
+    const chave = chaveDoMouse(bloco.elemento, bloco.mouse)
+    const foto = bloco.variantes.get(chave)
+    if (!foto) return false
+    if (foto !== bloco.foto) mostrarFoto(bloco, foto, chave)
+    // se só o mouse tinha mudado, a foto à vista está em dia
+    if (bloco.velha && bloco.soMouse) bloco.velha = false
+    return true
+  }
+
+  /** As fotos dos outros estados do mouse vão embora (a à vista fica, até chegar a nova). */
+  function esquecerVariantes(bloco: Bloco) {
+    for (const foto of bloco.variantes.values()) if (foto !== bloco.foto) soltarFoto(foto)
+    bloco.variantes.clear()
+    if (bloco.foto) bloco.variantes.set(bloco.chave, bloco.foto)
+  }
+
+  /** Todas as fotos do bloco vão embora. */
+  function soltarFotos(bloco: Bloco) {
+    for (const foto of bloco.variantes.values()) soltarFoto(foto)
+    if (bloco.foto && !bloco.variantes.has(bloco.chave)) soltarFoto(bloco.foto)
+    bloco.variantes.clear()
+    bloco.foto = null
+    bloco.fotoDaFrente = null
+  }
+
+  /**
+   * As fotos novas vão para as fatias: a do bloco no grupo, a da frente nas telas dos vídeos. A do
+   * bloco fica guardada com o estado do mouse em que foi feita (`chave`); se só o mouse tinha mudado
+   * (`soMouse`), as dos outros estados continuam valendo, e fica à vista a do estado de agora.
+   */
+  function aplicarFotos(bloco: Bloco, { foto, frente }: Fotos, soFrente: boolean, chave: string, soMouse: boolean) {
     if (!soFrente && foto) {
-      const antiga = bloco.foto
-      bloco.foto = foto
-      bloco.grupo?.style.setProperty('--foto', `url("${foto.url}")`)
-      soltarFoto(antiga)
+      const antigas = new Set(bloco.variantes.values())
+      if (bloco.foto) antigas.add(bloco.foto)
+      if (!soMouse) bloco.variantes.clear()
+      bloco.variantes.set(chave, foto)
+      const agora = chaveDoMouse(bloco.elemento, bloco.mouse)
+      mostrarFoto(bloco, bloco.variantes.get(agora) ?? foto, bloco.variantes.has(agora) ? agora : chave)
+      // as que passaram do limite saem, das mais antigas às mais novas (a à vista fica)
+      for (const [outra, guardada] of bloco.variantes) {
+        if (bloco.variantes.size <= VARIANTES) break
+        if (guardada !== bloco.foto) bloco.variantes.delete(outra)
+      }
+      const guardadas = new Set(bloco.variantes.values())
+      for (const antiga of antigas) if (!guardadas.has(antiga)) soltarFoto(antiga)
     }
     bloco.fotoDaFrente = frente
     for (const video of bloco.videos) mandarFrente(bloco, video)
@@ -1313,9 +1399,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   /** O bloco saiu da página: as fatias, as fotos e os vídeos dele no pintor vão embora. */
   function esquecer(bloco: Bloco) {
     devolver(bloco)
-    soltarFoto(bloco.foto)
-    bloco.foto = null
-    bloco.fotoDaFrente = null
+    soltarFotos(bloco)
     for (const video of bloco.videos) {
       if (video.apresentado) pintor?.esquecer(video.id)
       video.apresentado = false
@@ -1354,6 +1438,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       vivos: linha ? [] : medirVivos(elemento),
       tiras: [],
       foto: null,
+      variantes: new Map(),
+      chave: '',
       fotoDaFrente: null,
       velha: false,
       soFrente: false,
@@ -1433,9 +1519,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
         // as fotos são feitas nos pixels da tela: com outra escala, todas são refeitas
         dpr = novoDpr
         for (const bloco of blocos) {
-          soltarFoto(bloco.foto)
-          bloco.foto = null
-          bloco.fotoDaFrente = null
+          soltarFotos(bloco)
           atualizarGrade(bloco)
         }
       }

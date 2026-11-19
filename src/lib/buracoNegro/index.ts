@@ -38,7 +38,7 @@ const PRESSA = 0.15
 /** A maior velocidade de rolagem (px/s) levada em conta para a antecedência. */
 const VELOCIDADE_MAXIMA = 6000
 /**
- * A quantas telas daqui os blocos têm a foto refeita primeiro quando o original muda: para trás e
+ * A quantas telas daqui os blocos têm a foto refeita primeiro quando o original muda: para trás e 
  * para a frente, no sentido da rolagem, e para cada lado com a página parada.
  */
 const AQUECER = [0.75, 2.5, 1.5] as const
@@ -145,7 +145,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   const raiz = document.documentElement
   const movimentoReduzido = window.matchMedia('(prefers-reduced-motion: reduce)')
   const ponteiroFino = window.matchMedia('(hover: hover) and (pointer: fine)')
-  const relogio = criarRelogio()
+  // Ancorado no main: começa no topo da página (o resto do que vem antes dele é fixo) e contém todo
+  // o conteúdo absorvido (veja criarRelogio).
+  const relogio = criarRelogio(document.querySelector('main'))
   const absorcao = criarAbsorcao(relogio)
   /** A página não desce além do que a absorção tem pronto (veja limite.ts). */
   const limite = criarLimite()

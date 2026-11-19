@@ -7,6 +7,14 @@
 // ficam sempre na posição exata da rolagem, por mais rápida que ela seja, mesmo com o JavaScript
 // ocupado. Sem ScrollTimeline, o JavaScript leva cada uma à rolagem atual a cada quadro: o desenho é
 // o mesmo, mas rolando rápido ele pode chegar um quadro atrasado.
+//
+// A linha do tempo de uma ScrollTimeline vai do topo da página à maior rolagem possível, e o limite da
+// rolagem (veja limite.ts) muda essa rolagem máxima enquanto a página rola. A cada mudança, o Chrome
+// reenviava ao compositor todas as animações presas a ela, com todos os quadros-chave (as da absorção
+// têm um para cada pixel da faixa): no celular emulado, cada mudança custava um quadro de uns 30 ms.
+// Com uma âncora (o main, veja criarRelogio), a linha do tempo é a de uma ViewTimeline, que acompanha
+// a posição da âncora na tela e não depende da rolagem máxima. Os trechos continuam em px de rolagem,
+// contados do topo dela.
 
 /** Uma Animation com o trecho da linha do tempo (rangeStart e rangeEnd ainda faltam nos tipos do TypeScript). */
 type ComTrecho = Animation & { rangeStart: string; rangeEnd: string }
@@ -25,22 +33,40 @@ export interface Relogio {
   acertar(rolagem: number): void
 }
 
-function relogioNativo(): Relogio | null {
+/**
+ * A linha do tempo das animações e como escrever nela um trecho em px de rolagem. Com a âncora, uma
+ * ViewTimeline: o trecho é contado do momento em que o topo da âncora chega ao alto da tela (o 0% do
+ * trecho contain de um elemento mais alto que a tela), e a âncora tem de começar em `topo` na página e
+ * nunca sair dele. Sem inset, a ViewTimeline descontaria do alto da tela o scroll-padding-top da página
+ * (veja ajustarAncoras, em index.ts), e todas as animações andariam adiantadas.
+ */
+function linhaDoTempo(ancora: Element | null | undefined): { linha: AnimationTimeline; trecho: (px: number) => string } {
+  if (ancora && typeof ViewTimeline === 'function') {
+    const topo = ancora.getBoundingClientRect().top + window.scrollY
+    return {
+      linha: new ViewTimeline({ subject: ancora, axis: 'block', inset: [CSS.px(0), CSS.px(0)] }),
+      trecho: (px) => `contain ${px - topo}px`,
+    }
+  }
+  return { linha: new ScrollTimeline({ source: document.documentElement, axis: 'block' }), trecho: (px) => `${px}px` }
+}
+
+function relogioNativo(ancora: Element | null | undefined): Relogio | null {
   if (typeof ScrollTimeline !== 'function' || !('rangeStart' in Animation.prototype)) return null
   try {
-    const linha = new ScrollTimeline({ source: document.documentElement, axis: 'block' })
+    const { linha, trecho } = linhaDoTempo(ancora)
     return {
       animar(efeito, de, ate) {
         const animacao = new Animation(efeito, linha) as ComTrecho
-        animacao.rangeStart = `${de}px`
-        animacao.rangeEnd = `${ate}px`
+        animacao.rangeStart = trecho(de)
+        animacao.rangeEnd = trecho(ate)
         animacao.play()
         return animacao
       },
       mover(animacao, de, ate) {
         const comTrecho = animacao as ComTrecho
-        comTrecho.rangeStart = `${de}px`
-        comTrecho.rangeEnd = `${ate}px`
+        comTrecho.rangeStart = trecho(de)
+        comTrecho.rangeEnd = trecho(ate)
       },
       soltar: (animacao) => animacao.cancel(),
       acertar() {},
@@ -79,8 +105,13 @@ function relogioManual(): Relogio {
   }
 }
 
-export function criarRelogio(): Relogio {
-  return relogioNativo() ?? relogioManual()
+/**
+ * O relógio das animações presas à rolagem. Com `ancora`, um elemento que começa na mesma altura da
+ * página para sempre e cujos trechos ficam todos dentro dele, a linha do tempo não depende da rolagem
+ * máxima (veja linhaDoTempo); sem ela, vai do topo à rolagem máxima.
+ */
+export function criarRelogio(ancora?: Element | null): Relogio {
+  return relogioNativo(ancora) ?? relogioManual()
 }
 
 /**

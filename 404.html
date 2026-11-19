@@ -8,6 +8,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!--
+      A transição da troca de página (veja o comentário em index.html).
+    -->
+    <style>
+      @media (prefers-reduced-motion: no-preference) {
+        @view-transition {
+          navigation: auto;
+          types: troca-de-pagina;
+        }
+      }
+    </style>
+
     <title>Página não encontrada | Alexsandro Ferreira da Silva</title>
     <meta name="robots" content="noindex" />
     <meta name="theme-color" content="#f4f3ee" />

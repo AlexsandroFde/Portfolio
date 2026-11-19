@@ -60,7 +60,7 @@ summary: {
 },
 ```
 
-Nomes próprios e tecnologias, que são iguais nos dois idiomas, podem ser um texto só (`name: 'Beka'`). O TypeScript avisa se faltar uma das línguas. No cabeçalho, o link **EN**/**PT** leva para a mesma seção na outra versão. O título, a descrição e a prévia de compartilhamento de cada versão ficam em `index.html` e `en/index.html`.
+Nomes próprios e tecnologias, que são iguais nos dois idiomas, podem ser um texto só (`name: 'Beka'`). O TypeScript avisa se faltar uma das línguas. No cabeçalho, o link **EN**/**PT** leva para a mesma seção na outra versão. A troca de uma versão para a outra (e a volta da página de erro para o início) usa a transição de página do navegador: a página de antes some enquanto a nova aparece, em 0,25 s, em vez de um corte seco para a página nova ainda vazia; com o movimento reduzido, a troca é direta. O pedido da transição fica num `<style>` dentro de cada HTML (`index.html`, `en/index.html` e `404.html`), e não no CSS: com ele só no arquivo CSS, o Chrome pulava a transição sempre que o CSS ou o JavaScript da página nova demorava um pouco a chegar (com 100 ms de atraso, em todas as trocas medidas). As animações dela ficam no `index.css`, separadas das da troca de tema pelo tipo da transição. O título, a descrição e a prévia de compartilhamento de cada versão ficam em `index.html` e `en/index.html`.
 
 ### Currículo em PDF
 

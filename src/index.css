@@ -360,6 +360,32 @@
   mix-blend-mode: normal;
 }
 
+/* Troca de página dentro do site (a versão em inglês, a 404 e a volta dela): a página de antes some
+   enquanto a nova aparece, em vez de um corte seco para a página nova ainda vazia. Quem pede a
+   transição é o index.html (e as outras páginas), num estilo dentro dele (veja lá por quê); o tipo
+   separa esta transição da troca de tema. */
+html:active-view-transition-type(troca-de-pagina)::view-transition-old(root) {
+  animation: 0.25s ease-out both pagina-sai;
+  mix-blend-mode: plus-lighter;
+}
+
+html:active-view-transition-type(troca-de-pagina)::view-transition-new(root) {
+  animation: 0.25s ease-out both pagina-entra;
+  mix-blend-mode: plus-lighter;
+}
+
+@keyframes pagina-sai {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes pagina-entra {
+  from {
+    opacity: 0;
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Impressão
  * ------------------------------------------------------------------ */

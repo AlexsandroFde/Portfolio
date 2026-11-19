@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!--
+      A troca de página dentro do site (a versão em inglês, a 404 e a volta dela) com uma
+      transição: o navegador segura a página de antes até a nova ter o que mostrar e funde as
+      duas (as animações ficam no index.css). O pedido fica aqui, e não no CSS: o Chrome decide
+      cedo se faz a transição, e com o pedido só no arquivo CSS ela era pulada sempre que ele, ou
+      o JavaScript, demorava um pouco a chegar. Com o movimento reduzido, a troca é direta.
+    -->
+    <style>
+      @media (prefers-reduced-motion: no-preference) {
+        @view-transition {
+          navigation: auto;
+          types: troca-de-pagina;
+        }
+      }
+    </style>
+
     <title>Alexsandro Ferreira da Silva | Desenvolvedor de Software</title>
     <meta
       name="description"

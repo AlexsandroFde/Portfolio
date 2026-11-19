@@ -5,6 +5,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!--
+      A transição da troca de página (veja o comentário em index.html).
+    -->
+    <style>
+      @media (prefers-reduced-motion: no-preference) {
+        @view-transition {
+          navigation: auto;
+          types: troca-de-pagina;
+        }
+      }
+    </style>
+
     <title>Alexsandro Ferreira da Silva | Software Developer</title>
     <meta
       name="description"

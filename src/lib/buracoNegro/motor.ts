@@ -1,5 +1,5 @@
-// O motor do buraco negro: o laço que o desenha, quadro a quadro, no canvas do fundo da página e na
-// cortina (veja index.ts). Roda num worker (veja trabalhador.ts e ponte.ts), fora da thread
+// O motor do buraco negro: o laço que o desenha, quadro a quadro, no canvas do fundo da página, na
+// cortina e na tampa (veja index.ts). Roda num worker (veja trabalhador.ts e ponte.ts), fora da thread
 // principal: o que pesa nela (a absorção, os vídeos, o React) não atrasa nem um quadro
 // do buraco negro, que gira e anda junto com a rolagem como o resto da página, que o navegador rola
 // também fora dela. Sem worker, o mesmo motor roda na thread principal.
@@ -12,6 +12,7 @@
 // site chega (entrada.ts e entrada.frag), no mesmo passo das animações da página.
 
 import { curvaDaEntrada } from './entrada.ts'
+import { HORIZONTE, esmaecimento, forcaEm, type Faixa } from './faixa.ts'
 import { criarRenderizador, type Entrada, type Renderizador, type Rgb, type Rgba, type Tela } from './renderizador.ts'
 import {
   GIRO,
@@ -19,11 +20,15 @@ import {
   PARALAXE_MALHA,
   SENTIDO,
   SUBIDA,
+  alvoEm,
+  caminhoDaPagina,
   lerTabela,
   progressoDoMergulho,
   suave,
   tabelar,
+  type Caminho,
   type Palco,
+  type Posicao,
   type Tabela,
 } from './trajeto.ts'
 
@@ -36,7 +41,10 @@ export interface Cores {
   escuro: boolean
 }
 
-/** O tamanho do canvas e da cortina (px CSS) e quantos pixels da tela há em cada px CSS. */
+/**
+ * O tamanho do canvas e o da cortina, que é também o da tampa (px CSS), e quantos pixels da tela há
+ * em cada px CSS.
+ */
 export interface Tamanho {
   largura: number
   altura: number
@@ -55,6 +63,8 @@ export interface Inicio {
 export type ParaOMotor =
   | { tipo: 'tamanho'; tamanho: Tamanho }
   | { tipo: 'palco'; palco: Palco }
+  /** A faixa da absorção e a rolagem em que o puxão fica pleno (veja faixa.ts): a tampa é desenhada com elas. */
+  | { tipo: 'faixa'; faixa: Faixa; plena: number }
   /** A rolagem `s` no quadro da página que começou em `t` (ms desde a época, veja performance.timeOrigin). */
   | { tipo: 'rolagem'; s: number; t: number; salto?: boolean }
   /** O ponteiro, de -0,5 a 0,5 em cada eixo a partir do meio da tela. */
@@ -141,21 +151,28 @@ const cancelarQuadro: (id: number) => void =
   typeof cancelAnimationFrame === 'function' ? (id) => cancelAnimationFrame(id) : (id) => clearTimeout(id)
 
 /**
- * Liga o motor no canvas e na cortina (um canvas cada, ou o OffscreenCanvas de cada um, num worker).
- * `avisar` leva as mensagens do motor para a página.
+ * Liga o motor no canvas, na cortina e na tampa (um canvas cada, ou o OffscreenCanvas de cada um,
+ * num worker). `avisar` leva as mensagens do motor para a página.
  */
-export function criarMotor(canvas: Tela, cortina: Tela, inicio: Inicio, avisar: (mensagem: DoMotor) => void): Motor {
+export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Inicio, avisar: (mensagem: DoMotor) => void): Motor {
   let renderizador: Renderizador | null = criarRenderizador(canvas, inicio.densidade)
   if (!renderizador) {
     avisar({ tipo: 'falhou' })
     return { receber() {} }
   }
   const pincel = (cortina as HTMLCanvasElement).getContext('2d')
+  const pincelDaTampa = (tampa as HTMLCanvasElement).getContext('2d')
+  /** Onde se recorta, a cada quadro, o pedaço da cortina em volta da sombra (veja desenharTampa). */
+  const furo: Tela = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(1, 1) : document.createElement('canvas')
+  const pincelDoFuro = (furo as HTMLCanvasElement).getContext('2d')
 
   let cores = inicio.cores
   let palco: Palco | null = null
   let tabela: Tabela | null = null
+  /** O caminho do buraco negro ao longo da página, o mesmo que a absorção segue (veja trajeto.ts). */
+  let caminho: Caminho | null = null
   let tamanho: Tamanho | null = null
+  let absorcao: { faixa: Faixa; plena: number } | null = null
 
   // Qualidade: resolução da tela (até 2x). Se o aparelho não der conta, cai para 1x e, se ainda
   // assim sofrer, a página prende o buraco negro no alto da página (veja index.ts).
@@ -213,11 +230,13 @@ export function criarMotor(canvas: Tela, cortina: Tela, inicio: Inicio, avisar: 
       canvas.width = w
       canvas.height = h
     }
-    // A cortina tem a resolução do canvas e cobre a faixa do alto da tela (veja index.ts).
+    // A cortina e a tampa têm a resolução do canvas e cobrem a faixa do alto da tela (veja index.ts).
     const hc = Math.max(1, Math.min(h, Math.round(tamanho.cortina * escala)))
-    if (cortina.width !== w || cortina.height !== hc) {
-      cortina.width = w
-      cortina.height = hc
+    for (const tela of [cortina, tampa]) {
+      if (tela.width !== w || tela.height !== hc) {
+        tela.width = w
+        tela.height = hc
+      }
     }
   }
 
@@ -293,6 +312,61 @@ export function criarMotor(canvas: Tela, cortina: Tela, inicio: Inicio, avisar: 
     return { u, vistaX: largura / 2, vistaY: alturaTela / 2, escala: ponto.escala, torcao: ponto.torcao, janela: ponto.janela * meiaDiagonal }
   }
 
+  /**
+   * A tampa (veja index.ts): por cima das fatias da absorção, a mesma imagem da cortina, tanto mais
+   * opaca quanto mais o conteúdo já esmaeceu naquela altura da tela (veja esmaecimento), e inteira
+   * na sombra do buraco negro, a deste quadro. Sobre a cortina, as fatias aparecem com a
+   * transparência que lhes cabe ali: o mesmo que uma máscara na camada delas, mas sem a máscara, que
+   * obrigava a placa de vídeo a desenhar todas as fatias à parte e só então recortá-las, a cada
+   * quadro (rolando rápido, ela não dava conta).
+   */
+  function desenharTampa(rolagem: number, b: Posicao) {
+    if (!pincelDaTampa || !pincelDoFuro || !absorcao || !caminho || !tamanho) return
+    const { faixa, plena } = absorcao
+    const w = tampa.width
+    const h = tampa.height
+    // a imagem da cortina, inteira
+    pincelDaTampa.globalCompositeOperation = 'copy'
+    pincelDaTampa.drawImage(cortina, 0, 0)
+    // menos o quanto o conteúdo ainda aparece, em cada altura
+    const queda = alvoEm(caminho, rolagem).y - faixa.frente
+    const gradiente = pincelDaTampa.createLinearGradient(0, 0, 0, h)
+    for (const [y, aparece] of esmaecimento(faixa, queda, forcaEm(plena, rolagem))) {
+      gradiente.addColorStop(Math.min(1, Math.max(0, y / tamanho.cortina)), `rgba(0,0,0,${aparece})`)
+    }
+    pincelDaTampa.globalCompositeOperation = 'destination-out'
+    pincelDaTampa.fillStyle = gradiente
+    pincelDaTampa.fillRect(0, 0, w, h)
+    pincelDaTampa.globalCompositeOperation = 'source-over'
+    // Em volta da sombra, a imagem volta por cima, inteira dentro dela e sumindo até HORIZONTE raios
+    // do centro: recortada da cortina, com essa transparência, num canvas à parte.
+    const ex = canvas.width / tamanho.largura
+    const ey = canvas.height / tamanho.altura
+    const fora = b.raio * HORIZONTE + 1
+    const x0 = Math.max(0, Math.floor((b.x - fora) * ex))
+    const y0 = Math.max(0, Math.floor((b.y - fora) * ey))
+    const x1 = Math.min(w, Math.ceil((b.x + fora) * ex))
+    const y1 = Math.min(h, Math.ceil((b.y + fora) * ey))
+    if (x1 <= x0 || y1 <= y0) return
+    const fw = x1 - x0
+    const fh = y1 - y0
+    if (furo.width < fw || furo.height < fh) {
+      furo.width = Math.max(furo.width, fw)
+      furo.height = Math.max(furo.height, fh)
+    }
+    pincelDoFuro.globalCompositeOperation = 'copy'
+    pincelDoFuro.drawImage(cortina, x0, y0, fw, fh, 0, 0, fw, fh)
+    const cx = b.x * ex - x0
+    const cy = b.y * ey - y0
+    const sombra = pincelDoFuro.createRadialGradient(cx, cy, b.raio * ex, cx, cy, fora * ex)
+    sombra.addColorStop(0, '#000')
+    sombra.addColorStop(1, 'rgba(0,0,0,0)')
+    pincelDoFuro.globalCompositeOperation = 'destination-in'
+    pincelDoFuro.fillStyle = sombra
+    pincelDoFuro.fillRect(0, 0, fw, fh)
+    pincelDaTampa.drawImage(furo, 0, 0, fw, fh, x0, y0, fw, fh)
+  }
+
   /** Desenha o quadro com a página rolada até `s` (e, na entrada, com ela em `u`). */
   function desenhar(s: number, u: number | null = null) {
     const r = renderizador
@@ -328,12 +402,13 @@ export function criarMotor(canvas: Tela, cortina: Tela, inicio: Inicio, avisar: 
       ...cores,
     })
     // O alto do quadro vai também para a cortina, no mesmo quadro, sobre o fundo da página (ela
-    // cobre a faixa com o que está atrás da página ali). Uma cópia de imagem na placa de vídeo:
-    // desenhar o buraco negro duas vezes custaria o desenho em dobro.
+    // cobre a faixa com o que está atrás da página ali), e dela para a tampa. Cópias de imagem na
+    // placa de vídeo: desenhar o buraco negro mais vezes custaria o desenho em dobro.
     if (!preso && pincel) {
       pincel.fillStyle = `rgb(${cores.fundo.map((v) => Math.round(v * 255)).join(',')})`
       pincel.fillRect(0, 0, cortina.width, cortina.height)
       pincel.drawImage(canvas, 0, 0, cortina.width, cortina.height, 0, 0, cortina.width, cortina.height)
+      desenharTampa(rolagem, b)
     }
     if (!ativo) {
       ativo = true
@@ -531,6 +606,11 @@ export function criarMotor(canvas: Tela, cortina: Tela, inicio: Inicio, avisar: 
         case 'palco':
           palco = m.palco
           tabela = tabelar(m.palco)
+          caminho = caminhoDaPagina(m.palco)
+          desenhada = Number.NaN
+          break
+        case 'faixa':
+          absorcao = { faixa: m.faixa, plena: m.plena }
           desenhada = Number.NaN
           break
         case 'rolagem':

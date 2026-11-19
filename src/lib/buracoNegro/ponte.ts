@@ -1,5 +1,5 @@
 // A ponte entre a página e o motor do buraco negro (motor.ts). Onde dá, o motor roda num worker, com
-// o canvas do fundo e a cortina transferidos para ele (OffscreenCanvas): o laço de quadros dele fica
+// o canvas do fundo, a cortina e a tampa transferidos para ele (OffscreenCanvas): o laço de quadros dele fica
 // fora da thread principal, e nada do que pesa nela atrasa o buraco negro. Onde não dá (sem worker
 // de módulo ou sem OffscreenCanvas), o mesmo motor roda aqui.
 
@@ -18,10 +18,11 @@ export interface Ponte {
  */
 const ESPERA = 8000
 
-/** Liga o motor no canvas e na cortina. `ouvir` recebe as mensagens dele. */
+/** Liga o motor no canvas, na cortina e na tampa. `ouvir` recebe as mensagens dele. */
 export function criarPonte(
   canvas: HTMLCanvasElement,
   cortina: HTMLCanvasElement,
+  tampa: HTMLCanvasElement,
   inicio: Inicio,
   ouvir: (mensagem: DoMotor) => void,
 ): Ponte {
@@ -39,7 +40,7 @@ export function criarPonte(
     worker = null
     void import('./motor.ts').then(({ criarMotor }) => {
       if (destruido) return
-      const motor = criarMotor(canvas, cortina, inicio, ouvir)
+      const motor = criarMotor(canvas, cortina, tampa, inicio, ouvir)
       entregar = (mensagem) => motor.receber(mensagem)
       for (const mensagem of fila.splice(0)) entregar(mensagem)
     })
@@ -72,8 +73,9 @@ export function criarPonte(
       window.clearTimeout(desistir)
       const telaDoCanvas = canvas.transferControlToOffscreen()
       const telaDaCortina = cortina.transferControlToOffscreen()
-      const iniciar: Iniciar = { tipo: 'iniciar', canvas: telaDoCanvas, cortina: telaDaCortina, ...inicio }
-      esse.postMessage(iniciar, [telaDoCanvas, telaDaCortina])
+      const telaDaTampa = tampa.transferControlToOffscreen()
+      const iniciar: Iniciar = { tipo: 'iniciar', canvas: telaDoCanvas, cortina: telaDaCortina, tampa: telaDaTampa, ...inicio }
+      esse.postMessage(iniciar, [telaDoCanvas, telaDaCortina, telaDaTampa])
       entregar = (mensagem) => esse.postMessage(mensagem)
       for (const mensagem of fila.splice(0)) entregar(mensagem)
     })

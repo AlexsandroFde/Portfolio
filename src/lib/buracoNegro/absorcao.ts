@@ -20,7 +20,8 @@
 // vez, longe da faixa, e cada fatia é só um retângulo com o pedaço dela da foto, sem nada dentro.
 // As fatias ficam numa camada fixa no alto da tela, sem foco, clique ou leitor de tela, por cima de
 // uma cortina (veja index.ts) que cobre a faixa com o fundo e o buraco negro: o original não sai do
-// lugar nem muda, só passa por trás dela.
+// lugar nem muda, só passa por trás dela. Por cima das fatias fica a tampa, a mesma imagem da
+// cortina, que as esmaece pelo caminho e as apaga na sombra do buraco negro.
 //
 // Quem move as fatias é o navegador, e não o JavaScript: cada uma tem uma animação presa à rolagem
 // (veja rolagem.ts), com um quadro-chave para cada pixel da tela que a página rola enquanto a fatia
@@ -35,19 +36,10 @@
 // página (a borda de cima das seções e das listas) entram como blocos de uma fatia só, desenhadas
 // por um modelo da linha (uma linha só não precisa de foto).
 
+import { ACELERACAO, type Faixa } from './faixa.ts'
 import { elementosDe, enquadrar, fotografar, soltarFoto, type Foto, type Fotos } from './fotos.ts'
-import { aparecerAoRolar, type Relogio } from './rolagem.ts'
+import type { Relogio } from './rolagem.ts'
 import { alvoEm, type Alvo, type Caminho } from './trajeto.ts'
-
-/**
- * A faixa da tela em que o conteúdo é absorvido: ele começa a ser puxado quando sobe até `inicio`
- * e chega ao buraco negro em `frente`. Acima de `frente` só fica o buraco negro. As duas ficam em
- * pixels inteiros da tela.
- */
-export interface Faixa {
-  frente: number
-  inicio: number
-}
 
 /**
  * O que a absorção precisa saber da tela. Nada disso muda com a rolagem, só com o tamanho da janela.
@@ -237,24 +229,10 @@ export function temBlocos(no: Node): boolean {
  * curva mais (com 12 px já aparecem quinas na borda); cada uma a mais é uma camada.
  */
 const FATIA = 10
-/**
- * Como a linha anda até o buraco negro: a fração do caminho é o progresso elevado a isto. Começa
- * devagar (na borda da faixa o conteúdo continua junto do que ficou no lugar) e acelera, como
- * quem cai.
- */
-const ACELERACAO = 2
 /** Largura que uma linha ainda tem ao chegar ao centro do buraco negro (px). */
 const FIO = 1
-/**
- * O conteúdo some ao entrar na sombra do buraco negro: a camada das fatias é transparente dentro
- * dela e opaca a partir de HORIZONTE raios do centro (um fio de transição, sobre o anel de luz).
- * Pouco mais que o raio: o que ainda está no lugar, logo abaixo da faixa, nunca chega tão perto.
- */
-const HORIZONTE = 1.06
 /** A maior razão aceita entre as larguras das bordas de uma fatia (só chega perto disso dentro da sombra). */
 const PERSPECTIVA_MAXIMA = 12
-/** Em quantos pontos da faixa a máscara do esmaecimento é medida (entre eles, ela vai em linha reta). */
-const PARADAS = 12
 /**
  * Quanto tempo (ms) um quadro pode gastar, no máximo, pondo no lugar as fatias que podem aparecer
  * já nos próximos quadros (as outras têm o orçamento que preparar recebe). Um quadro longo demais
@@ -274,10 +252,18 @@ const MANTER = 1.25
  */
 const ESCONDIDA = '0 -100000px'
 /**
- * Quanto a camada das fatias passa da faixa, para baixo (px): a altura de três fatias, onde as
- * presas à rolagem esperam a sua vez, escondidas pela máscara (veja obterCamada).
+ * Quanto acima do alto da tela a fatia presa à rolagem espera a sua vez (px): fora da tela, mas
+ * perto. O navegador a desenha de antemão, sem pressa, e ela entra na faixa pronta. Dentro da tela,
+ * mesmo recortada pela camada, ela conta como à vista: cada fatia nova precisava estar desenhada
+ * antes de o quadro seguinte da página aparecer, e rolando rápido, com a placa de vídeo ocupada, a
+ * página inteira esperava por elas.
  */
-const ESPERA = 3 * FATIA
+const ACIMA = 8
+/**
+ * O z-index que põe um elemento da página por cima da cortina, das fatias e da tampa (veja
+ * index.ts), e ainda abaixo do cabeçalho.
+ */
+const POR_CIMA = '42'
 /**
  * Margem (px de rolagem) além da urgência em que uma fatia já recebe cada quadro dos vídeos: ela
  * pode aparecer antes de o JavaScript rodar de novo (a urgência já cresce com a velocidade).
@@ -305,27 +291,6 @@ const temQuadros = typeof HTMLVideoElement !== 'undefined' && 'requestVideoFrame
 const temOcioso = typeof window !== 'undefined' && 'requestIdleCallback' in window
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
-
-/**
- * O esmaecimento ao longo da distorção, como máscara da camada das fatias (de cima para baixo, em
- * px da tela): cada linha do conteúdo fica tão transparente quanto já se estreitou a caminho do
- * buraco negro (veja linhaEm), inteira na borda de baixo da faixa e sumindo perto do centro dele.
- * Basta a altura: a de cada linha na tela diz o quanto ela já foi puxada, qualquer que seja o
- * bloco. Muda só com a faixa (e com a força, no começo da página), não com a rolagem. Abaixo da
- * faixa, onde as fatias esperam (veja obterCamada), nada aparece.
- */
-function esmaecimento({ frente, inicio }: Faixa, queda: number, forca: number): string {
-  const banda = Math.max(1, inicio - frente)
-  const paradas: string[] = []
-  for (let i = PARADAS; i >= 0; i--) {
-    const t = i / PARADAS
-    const q = forca * t
-    const y = inicio - t * banda + q * q * queda
-    paradas.push(`rgba(0,0,0,${(1 - q ** ACELERACAO).toFixed(3)}) ${y.toFixed(1)}px`)
-  }
-  paradas.push(`transparent ${inicio}px`)
-  return `linear-gradient(${paradas.join(',')})`
-}
 
 /** Posição e tamanho na página, sem a translação da animação de entrada (se ela ainda estiver no meio). */
 function medirBloco(elemento: HTMLElement) {
@@ -575,11 +540,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   let blocos: Bloco[] = []
   let cena: Cena | null = null
   let camada: HTMLDivElement | null = null
-  /** A animação que mostra a camada a partir do primeiro pixel de rolagem (veja aparecerAoRolar). */
-  let entrada: Animation | null = null
-  /** A força e o lugar e o tamanho do buraco negro com que a máscara da camada foi feita. */
-  let forcaDaMascara = Number.NaN
-  let furoDaMascara = ''
   /** Faltou tempo, no último quadro, para pôr no lugar todas as fatias da folga. */
   let incompleto = false
   /** As fatias que mudaram de lugar e esperam a animação nova (veja animarPendentes). */
@@ -678,12 +638,12 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   }
 
   /**
-   * A camada das fatias: fixa no alto da tela, acima da cortina e abaixo do cabeçalho. Fixa como a
-   * cortina: as fatias andam pela rolagem com as animações, e não com a página. Ela mostra só a
-   * faixa (o que passa dela fica por conta do original), mas vai um pouco além, até ESPERA abaixo
-   * dela, com essa parte apagada pela máscara (veja esmaecimento): é ali que as fatias presas à
-   * rolagem esperam a sua vez, logo abaixo da beira. Recortadas fora da camada, o navegador não as
-   * desenharia antes de entrarem na faixa, e nos primeiros quadros elas apareciam vazias.
+   * A camada das fatias: fixa no alto da tela, entre a cortina e a tampa (veja index.ts), abaixo
+   * do cabeçalho. Fixa como a cortina: as fatias andam pela rolagem com as animações, e não com a
+   * página. Ela mostra só a faixa e recorta o resto: o que passa da beira fica por conta do
+   * original. Nada nela muda a opacidade (nem para escondê-la no topo da página, veja trajeto):
+   * com uma animação de opacidade, o navegador desenhava todas as fatias à parte, a cada quadro,
+   * antes de pô-las na tela.
    */
   function obterCamada(): HTMLDivElement {
     if (!camada) {
@@ -694,9 +654,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       camada.inert = true
       camada.style.cssText =
         'position:fixed;left:0;top:0;width:100%;overflow:hidden;z-index:40;pointer-events:none;user-select:none;contain:layout style'
-      if (cena) camada.style.height = `${cena.faixa.inicio + ESPERA}px`
+      if (cena) camada.style.height = `${cena.faixa.inicio}px`
       document.body.append(camada)
-      forcaDaMascara = Number.NaN
       const principal = document.querySelector('main')
       if (principal) {
         vigiaConteudo.observe(principal, {
@@ -716,38 +675,11 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   }
 
   /**
-   * A máscara da camada: a sombra apaga o que entra nela, e antes disso o conteúdo vai esmaecendo
-   * pelo caminho. Depende da cena, da força, que muda só no começo da página (em degraus, para a
-   * máscara não mudar a cada quadro), e de onde o buraco negro está e de que tamanho (o furo anda e
-   * cresce com ele, em pixels inteiros da tela).
-   */
-  function ajustarMascara(rolagem: number) {
-    if (!camada || !cena) return
-    const forca = Math.round(cena.forca(rolagem) * 20) / 20
-    const alvo = alvoEm(cena, rolagem)
-    const x = alinhar(alvo.x)
-    const y = alinhar(alvo.y)
-    const raio = alinhar(alvo.raio)
-    const furo = `${x} ${y} ${raio}`
-    if (forca === forcaDaMascara && furo === furoDaMascara) return
-    forcaDaMascara = forca
-    furoDaMascara = furo
-    const { faixa } = cena
-    const sombra = `radial-gradient(circle at ${x}px ${y}px, transparent ${raio}px, #000 ${raio * HORIZONTE + 1}px)`
-    const mascara = `${sombra}, ${esmaecimento(faixa, alvo.y - faixa.frente, forca)}`
-    camada.style.maskImage = mascara
-    camada.style.webkitMaskImage = mascara
-    // a máscara é o que as duas deixam passar
-    camada.style.setProperty('-webkit-mask-composite', 'source-in')
-    camada.style.maskComposite = 'intersect'
-  }
-
-  /**
    * Onde o bloco mira: o buraco negro anda com a rolagem (veja alvoEm), e o bloco vai até onde ele
    * está quando o meio do bloco passa pelo meio da faixa. Todas as fatias do bloco miram o mesmo
    * ponto: as bordas que elas dividem coincidem, e as que cruzam a faixa com a força inteira dividem
    * os mesmos quadros-chave. No começo e no fim da passagem de um bloco alto o buraco negro já está
-   * um pouco ao lado desse ponto, mas a tira chega a ele por dentro da sombra, onde a máscara a apaga.
+   * um pouco ao lado desse ponto, mas a tira chega a ele por dentro da sombra, onde a tampa a apaga.
    */
   function alvoDoBloco(bloco: Bloco): Alvo {
     const { faixa } = cena!
@@ -771,7 +703,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
 
   /**
    * Por onde a fatia passa, em pixels inteiros da tela de rolagem: da rolagem n0 / dpr, a última
-   * em que ela ainda está inteira abaixo da faixa (e escondida pela beira da camada), à n1 / dpr, em
+   * em que ela ainda está inteira abaixo da faixa (e espera a vez fora da tela), à n1 / dpr, em
    * que ela foi engolida de vez (no começo da página, não antes de a força chegar a 1). Contas em
    * inteiros: cada fatia sai exatamente pixelsDaFatia pixels depois da de cima.
    */
@@ -822,7 +754,22 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     const passos = n1 - n0
     const quadros: Keyframe[] = []
     const alvo = alvoDoBloco(bloco)
+    // esperando a vez, logo acima da tela (veja ACIMA)
+    const direita = bloco.esquerda + bloco.larguraDaGrade
+    const espera = trapezio(
+      bloco.larguraDaGrade,
+      altura,
+      { esquerda: bloco.esquerda, direita, y: -altura - ACIMA, q: 0 },
+      { esquerda: bloco.esquerda, direita, y: -ACIMA, q: 0 },
+    )
     for (let i = 0; i <= passos; i++) {
+      // No primeiro quadro-chave a fatia ainda está inteira abaixo da faixa, e no topo da página a
+      // absorção ainda não aparece: ela começa no segundo pixel da tela de rolagem, junto com a
+      // cortina e a tampa (veja aparecerAoRolar).
+      if (i === 0 || n0 + i < 2) {
+        quadros.push({ offset: i / passos, easing: 'step-end', transform: espera })
+        continue
+      }
       const rolagem = (n0 + i) / dpr
       const forca = comum ? 1 : cena!.forca(rolagem)
       const y = bloco.topo + de - rolagem
@@ -923,8 +870,10 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
    */
   function criarTira(bloco: Bloco): Tira {
     const caixa = document.createElement('div')
-    // nasce escondida (veja ESCONDIDA)
-    caixa.style.cssText = `position:absolute;left:0;top:0;contain:size layout style;transform-origin:0 0;translate:${ESCONDIDA}`
+    // Nasce escondida (veja ESCONDIDA). Com o will-change, o navegador desenha a fatia uma vez, no
+    // tamanho dela, e só a encolhe a caminho do buraco negro: sem ele, ele a redesenhava a cada
+    // mudança de escala, várias vezes por fatia, e rolando rápido a página esperava por isso.
+    caixa.style.cssText = `position:absolute;left:0;top:0;contain:size layout style;transform-origin:0 0;will-change:transform;translate:${ESCONDIDA}`
     if (bloco.linha) {
       const modelo = bloco.elemento.cloneNode(true) as HTMLElement
       modelo.style.position = 'absolute'
@@ -1164,7 +1113,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     if (sim) {
       bloco.estiloAntes = [estilo.position, estilo.zIndex]
       if (getComputedStyle(bloco.elemento).position === 'static') estilo.position = 'relative'
-      estilo.zIndex = '2'
+      estilo.zIndex = POR_CIMA
     } else {
       ;[estilo.position, estilo.zIndex] = bloco.estiloAntes
     }
@@ -1341,7 +1290,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     bloco.fotoDaFrente = null
   }
 
-  /** Os títulos fixos das seções param no alto da tela, dentro da faixa: ficam por cima da cortina. */
+  /** Os títulos fixos das seções param no alto da tela, dentro da faixa: ficam por cima da cortina e da tampa. */
   function fixarPorCima(elementos: Set<HTMLElement>) {
     for (const [elemento, antes] of fixos) {
       if (elementos.has(elemento)) continue
@@ -1351,7 +1300,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     for (const elemento of elementos) {
       if (fixos.has(elemento)) continue
       fixos.set(elemento, elemento.style.zIndex)
-      elemento.style.zIndex = '2'
+      elemento.style.zIndex = POR_CIMA
     }
   }
 
@@ -1431,7 +1380,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
         nova.caminho.base === cena.caminho.base
       cena = nova
       if (igual && mesmoCaminho) return
-      furoDaMascara = ''
       if (igual) {
         // Só o caminho mudou (a página mudou de altura): as fatias continuam, com trajetos novos.
         for (const bloco of blocos) {
@@ -1458,10 +1406,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       }
       pixelsDaFatia = Math.max(1, Math.round(FATIA * dpr))
       passo = pixelsDaFatia / dpr
-      obterCamada().style.height = `${nova.faixa.inicio + ESPERA}px`
-      if (entrada) relogio.soltar(entrada)
-      entrada = null
-      forcaDaMascara = Number.NaN
+      obterCamada().style.height = `${nova.faixa.inicio}px`
     },
 
     pendente: () => incompleto,
@@ -1548,8 +1493,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       urgenciaAtual = urgencia
       folgaAtual = folga
       aquecerAtual = [acima, abaixo]
-      entrada ??= aparecerAoRolar(relogio, obterCamada())
-      ajustarMascara(rolagem)
+      obterCamada()
       // O foco de um clique (num botão, num link) não conta, só o do teclado: senão o bloco clicado
       // nunca seria absorvido.
       const focado = document.activeElement
@@ -1631,8 +1575,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       vigiaTema.disconnect()
       document.removeEventListener('pointerover', aoMexerMouse)
       document.removeEventListener('pointerout', aoMexerMouse)
-      if (entrada) relogio.soltar(entrada)
-      entrada = null
       camada?.remove()
       camada = null
       porAnimar.length = 0

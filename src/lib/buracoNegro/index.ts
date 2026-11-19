@@ -1,10 +1,11 @@
-import { criarAbsorcao, temBlocos, type Cena as CenaDaAbsorcao, type Faixa, type Folga } from './absorcao.ts'
+import { criarAbsorcao, temBlocos, type Cena as CenaDaAbsorcao, type Folga } from './absorcao.ts'
+import { forcaEm, type Faixa } from './faixa.ts'
 import { definirQueda, quandoMedirMergulho, quandoVoltar, trechoDoMergulho, type Queda } from './mergulho.ts'
 import type { Cores, DoMotor } from './motor.ts'
 import { criarPonte } from './ponte.ts'
 import type { Rgb, Rgba } from './renderizador.ts'
 import { aparecerAoRolar, criarRelogio } from './rolagem.ts'
-import { caminhoDaPagina, raioNoCanto, suave, type Palco } from './trajeto.ts'
+import { caminhoDaPagina, raioNoCanto, type Palco } from './trajeto.ts'
 
 /**
  * Com que antecedência (s) as fatias da absorção ficam presas à rolagem, prontas para entrar na
@@ -99,21 +100,16 @@ function aposEntrada(secao: HTMLElement): Promise<unknown> {
 }
 
 /**
- * A cortina: cobre a faixa do alto da tela, onde o conteúdo é absorvido, com o que fica atrás dele
- * (o fundo da página e, copiado do canvas a cada desenho, o buraco negro e a malha). Por cima dela
- * só passam as fatias que a absorção desenha (e os títulos fixos das seções): o original continua
- * no lugar, sem máscara nem nada que mude com a rolagem, e some atrás dela exatamente na beira da
- * faixa, que é fixa na tela. Fica entre a página e a camada das fatias. Quem desenha nela, fundo
- * incluído, é o motor: com a altura da cortina em fração de px CSS, um fundo em CSS passava um
- * quarto de pixel da borda dela e aparecia como um fio sobre o buraco negro.
+ * Um canvas fixo no alto da tela, da altura da faixa da absorção (veja ajustarTamanho), para o motor
+ * desenhar, no nível `nivel` (o z-index) da página. Fica escondido até a absorção começar.
  */
-function criarCortina(): HTMLCanvasElement {
-  const cortina = document.createElement('canvas')
-  cortina.className = 'print-hidden'
-  cortina.setAttribute('aria-hidden', 'true')
-  cortina.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:0;z-index:1;pointer-events:none;display:none'
-  document.body.append(cortina)
-  return cortina
+function criarCanvasFixo(nivel: number): HTMLCanvasElement {
+  const tela = document.createElement('canvas')
+  tela.className = 'print-hidden'
+  tela.setAttribute('aria-hidden', 'true')
+  tela.style.cssText = `position:fixed;left:0;top:0;width:100%;height:0;z-index:${nivel};pointer-events:none;display:none`
+  document.body.append(tela)
+  return tela
 }
 
 /**
@@ -140,9 +136,25 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'display:block;width:100%;height:100%'
   recipiente.append(canvas)
-  const cortina = criarCortina()
-  /** A cortina aparece junto com a camada das fatias, ao primeiro pixel de rolagem. */
-  let entradaDaCortina: Animation | null = null
+  /**
+   * A cortina: cobre a faixa do alto da tela, onde o conteúdo é absorvido, com o que fica atrás dele
+   * (o fundo da página e, copiado do canvas a cada desenho, o buraco negro e a malha). Por cima dela
+   * só passam as fatias que a absorção desenha (e os títulos fixos das seções): o original continua
+   * no lugar, sem máscara nem nada que mude com a rolagem, e some atrás dela exatamente na beira da
+   * faixa, que é fixa na tela. Fica entre a página e a camada das fatias (z-index 40, veja
+   * absorcao.ts). Quem desenha nela, fundo incluído, é o motor: com a altura da cortina em fração de
+   * px CSS, um fundo em CSS passava um quarto de pixel da borda dela e aparecia como um fio sobre o
+   * buraco negro.
+   */
+  const cortina = criarCanvasFixo(1)
+  /**
+   * A tampa: logo acima da camada das fatias, a mesma imagem da cortina, que as esmaece pelo caminho
+   * e as apaga na sombra do buraco negro (veja desenharTampa, em motor.ts). Os títulos fixos das
+   * seções e os blocos que a absorção põe por cima da cortina ficam por cima dela também.
+   */
+  const tampa = criarCanvasFixo(41)
+  /** As animações com que a cortina e a tampa aparecem ao rolar (veja prenderEntradas). */
+  let entradas: Animation[] = []
 
   // medidas (px CSS)
   let alturaHero = 0
@@ -180,6 +192,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   const ponte = criarPonte(
     canvas,
     cortina,
+    tampa,
     {
       cores: lerCores(),
       // a imagem no canto é a menor que o buraco negro tem: o mapa fica um pouco mais fino que ela
@@ -204,6 +217,12 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       inicio: pixel(topo + Math.min(140, Math.max(96, window.innerHeight * 0.14))),
     }
   }
+
+  /**
+   * A rolagem a partir da qual o puxão tem a força toda: no topo da página nada é puxado (a
+   * apresentação aparece inteira), e a força cresce ao longo do primeiro quarto de tela.
+   */
+  const rolagemPlena = () => window.innerHeight * 0.25
 
   /** As medidas de que o trajeto do buraco negro depende (veja trajeto.ts), e o raio dele no canto. */
   function medirPalco(): Palco & { raioNoCanto: number } {
@@ -241,12 +260,27 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     },
   }
 
-  /** A absorção não age: sem fatias e sem cortina (a página fica como sem o efeito). */
+  /**
+   * A cortina e a tampa ficam invisíveis com a página no topo e aparecem junto com a camada das
+   * fatias (veja aparecerAoRolar). A entrada é medida em pixels da tela, que mudam com o zoom: é
+   * refeita a cada medida.
+   */
+  function prenderEntradas() {
+    soltarEntradas()
+    entradas = [cortina, tampa].map((tela) => aparecerAoRolar(relogio, tela))
+  }
+
+  function soltarEntradas() {
+    for (const entrada of entradas) relogio.soltar(entrada)
+    entradas = []
+  }
+
+  /** A absorção não age: sem fatias, cortina nem tampa (a página fica como sem o efeito). */
   function desligarAbsorcao() {
     absorcao.limpar()
-    if (entradaDaCortina) relogio.soltar(entradaDaCortina)
-    entradaDaCortina = null
+    soltarEntradas()
     cortina.style.display = 'none'
+    tampa.style.display = 'none'
   }
 
   function aplicarModo() {
@@ -258,9 +292,10 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     definirQueda(preso ? null : queda)
     if (preso) desligarAbsorcao()
     else {
-      // invisível com a página no topo desde já, antes de ela aparecer
-      entradaDaCortina ??= aparecerAoRolar(relogio, cortina)
+      // invisíveis com a página no topo desde já, antes de elas aparecerem
+      if (!entradas.length) prenderEntradas()
       cortina.style.display = ''
+      tampa.style.display = ''
     }
     reabsorver = true
     ajustarAncoras()
@@ -268,33 +303,31 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
 
   function ajustarTamanho() {
     largura = recipiente.clientWidth
-    // A cortina tem a altura da faixa menos um pixel da tela. Nesse último pixel, logo acima da
-    // beira, a máscara das fatias já vai sumindo (a beira dela não é um corte exato); com a cortina
-    // ali, ele aparecia como um fio claro sobre o conteúdo. Sem ela, o que aparece por baixo da
-    // fatia é o próprio original, no mesmo lugar.
+    // A cortina e a tampa cobrem a faixa até a beira de baixo dela, onde acaba a camada das fatias.
     const dpr = window.devicePixelRatio || 1
-    const alturaDaCortina = faixa().inicio - 1 / dpr
-    cortina.style.height = `${alturaDaCortina}px`
+    const { frente, inicio } = faixa()
+    cortina.style.height = `${inicio}px`
+    tampa.style.height = `${inicio}px`
     ponte.enviar({
       tipo: 'tamanho',
-      tamanho: { largura, altura: recipiente.clientHeight, cortina: alturaDaCortina, dpr },
+      tamanho: { largura, altura: recipiente.clientHeight, cortina: inicio, dpr },
     })
+    ponte.enviar({ tipo: 'faixa', faixa: { frente, inicio }, plena: rolagemPlena() })
   }
 
   /**
    * O que a absorção precisa saber da tela. O conteúdo que sobe até a faixa do alto da tela é
-   * puxado até o buraco negro, e quanto depende só da rolagem: no topo da página nada é puxado (a
-   * apresentação aparece inteira), e a força cresce ao longo do primeiro quarto de tela. O buraco
-   * negro começa no canto e, ao longo da página, anda pelo alto da tela até o meio dela, aonde chega
-   * no fim do conteúdo, quando começa o mergulho (veja trajeto.ts): ele se aproxima sem descer pela
-   * página, onde ficaria atrás do texto e o conteúdo teria de descer até ele.
+   * puxado até o buraco negro, e quanto depende só da rolagem (veja rolagemPlena). O buraco negro
+   * começa no canto e, ao longo da página, anda pelo alto da tela até o meio dela, aonde chega no fim
+   * do conteúdo, quando começa o mergulho (veja trajeto.ts): ele se aproxima sem descer pela página,
+   * onde ficaria atrás do texto e o conteúdo teria de descer até ele.
    */
   function cenaDaAbsorcao(): CenaDaAbsorcao {
-    const plena = window.innerHeight * 0.25
+    const plena = rolagemPlena()
     return {
       ...caminhoDaPagina(medirPalco()),
       faixa: faixa(),
-      forca: (s) => suave(0, plena, s),
+      forca: (s) => forcaEm(plena, s),
       plena,
     }
   }
@@ -366,9 +399,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     if (!preso) {
       absorcao.definirCena(cenaDaAbsorcao())
       absorcao.medir()
-      // a entrada da cortina é medida em pixels da tela, que mudam com o zoom
-      if (entradaDaCortina) relogio.soltar(entradaDaCortina)
-      entradaDaCortina = aparecerAoRolar(relogio, cortina)
+      prenderEntradas()
       // na hora, e não no próximo quadro: um bloco que mudou de tamanho perdeu as fatias (e as fatias
       // novas precisam já do quadro dos vídeos)
       relogio.acertar(window.scrollY)
@@ -647,6 +678,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     ponte.destruir()
     canvas.remove()
     cortina.remove()
+    tampa.remove()
     raiz.style.removeProperty('--topo-livre')
     recipiente.removeAttribute('data-preso')
     recipiente.style.height = ''

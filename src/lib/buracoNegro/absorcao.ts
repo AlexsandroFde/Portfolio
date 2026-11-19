@@ -65,18 +65,10 @@ export type Folga = readonly [number, number]
 export interface Preparo {
   /** As fatias que aparecem com a página rolada dentro da folga ficam presas à rolagem. */
   folga: Folga
-  /**
-   * As que podem aparecer até `urgencia` px daqui (para cima e para baixo, como a folga), na hora
-   * (até ORCAMENTO_URGENTE ms).
-   */
-  urgencia: Folga
+  /** As que podem aparecer até `urgencia` px daqui, na hora (até ORCAMENTO_URGENTE ms). */
+  urgencia: number
   /** As outras, com o tempo que sobrar: até `orcamento` ms por quadro. */
   orcamento: number
-  /**
-   * A maior rolagem que a página já pode alcançar (veja limite.ts), ou -Infinity: as fatias que podem
-   * aparecer até ela continuam prontas e no lugar, mesmo fora da folga.
-   */
-  manter: number
   /**
    * Os blocos que aparecem com a página dentro desta faixa têm a foto refeita primeiro, quando o
    * original muda; os mais longe, só quando chegarem perto.
@@ -94,16 +86,7 @@ export interface Absorcao {
    * `rolagem`. Devolve quantas fatias novas foram criadas.
    */
   preparar(rolagem: number, preparo: Preparo): number
-  /**
-   * Até que rolagem (px) a página pode descer com a absorção pronta, desde o último preparar: até lá,
-   * cada fatia que aparece está no lugar, e cada bloco, com a sua foto (veja limite.ts). Infinity se
-   * nada mais falta.
-   */
-  pronto(): number
-  /**
-   * Ficaram fatias por pôr no lugar para o próximo quadro, ou o que está pronto mudou sem a rolagem
-   * mudar (chegou uma foto): o próximo quadro prepara de novo.
-   */
+  /** Ficaram fatias por pôr no lugar para o próximo quadro. */
   pendente(): boolean
   /** Devolve todos os blocos ao normal e apaga as fatias e as fotos. */
   limpar(): void
@@ -220,11 +203,6 @@ interface Bloco {
   fotografando: boolean
   /** Quando a última foto falhou (ms): espera um pouco para tentar de novo. */
   falhou: number
-  /**
-   * Desde quando (ms) o bloco, sem foto, está perto de chegar à faixa e segura a rolagem esperando por
-   * ela (veja ESPERA_PELA_FOTO), ou null.
-   */
-  esperaDaFoto: number | null
   /** Quando o mouse mudou o bloco pela última vez (ms): a foto espera as transições acabarem. */
   mexido: number
   /** O elemento mais fundo do bloco com o mouse em cima (os outros são os ancestrais dele), ou null. */
@@ -325,13 +303,6 @@ const ESPERA_DO_MOUSE = 350
 const ESPERA_DA_ROLAGEM = 300
 /** Depois de uma foto que falhou, quanto esperar (ms) para tentar de novo. */
 const NOVA_TENTATIVA = 3000
-/**
- * Por quanto tempo (ms), no máximo, um bloco sem foto segura a rolagem antes de chegar à faixa (veja
- * pronto): sem foto, ele passaria inteiro, sem ser absorvido. A foto de um bloco perto da faixa é
- * feita na hora, e num celular leva uns décimos de segundo; se demorar mais que isto, ou falhar, a
- * página segue, e o bloco passa inteiro.
- */
-const ESPERA_PELA_FOTO = 2000
 /** Quantas fotos do mesmo bloco, para estados diferentes do mouse, ficam guardadas (veja variantes). */
 const VARIANTES = 4
 
@@ -596,12 +567,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   let camada: HTMLDivElement | null = null
   /** Faltou tempo, no último quadro, para pôr no lugar todas as fatias da folga. */
   let incompleto = false
-  /** Até onde a absorção estava pronta no último preparar (veja pronto). */
-  let prontoAte = Infinity
-  /** Chegou a foto de algum bloco depois do último preparar: o que está pronto mudou. */
-  let fotoNova = false
-  /** Quando (ms) acaba a espera de algum bloco pela foto (veja ESPERA_PELA_FOTO): o que está pronto muda. */
-  let revisarEm = Infinity
   /** As fatias que mudaram de lugar e esperam a animação nova (veja animarPendentes). */
   const porAnimar: [Bloco, Tira][] = []
   /** Até quando o quadro pode pôr no lugar as fatias urgentes (veja ORCAMENTO_URGENTE). */
@@ -1103,62 +1068,40 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     return ate >= rolagem - folga[0] * fator && de <= rolagem + folga[1] * fator
   }
 
-  /**
-   * A fatia pode aparecer descendo até a rolagem `manter`, que o limite já deixa a página alcançar
-   * (veja Preparo)? Ela fica onde está: se saísse, o limite teria de recuar (veja limite.ts).
-   */
-  function prometida(bloco: Bloco, fatia: number, rolagem: number, manter: number): boolean {
-    const [de, ate] = trecho(bloco, fatia)
-    return ate >= rolagem && de <= manter
-  }
-
-  /**
-   * As fatias que a página pode levar à faixa dentro da folga, das mais próximas de aparecer às mais
-   * distantes: [fatia, distância, se ela ainda está abaixo da faixa (e não já engolida)].
-   */
-  function fatiasDaFolga(bloco: Bloco, rolagem: number, folga: Folga): [number, number, boolean][] {
+  /** As fatias que a página pode levar à faixa dentro da folga, das mais próximas de aparecer às mais distantes. */
+  function fatiasDaFolga(bloco: Bloco, rolagem: number, folga: Folga): [number, number][] {
     const { faixa, plena } = cena!
     const ultima = quantasFatias(bloco) - 1
     // um intervalo que certamente contém todas, conferido uma a uma em seguida
     const primeira =
       rolagem - folga[0] <= plena + 1 ? 0 : Math.max(0, Math.floor((rolagem - folga[0] + faixa.frente - bloco.topo) / passo) - 2)
     const derradeira = Math.min(ultima, Math.floor((rolagem + folga[1] + faixa.inicio - bloco.topo) / passo) + 2)
-    const lista: [number, number, boolean][] = []
+    const lista: [number, number][] = []
     for (let fatia = primeira; fatia <= derradeira; fatia++) {
-      if (alcancavel(bloco, fatia, rolagem, folga)) lista.push([fatia, distancia(bloco, fatia, rolagem), trecho(bloco, fatia)[0] > rolagem])
+      if (alcancavel(bloco, fatia, rolagem, folga)) lista.push([fatia, distancia(bloco, fatia, rolagem)])
     }
     return lista.sort((a, b) => a[1] - b[1])
   }
 
   /**
    * Põe as fatias do bloco nos lugares (`fatias`, com a distância de cada um): as que já mostram um
-   * deles continuam nele, como as que o limite já deixa a rolagem alcançar (veja prometida); as
-   * outras passam aos que faltam, das mais longe para as mais perto; e só então se criam fatias novas.
-   * Lugares a até `urgencia` px de aparecer (acima ou abaixo da faixa) ganham fatia na hora; os
+   * deles continuam nele; as outras passam aos que faltam, das mais longe para as mais perto; e só
+   * então se criam fatias novas. Lugares a até `urgencia` px de aparecer ganham fatia na hora; os
    * outros, só enquanto houver tempo no quadro (até `limite`). Devolve quantas fatias foram criadas.
    */
-  function distribuir(
-    bloco: Bloco,
-    fatias: [number, number, boolean][],
-    rolagem: number,
-    folga: Folga,
-    urgencia: Folga,
-    limite: number,
-    manter: number,
-  ): number {
+  function distribuir(bloco: Bloco, fatias: [number, number][], rolagem: number, folga: Folga, urgencia: number, limite: number): number {
     let novas = 0
     const { tiras } = bloco
     const precisas = new Set(fatias.map(([fatia]) => fatia))
-    for (const tira of tiras) if (tira.fatia >= 0 && prometida(bloco, tira.fatia, rolagem, manter)) precisas.add(tira.fatia)
     const longe = (tira: Tira) => (tira.fatia < 0 ? Infinity : distancia(bloco, tira.fatia, rolagem))
     // da mais perto à mais longe: as últimas (pop) são as primeiras a mudar de lugar
     const livres = tiras.filter((tira) => !precisas.has(tira.fatia)).sort((a, b) => longe(a) - longe(b))
     const cobertas = new Set(tiras.map((tira) => tira.fatia))
-    for (const [fatia, d, abaixo] of fatias) {
+    for (const [fatia, d] of fatias) {
       if (cobertas.has(fatia)) continue
       let tira = livres.pop()
       if (!tira) {
-        if (performance.now() > (d > urgencia[abaixo ? 1 : 0] ? limite : limiteUrgente)) {
+        if (performance.now() > (d > urgencia ? limite : limiteUrgente)) {
           incompleto = true
           continue
         }
@@ -1185,46 +1128,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       const perto = tira.fatia >= 0 && distancia(bloco, tira.fatia, rolagem) <= PERTO
       for (const tela of tira.telas) if (tela) pintor.acordar(tela, perto)
     }
-  }
-
-  /**
-   * Até que rolagem a página pode descer com a absorção pronta (veja pronto): até a que traz à faixa
-   * a primeira fatia que ainda não está no lugar, ou o primeiro bloco que ainda espera a foto (sem
-   * ela, ele passaria inteiro, por cima da cortina). Descendo, só contam as fatias que ainda não foram
-   * engolidas.
-   */
-  function calcularPronto(rolagem: number, agora: number): number {
-    const { faixa, plena } = cena!
-    let pronto = Infinity
-    for (const bloco of blocos) {
-      const comeco = trecho(bloco, 0)[0]
-      // começa depois de um que já segura a rolagem: não segura antes dele
-      if (comeco >= pronto) continue
-      const quantas = quantasFatias(bloco)
-      // já engolido por inteiro: descendo, não volta à faixa
-      if (trecho(bloco, quantas - 1)[1] < rolagem) continue
-      // com o foco do teclado, ele passa inteiro de propósito (veja elevar)
-      if (bloco.focado) continue
-      if (!bloco.linha && !bloco.foto) {
-        // Sem foto, segura a rolagem antes de chegar à faixa, mas não depois de a foto falhar, nem
-        // por mais que ESPERA_PELA_FOTO depois de chegar perto dela.
-        if (agora - bloco.falhou < NOVA_TENTATIVA) continue
-        const desde = bloco.esperaDaFoto
-        if (desde !== null && agora - desde >= ESPERA_PELA_FOTO) continue
-        if (desde !== null) revisarEm = Math.min(revisarEm, desde + ESPERA_PELA_FOTO)
-        pronto = comeco
-        continue
-      }
-      // a primeira fatia ainda não engolida (como em fatiasDaFolga) e, dela para baixo, a primeira
-      // que não está no lugar
-      let fatia = rolagem <= plena + 1 ? 0 : Math.max(0, Math.floor((rolagem + faixa.frente - bloco.topo) / passo) - 2)
-      while (fatia < quantas && trecho(bloco, fatia)[1] < rolagem) fatia++
-      const postas = new Set<number>()
-      for (const tira of bloco.tiras) if (tira.fatia >= 0) postas.add(tira.fatia)
-      while (fatia < quantas && postas.has(fatia)) fatia++
-      if (fatia < quantas) pronto = Math.min(pronto, trecho(bloco, fatia)[0])
-    }
-    return pronto
   }
 
   function apagarTiras(bloco: Bloco) {
@@ -1468,7 +1371,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     bloco.variantes.clear()
     bloco.foto = null
     bloco.fotoDaFrente = null
-    bloco.esperaDaFoto = null
   }
 
   /**
@@ -1478,9 +1380,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
    */
   function aplicarFotos(bloco: Bloco, { foto, frente }: Fotos, soFrente: boolean, chave: string, soMouse: boolean) {
     if (!soFrente && foto) {
-      // a rolagem que esperava por ela pode seguir (veja calcularPronto)
-      if (!bloco.foto) fotoNova = true
-      bloco.esperaDaFoto = null
       const antigas = new Set(bloco.variantes.values())
       if (bloco.foto) antigas.add(bloco.foto)
       if (!soMouse) bloco.variantes.clear()
@@ -1556,7 +1455,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       soMouse: false,
       fotografando: false,
       falhou: Number.NEGATIVE_INFINITY,
-      esperaDaFoto: null,
       mexido: Number.NEGATIVE_INFINITY,
       mouse: null,
       trajetos: new Map(),
@@ -1639,9 +1537,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       obterCamada().style.height = `${nova.faixa.inicio}px`
     },
 
-    pronto: () => prontoAte,
-
-    pendente: () => incompleto || fotoNova || performance.now() >= revisarEm,
+    pendente: () => incompleto,
 
     medir() {
       // As medidas ignoram o efeito (o original nunca sai do lugar): as fatias e a foto continuam
@@ -1714,10 +1610,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       agendarFotos(false)
     },
 
-    preparar(rolagem, { folga, urgencia, orcamento, manter, aquecer: [acima, abaixo] }) {
+    preparar(rolagem, { folga, urgencia, orcamento, aquecer: [acima, abaixo] }) {
       incompleto = false
-      fotoNova = false
-      revisarEm = Infinity
       if (!cena) return 0
       const agora = performance.now()
       const limite = agora + orcamento
@@ -1745,25 +1639,19 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
           bloco.focado = doTeclado !== null && bloco.elemento.contains(doTeclado)
           const precisa = fatias.length > 0 && !bloco.foto
           if (precisa) semFoto = true
-          // perto da faixa, sem foto, ele segura a rolagem por um tempo (veja calcularPronto)
-          if (precisa) bloco.esperaDaFoto ??= agora
           if (!bloco.fotografando && (!bloco.foto || bloco.velha)) falta = true
           elevar(bloco, bloco.focado || precisa)
         }
-        if (fatias.length) novas += distribuir(bloco, fatias, rolagem, folga, urgencia, limite, manter)
+        if (fatias.length) novas += distribuir(bloco, fatias, rolagem, folga, urgencia, limite)
         else {
-          // as fatias que a rolagem não pode trazer logo saem (as que o limite já deixa alcançar, não)
-          for (const tira of [...bloco.tiras]) {
-            const fica = tira.fatia >= 0 && (alcancavel(bloco, tira.fatia, rolagem, folga, MANTER) || prometida(bloco, tira.fatia, rolagem, manter))
-            if (!fica) descartar(bloco, tira)
-          }
+          // as fatias que a rolagem não pode trazer logo saem
+          for (const tira of [...bloco.tiras]) if (tira.fatia < 0 || !alcancavel(bloco, tira.fatia, rolagem, folga, MANTER)) descartar(bloco, tira)
           // sem fatias, o grupo do bloco sai também (a foto fica, para quando ele voltar)
           if (!bloco.tiras.length && bloco.grupo) apagarTiras(bloco)
         }
         if (bloco.videos.length) acordarTelas(bloco, rolagem)
       }
       animarPendentes()
-      prontoAte = calcularPronto(rolagem, agora)
       if (falta) agendarFotos(semFoto, true)
       return novas
     },
@@ -1796,9 +1684,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       pintor = null
       porAnimar.length = 0
       incompleto = false
-      prontoAte = Infinity
-      fotoNova = false
-      revisarEm = Infinity
     },
   }
 }

@@ -1,6 +1,5 @@
-import { criarAbsorcao, temBlocos, type Cena as CenaDaAbsorcao } from './absorcao.ts'
+import { criarAbsorcao, temBlocos, type Cena as CenaDaAbsorcao, type Folga } from './absorcao.ts'
 import { forcaEm, type Faixa } from './faixa.ts'
-import { alturaDaPagina, criarLimite } from './limite.ts'
 import { definirQueda, quandoMedirMergulho, quandoVoltar, trechoDoMergulho, type Queda } from './mergulho.ts'
 import type { Cores, DoMotor } from './motor.ts'
 import { criarPonte } from './ponte.ts'
@@ -22,19 +21,6 @@ const ANTECEDENCIA = 0.3
  * pode ser curta.
  */
 const FOLGA = { frente: 64, tras: 48 }
-/**
- * Quanto conteúdo fica sempre pronto abaixo da faixa, mesmo com a página parada ou subindo: a página
- * não desce além do que a absorção tem pronto (veja limite.ts), e o primeiro tranco da roda (uns
- * 100 px), antes de o JavaScript ver a rolagem e preparar mais, não pode bater no limite. Com a roda,
- * em px; com o dedo, que arranca bem mais rápido, em frações da tela.
- */
-const RESERVA = { roda: 240, toque: 0.5 }
-/**
- * Abaixo da faixa, as fatias da reserva, ou as que a rolagem alcança em PRESSA s, se forem mais,
- * ficam prontas com pressa (com o orçamento das que vão aparecer já): é ali que a página pararia se
- * elas faltassem (veja limite.ts).
- */
-const PRESSA = 0.15
 /** A maior velocidade de rolagem (px/s) levada em conta para a antecedência. */
 const VELOCIDADE_MAXIMA = 6000
 /**
@@ -149,8 +135,6 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   // o conteúdo absorvido (veja criarRelogio).
   const relogio = criarRelogio(document.querySelector('main'))
   const absorcao = criarAbsorcao(relogio)
-  /** A página não desce além do que a absorção tem pronto (veja limite.ts). */
-  const limite = criarLimite()
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'display:block;width:100%;height:100%'
   recipiente.append(canvas)
@@ -194,7 +178,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
    * A altura da tela para a faixa, a força do puxão e o trajeto: a da tela grande (veja regua), e não
    * a da janela. No celular, a barra do navegador some e volta conforme a rolagem, e a janela muda de
    * altura junto: com ela mudavam a faixa, a força e o raio do buraco negro, e a absorção era refeita
-   * do zero no meio da rolagem, com a página presa pelo limite até as fatias ficarem prontas de novo.
+   * do zero no meio da rolagem, e as fatias que iam aparecer podiam faltar até ficarem prontas de novo.
    * A tela grande só muda quando a janela muda de verdade (o celular girou, a janela do computador
    * mudou de tamanho).
    */
@@ -271,7 +255,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       alturaHero,
       celula,
       mergulho: trechoDoMergulho(),
-      rolagemMaxima: Math.max(0, alturaDaPagina() - window.innerHeight),
+      rolagemMaxima: Math.max(0, raiz.scrollHeight - window.innerHeight),
     }
     return { ...palco, raioNoCanto: raioNoCanto(palco) }
   }
@@ -312,10 +296,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     entradas = []
   }
 
-  /** A absorção não age: sem fatias, cortina nem tampa (a página fica como sem o efeito), e sem limite na rolagem. */
+  /** A absorção não age: sem fatias, cortina nem tampa (a página fica como sem o efeito). */
   function desligarAbsorcao() {
     absorcao.limpar()
-    limite.soltar()
     soltarEntradas()
     cortina.style.display = 'none'
     tampa.style.display = 'none'
@@ -379,24 +362,20 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     if (preso) return 0
     const tela = alturaDaTela
     // As fatias que podem aparecer ficam presas à rolagem antes (veja ANTECEDENCIA), mais longe no
-    // sentido da rolagem; para trás, o bastante para ela voltar. Abaixo da faixa fica sempre pronta
-    // pelo menos a reserva, mesmo subindo: a página não desce além do que está pronto (veja RESERVA).
-    // No começo da página, onde a força ainda cresce, cada fatia tem o seu trajeto, mais caro de
-    // calcular: elas ficam prontas antes, enquanto a página está parada no topo.
+    // sentido da rolagem; para trás, o bastante para ela voltar. No começo da página, onde a força
+    // ainda cresce, cada fatia tem o seu trajeto, mais caro de calcular: elas ficam prontas antes,
+    // enquanto a página está parada no topo.
     const minimo = s < tela * 0.75 ? tela * 0.4 : 0
     const adiante = Math.min(velocidade * ANTECEDENCIA, tela * 0.9)
+    const frente = Math.max(minimo, FOLGA.frente + adiante)
+    const tras = Math.max(minimo, FOLGA.tras)
     const indo = velocidade > 0 ? sentido : 0
-    const reserva = Math.max(FOLGA.frente, limite.toque ? tela * RESERVA.toque : RESERVA.roda)
-    const acima = Math.max(minimo, indo < 0 ? FOLGA.frente + adiante : indo > 0 ? FOLGA.tras : FOLGA.frente)
-    const abaixo = Math.max(minimo, reserva, indo > 0 ? FOLGA.frente + adiante : 0)
+    const folga: Folga = indo > 0 ? [tras, frente] : indo < 0 ? [frente, tras] : [frente, frente]
     return absorcao.preparar(s, {
-      folga: [acima, abaixo],
-      // O que pode aparecer nos próximos dois quadros não espera; abaixo da faixa, nem a reserva e o
-      // que a rolagem alcança em PRESSA s, onde a página pararia se elas faltassem.
-      urgencia: [Math.min(24 + velocidade * 0.035, tela * 0.2), Math.min(abaixo, Math.max(reserva, 24 + velocidade * PRESSA))],
+      folga,
+      // o que pode aparecer nos próximos dois quadros não espera
+      urgencia: Math.min(24 + velocidade * 0.035, tela * 0.2),
       orcamento: velocidade > 0 ? ORCAMENTO.rolando : ORCAMENTO.parada,
-      // o que o limite da rolagem já deixa alcançar continua pronto (veja limite.ts)
-      manter: Number.isFinite(limite.maximo) ? limite.maximo : Number.NEGATIVE_INFINITY,
       // Os blocos a até algumas telas daqui têm a foto refeita primeiro quando mudam (o tema, o
       // mouse em cima), enquanto a rolagem ainda está longe deles. Mais telas à frente, no sentido
       // da rolagem, que atrás.
@@ -433,10 +412,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     const espaco = document.querySelector<HTMLElement>('.mergulho')
     fimDoCaminho = Math.max(
       1,
-      espaco?.offsetHeight ? espaco.getBoundingClientRect().top + window.scrollY : alturaDaPagina() - window.innerHeight,
+      espaco?.offsetHeight ? espaco.getBoundingClientRect().top + window.scrollY : raiz.scrollHeight - window.innerHeight,
     )
     celula = 4 * Number.parseFloat(getComputedStyle(raiz).fontSize) || 64
-    limite.medir()
     aplicarModo()
     ajustarTamanho()
     ponte.enviar({ tipo: 'palco', palco: medirPalco() })
@@ -543,8 +521,6 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       // uma vez, e esse quadro pesa mais que os de rolar: ele não diz se o aparelho dá conta.
       if (preparar(s) > 6) ignorar = Math.max(ignorar, 2)
     }
-    // A página desce só até onde a absorção já está pronta (veja limite.ts).
-    limite.quadro(absorcao.pronto(), s, dt)
     avaliarDesempenho(intervalo)
   }
 
@@ -613,12 +589,11 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     cancelAnimationFrame(esperaMedida)
     esperaMedida = requestAnimationFrame(remedir)
   }
-  // A janela, a apresentação ou o resto da página mudaram de tamanho. O resto da página é o conteúdo,
-  // e não o body: ele muda de altura com o limite da rolagem (veja limite.ts).
+  // a janela, a apresentação ou o resto da página mudaram de tamanho
   const aoRedimensionar = new ResizeObserver(agendarMedida)
   aoRedimensionar.observe(recipiente)
   aoRedimensionar.observe(hero)
-  for (const parte of document.querySelectorAll('main, footer')) aoRedimensionar.observe(parte)
+  aoRedimensionar.observe(document.body)
   // o trecho do mergulho mudou (o espaço depois do rodapé foi medido de novo)
   const pararDeOuvirMergulho = quandoMedirMergulho(agendarMedida)
 
@@ -717,7 +692,6 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     pararDeOuvirMergulho()
     window.removeEventListener('pointermove', aoMoverPonteiro)
     desligarAbsorcao()
-    limite.destruir()
     ponte.destruir()
     canvas.remove()
     regua.remove()

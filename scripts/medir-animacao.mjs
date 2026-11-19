@@ -15,9 +15,8 @@
 // A rolagem vem da roda do mouse sintetizada pelo próprio navegador (Input.synthesizeScrollGesture),
 // numa velocidade que não depende da página: com a CPU mais lenta, a roda continua no mesmo ritmo. O
 // toque não entra: o Chrome sem janela não sintetiza o gesto do dedo, e os toques avulsos esperam a
-// página a cada evento (a velocidade deixaria de ser a pedida). Com o limite da rolagem (veja
-// src/lib/buracoNegro/limite.ts), a página pode andar mais devagar que a roda: a velocidade que ela
-// de fato atingiu também é registrada.
+// página a cada evento (a velocidade deixaria de ser a pedida). A velocidade que a página de fato
+// atingiu também é registrada.
 //
 // Para cada fase, registra:
 //   - o intervalo entre quadros da página (requestAnimationFrame): p50, p95, p99 e quantos passam de
@@ -321,16 +320,13 @@ function medirPagina() {
   return { fimDoConteudo, nosProjetos, alturaDaTela: innerHeight }
 }
 
-/** Vai até `alvo` na hora. Para baixo, solta antes o limite da rolagem (um salto do teclado, veja limite.ts). */
+/** Vai até `alvo` na hora. */
 async function irPara(pagina, alvo) {
-  const agora = await pagina.evaluate(() => window.scrollY)
-  if (alvo > agora) await pagina.keyboard.press('x')
   await pagina.evaluate((top) => window.scrollTo({ top, behavior: 'instant' }), alvo)
 }
 
 /**
- * Rola com a roda até `ate`, em gestos de `passo` px a `velocidade` px/s. Se o limite da rolagem
- * segura a página (a absorção não ficou pronta), insiste até o prazo.
+ * Rola com a roda até `ate`, em gestos de `passo` px a `velocidade` px/s, até o prazo.
  */
 async function rolarAte(cdp, pagina, centro, { ate, velocidade, passo = 1200, prazo }) {
   const comeco = Date.now()
@@ -347,7 +343,7 @@ async function rolarAte(cdp, pagina, centro, { ate, velocidade, passo = 1200, pr
 
 const FASES = {
   async constante({ cdp, pagina, centro, medidas, opcoes }) {
-    // um gesto só, do topo ao fim (outro só se o limite da rolagem segurar a página no caminho)
+    // um gesto só, do topo ao fim
     const ate = medidas.fimDoConteudo
     return rolarAte(cdp, pagina, centro, { ate, velocidade: opcoes.velocidade, passo: ate, prazo: (ate / opcoes.velocidade) * 4000 + 15000 })
   },

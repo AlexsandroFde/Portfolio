@@ -8,10 +8,11 @@
 // ocupado. Sem ScrollTimeline, o JavaScript leva cada uma à rolagem atual a cada quadro: o desenho é
 // o mesmo, mas rolando rápido ele pode chegar um quadro atrasado.
 //
-// A linha do tempo de uma ScrollTimeline vai do topo da página à maior rolagem possível, e o limite da
-// rolagem (veja limite.ts) muda essa rolagem máxima enquanto a página rola. A cada mudança, o Chrome
-// reenviava ao compositor todas as animações presas a ela, com todos os quadros-chave (as da absorção
-// têm um para cada pixel da faixa): no celular emulado, cada mudança custava um quadro de uns 30 ms.
+// A linha do tempo de uma ScrollTimeline vai do topo da página à maior rolagem possível, que muda com a
+// página rolando (no celular, quando a barra do navegador some ou volta; e quando a página muda de
+// altura). A cada mudança, o Chrome reenviava ao compositor todas as animações presas a ela, com todos
+// os quadros-chave (as da absorção têm um para cada pixel da faixa): no celular emulado, cada mudança
+// custava um quadro de uns 30 ms.
 // Com uma âncora (o main, veja criarRelogio), a linha do tempo é a de uma ViewTimeline, que acompanha
 // a posição da âncora na tela e não depende da rolagem máxima. Os trechos continuam em px de rolagem,
 // contados do topo dela.

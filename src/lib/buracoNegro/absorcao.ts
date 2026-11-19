@@ -111,11 +111,29 @@ interface Video {
   frentes: number
 }
 
+/**
+ * Um elemento do bloco que se anima sem parar (o ponto que pulsa ao lado do status): numa foto ele
+ * ficaria parado. Ele fica fora da foto, e a fatia que passa pelo meio dele leva uma cópia dele,
+ * viva, no mesmo passo do original.
+ */
+interface Vivo {
+  elemento: HTMLElement
+  /** A posição dele entre os elementos do bloco (veja elementosDe). */
+  indice: number
+  /** Posição relativa ao bloco e tamanho (px CSS). */
+  x: number
+  y: number
+  largura: number
+  altura: number
+}
+
 /** Uma fatia na tela: um retângulo com o seu pedaço da foto do bloco. */
 interface Tira {
   caixa: HTMLDivElement
   /** Para cada vídeo do bloco, a tela em que a fatia mostra a parte dele que cai nela, se cair alguma. */
   telas: (Tela | null)[]
+  /** Para cada elemento vivo do bloco, a cópia dele na fatia, se for ela que passa pelo meio dele. */
+  copias: (HTMLElement | null)[]
   /** A fatia que ela mostra, ou -1 (ainda sem lugar, ou já fora da página). */
   fatia: number
   /** A animação que a leva pela faixa, presa à rolagem. */
@@ -161,6 +179,7 @@ interface Bloco {
   fase: string
   videos: Video[]
   frente: Frente | null
+  vivos: Vivo[]
   tiras: Tira[]
   foto: Foto | null
   /** O que fica na frente dos vídeos, sozinho (veja Frente). */
@@ -402,6 +421,40 @@ function medirVideos(elemento: HTMLElement): Video[] {
       frentes: 0,
     }
   })
+}
+
+const infinita = (animacao: Animation) => animacao.effect?.getComputedTiming().iterations === Infinity
+
+/** Os elementos do bloco que se animam sem parar (veja Vivo). */
+function medirVivos(elemento: HTMLElement): Vivo[] {
+  const alvos = new Set<Element>()
+  for (const animacao of elemento.getAnimations({ subtree: true })) {
+    const efeito = animacao.effect
+    if (infinita(animacao) && efeito instanceof KeyframeEffect && efeito.target) alvos.add(efeito.target)
+  }
+  if (!alvos.size) return []
+  const posicoes = new Map(elementosDe(elemento).map((filho, i): [Element, number] => [filho, i]))
+  const caixa = elemento.getBoundingClientRect()
+  return [...alvos].flatMap((alvo): Vivo[] => {
+    const indice = posicoes.get(alvo)
+    if (indice === undefined || indice === 0 || !(alvo instanceof HTMLElement)) return []
+    const r = alvo.getBoundingClientRect()
+    return [{ elemento: alvo, indice, x: r.left - caixa.left, y: r.top - caixa.top, largura: r.width, altura: r.height }]
+  })
+}
+
+/** As animações sem fim da cópia andam no mesmo passo das do original. */
+function sincronizar(original: Element, copia: Element) {
+  const deles = original.getAnimations({ subtree: true }).filter(infinita)
+  copia
+    .getAnimations({ subtree: true })
+    .filter(infinita)
+    .forEach((animacao, i) => {
+      const par = deles[i]
+      if (!par || par.startTime === null) return
+      animacao.playbackRate = par.playbackRate
+      animacao.startTime = par.startTime
+    })
 }
 
 /** Uma borda solta da página: o lado de um elemento que não é bloco nem está dentro de um. */
@@ -856,7 +909,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       caixa.style.backgroundRepeat = 'no-repeat'
     }
     grupoDo(bloco).append(caixa)
-    return { caixa, telas: bloco.videos.map(() => null), fatia: -1, animacao: null, modelo: null }
+    return { caixa, telas: bloco.videos.map(() => null), copias: bloco.vivos.map(() => null), fatia: -1, animacao: null, modelo: null }
   }
 
   /** Põe a fatia no lugar: o pedaço da foto que ela mostra e as telas dos vídeos sobre a parte que cai nela. */
@@ -879,6 +932,43 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       style.backgroundPosition = `0 ${-de}px`
     }
     bloco.videos.forEach((_, i) => porTela(bloco, tira, i, de, ate))
+    bloco.vivos.forEach((_, i) => porCopia(bloco, tira, i, de, ate))
+  }
+
+  /**
+   * Põe na fatia (de `de` a `ate` na grade) a cópia viva do elemento `i` (veja Vivo), se o meio
+   * dele cai nela, ou a tira. Uma fatia só leva a cópia: o que passa dela sai junto, com a forma
+   * dessa fatia (perto do buraco negro, um pouco torto, mas inteiro).
+   */
+  function porCopia(bloco: Bloco, tira: Tira, i: number, de: number, ate: number) {
+    const vivo = bloco.vivos[i]
+    if (!vivo) return
+    const gx = vivo.x + bloco.x - bloco.esquerda
+    const gy = vivo.y + bloco.y - bloco.topo
+    const meio = gy + vivo.altura / 2
+    let copia = tira.copias[i] ?? null
+    if (meio < de || meio >= ate) {
+      copia?.remove()
+      tira.copias[i] = null
+      return
+    }
+    if (!copia) {
+      copia = vivo.elemento.cloneNode(true) as HTMLElement
+      copia.removeAttribute('id')
+      for (const filho of copia.querySelectorAll('[id]')) filho.removeAttribute('id')
+      tira.caixa.append(copia)
+      tira.copias[i] = copia
+    }
+    Object.assign(copia.style, {
+      position: 'absolute',
+      left: `${gx}px`,
+      top: `${gy - de}px`,
+      width: `${vivo.largura}px`,
+      height: `${vivo.altura}px`,
+      margin: '0',
+      boxSizing: 'border-box',
+    })
+    sincronizar(vivo.elemento, copia)
   }
 
   /** Marca a fatia para ser presa à rolagem, no trajeto do seu lugar (veja animarPendentes). */
@@ -1174,6 +1264,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       altura: bloco.altura,
       dpr,
       frente: bloco.frente?.elementos ?? [],
+      vivos: bloco.vivos.map((vivo) => vivo.indice),
       foto: !soFrente,
       fotoDaFrente: bloco.frente !== null,
       urgente: () => bloco.elevado || bloco.tiras.some((tira) => tira.fatia >= 0),
@@ -1260,6 +1351,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       fase: '',
       videos,
       frente: linha ? null : medirFrente(elemento, videos),
+      vivos: linha ? [] : medirVivos(elemento),
       tiras: [],
       foto: null,
       fotoDaFrente: null,

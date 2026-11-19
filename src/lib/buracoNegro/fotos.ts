@@ -53,6 +53,11 @@ export interface Pedido {
    * foto e vão para uma foto só deles, que as telas dos vídeos desenham por cima de cada quadro.
    */
   frente: number[]
+  /**
+   * Os elementos que se animam sem parar (o ponto que pulsa ao lado do status), pela posição: ficam
+   * fora das duas fotos, e as fatias os mostram vivos (veja Vivo, em absorcao.ts).
+   */
+  vivos: number[]
   /** Quais fotos fazer. */
   foto: boolean
   fotoDaFrente: boolean
@@ -292,7 +297,7 @@ function vez(urgente: boolean): Promise<void> {
  * em px CSS esticado na hora de desenhar sairia borrado.
  */
 async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): Promise<string> {
-  const { elemento, x, y, largura, altura, dpr, frente } = pedido
+  const { elemento, x, y, largura, altura, dpr, frente, vivos } = pedido
   const quadro = enquadrar(x, y, largura, altura, dpr)
   const w = Math.round(quadro.largura * dpr)
   const h = Math.round(quadro.altura * dpr)
@@ -334,6 +339,8 @@ async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): 
   // a frente dos vídeos fica numa foto à parte, desenhada por cima de cada quadro deles
   if (modo === 'frente') clone.style.visibility = 'hidden'
   for (const i of frente) (copias[i] as (Element & ElementCSSInlineStyle) | undefined)?.style.setProperty('visibility', modo === 'frente' ? 'visible' : 'hidden')
+  // o que se anima sem parar fica fora das duas (as fatias o mostram vivo)
+  for (const i of vivos) (copias[i] as (Element & ElementCSSInlineStyle) | undefined)?.style.setProperty('visibility', 'hidden')
 
   // Imagens: embutidas, na versão que a página mostra (ou mostraria).
   const imagens = [...elemento.querySelectorAll('img')]

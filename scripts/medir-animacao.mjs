@@ -7,7 +7,10 @@
 //   - mergulho: do fim do conteúdo até a volta ao topo, com a entrada do site;
 //   - parado: alguns segundos parado nos projetos, com os vídeos tocando;
 //   - barra e semBarra (só quando pedidas em --fases): três trechos de rolagem com a barra de
-//     endereço do celular sumindo e voltando no meio (a janela muda de altura), e o mesmo sem ela.
+//     endereço do celular sumindo e voltando no meio (a janela muda de altura), e o mesmo sem ela;
+//   - logo (só quando pedida em --fases): a página aberta de novo e, assim que o buraco negro
+//     aparece, do topo ao fim do conteúdo como na constante, sem esperar as fotos dos blocos (a
+//     absorção as faz com pressa pelo caminho, como para quem rola logo que a página abre).
 //
 // A rolagem vem da roda do mouse sintetizada pelo próprio navegador (Input.synthesizeScrollGesture),
 // numa velocidade que não depende da página: com a CPU mais lenta, a roda continua no mesmo ritmo. O
@@ -20,6 +23,7 @@
 //   - o intervalo entre quadros da página (requestAnimationFrame): p50, p95, p99 e quantos passam de
 //     16,7 ms e de 33,3 ms;
 //   - as tarefas longas (longtask) e os quadros longos (long-animation-frame);
+//   - quanto a thread principal ficou ocupada (a soma das tarefas, pelas métricas do Chrome);
 //   - por quadro da thread principal, o tempo de estilo, layout e pintura (PrePaint, Paint e
 //     Layerize), e os layouts e estilos forçados pelo JavaScript, com as funções que os forçaram;
 //   - os quadros do compositor (os que chegam à tela): apresentados, perdidos e com conteúdo ainda
@@ -34,7 +38,7 @@
 //   npm run medir -- --css "header { backdrop-filter: none !important }"
 //
 // Opções: --rotulo (nome do arquivo em medicoes/), --cpu (lista), --telas (desktop, celular),
-// --fases (constante, rajadas, mergulho, parado), --velocidade (px/s da fase constante), --pagina
+// --fases (constante, rajadas, mergulho, parado, barra, semBarra, logo), --velocidade (px/s da fase constante), --pagina
 // (caminho dentro do site, por exemplo en/), --css (regras injetadas antes da página, para comparar
 // uma mudança sem mexer no código), --raiz (a pasta de outro checkout do projeto, já com o build, para
 // comparar com uma versão anterior) e --porta.
@@ -109,6 +113,12 @@ function lerOpcoes(argv) {
 }
 
 const espera = (ms) => new Promise((resolver) => setTimeout(resolver, ms))
+
+/** As métricas que o Chrome soma para a página (em s): o tempo das tarefas e do JavaScript da thread principal. */
+async function lerMetricas(cdp) {
+  const { metrics } = await cdp.send('Performance.getMetrics')
+  return Object.fromEntries(metrics.map((m) => [m.name, m.value]))
+}
 
 /** O p-ésimo percentil (0 a 100) de uma lista já ordenada. */
 const percentil = (ordenada, p) => (ordenada.length ? ordenada[Math.min(ordenada.length - 1, Math.floor((p / 100) * ordenada.length))] : 0)
@@ -374,6 +384,9 @@ const FASES = {
   barra: (contexto) => rolarComBarra(contexto, true),
   // o mesmo caminho, sem a barra mudar (para comparar)
   semBarra: (contexto) => rolarComBarra(contexto, false),
+
+  // do topo ao fim, como na constante, mas logo depois de a página abrir (veja abrirDeNovo)
+  logo: (contexto) => FASES.constante(contexto),
 }
 
 /** Quanto a barra de endereço de um celular ocupa (px CSS). */
@@ -403,6 +416,18 @@ const ANTES = {
   },
   barra: prepararBarra,
   semBarra: prepararBarra,
+  logo: abrirDeNovo,
+}
+
+/**
+ * A página aberta de novo, no topo, e a fase começa assim que o buraco negro aparece, sem esperar as
+ * fotos dos blocos. As fases que vierem depois dela também não as esperam: peça-a sozinha ou por último.
+ */
+async function abrirDeNovo({ pagina, cpu }) {
+  await irPara(pagina, 0)
+  await pagina.reload({ waitUntil: 'load' })
+  await pagina.waitForSelector('.buraco-negro[data-ativo]', { timeout: 30000 * cpu })
+  await pagina.evaluate(() => window.scrollY === 0 || window.scrollTo({ top: 0, behavior: 'instant' }))
 }
 
 /** Do topo, com a absorção já pronta lá. */
@@ -432,6 +457,7 @@ async function medirCombinacao(navegador, url, tela, cpu, opcoes) {
   await pagina.setViewport(TELAS[tela])
   const cdp = await pagina.createCDPSession()
   if (cpu > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpu })
+  await cdp.send('Performance.enable')
   await pagina.evaluateOnNewDocument(instalarMedidor)
   if (opcoes.css) {
     await pagina.evaluateOnNewDocument((css) => {
@@ -455,13 +481,15 @@ async function medirCombinacao(navegador, url, tela, cpu, opcoes) {
   const resultado = { tela, cpu, efeitoAtivo: ativou, fases: {} }
   for (const fase of opcoes.fases) {
     if (!FASES[fase]) continue
-    await ANTES[fase]?.({ pagina, medidas, tela })
+    await ANTES[fase]?.({ pagina, medidas, tela, cpu })
     const inicio = await pagina.evaluate(() => performance.now())
     const posicaoInicial = await pagina.evaluate(() => window.scrollY)
     await pagina.tracing.start({ categories: CATEGORIAS })
+    const metricasAntes = await lerMetricas(cdp)
     const relogio = Date.now()
     const chegou = await FASES[fase]({ cdp, pagina, centro, medidas, opcoes, tela })
     const duracao = (Date.now() - relogio) / 1000
+    const metricasDepois = await lerMetricas(cdp)
     const trace = await pagina.tracing.stop()
     const fim = await pagina.evaluate(() => performance.now())
     const daPagina = await pagina.evaluate(
@@ -483,6 +511,11 @@ async function medirCombinacao(navegador, url, tela, cpu, opcoes) {
       velocidadeAtingida: Math.round(Math.abs(chegou - posicaoInicial) / Math.max(0.001, duracao)),
       quadrosDaPagina: resumirIntervalos(daPagina.quadros),
       tarefasLongas: { quantas: longas.length, totalMs: Math.round(longas.reduce((a, b) => a + b, 0)), maiorMs: Math.round(Math.max(0, ...longas)) },
+      principal: {
+        ocupadaMs: Math.round((metricasDepois.TaskDuration - metricasAntes.TaskDuration) * 1000),
+        porcento: arredondar(((metricasDepois.TaskDuration - metricasAntes.TaskDuration) / duracao) * 100),
+        scriptMs: Math.round((metricasDepois.ScriptDuration - metricasAntes.ScriptDuration) * 1000),
+      },
       quadrosLongos: {
         quantos: daPagina.quadrosLongos.length,
         bloqueioMs: Math.round(daPagina.quadrosLongos.reduce((a, [, , b]) => a + b, 0)),
@@ -514,6 +547,7 @@ function imprimir(resultados) {
         '>16,7': f.quadrosDaPagina.acima16,
         '>33': f.quadrosDaPagina.acima33,
         longas: f.tarefasLongas.quantas,
+        'ocupada%': f.principal?.porcento ?? '-',
         'est+lay': t ? arredondar(t.porQuadro.estilo.media + t.porQuadro.layout.media, 2) : '-',
         pintura: t ? t.porQuadro.pintura.media : '-',
         forcados: t ? t.forcados.layouts + t.forcados.estilos : '-',

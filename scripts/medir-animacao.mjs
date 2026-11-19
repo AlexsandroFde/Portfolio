@@ -23,7 +23,7 @@
 //   - o intervalo entre quadros da página (requestAnimationFrame): p50, p95, p99 e quantos passam de
 //     16,7 ms e de 33,3 ms;
 //   - as tarefas longas (longtask) e os quadros longos (long-animation-frame);
-//   - quanto a thread principal ficou ocupada (a soma das tarefas, pelas métricas do Chrome);
+//   - quanto a thread principal ficou ocupada (a soma das tarefas dela no trace);
 //   - por quadro da thread principal, o tempo de estilo, layout e pintura (PrePaint, Paint e
 //     Layerize), e os layouts e estilos forçados pelo JavaScript, com as funções que os forçaram;
 //   - os quadros do compositor (os que chegam à tela): apresentados, perdidos e com conteúdo ainda
@@ -113,12 +113,6 @@ function lerOpcoes(argv) {
 }
 
 const espera = (ms) => new Promise((resolver) => setTimeout(resolver, ms))
-
-/** As métricas que o Chrome soma para a página (em s): o tempo das tarefas e do JavaScript da thread principal. */
-async function lerMetricas(cdp) {
-  const { metrics } = await cdp.send('Performance.getMetrics')
-  return Object.fromEntries(metrics.map((m) => [m.name, m.value]))
-}
 
 /** O p-ésimo percentil (0 a 100) de uma lista já ordenada. */
 const percentil = (ordenada, p) => (ordenada.length ? ordenada[Math.min(ordenada.length - 1, Math.floor((p / 100) * ordenada.length))] : 0)
@@ -238,6 +232,15 @@ function analisarTrace(texto, duracao) {
       }
     }
   }
+  // Quanto a thread principal ficou ocupada: a soma das tarefas dela (as de fora, sem as aninhadas).
+  const tarefas = daPrincipal.filter((e) => e.name === 'RunTask' || e.name === 'ThreadControllerImpl::RunTask').sort((a, b) => a.ts - b.ts)
+  let ocupada = 0
+  let fimDaTarefa = Number.NEGATIVE_INFINITY
+  for (const e of tarefas) {
+    if (e.ts >= fimDaTarefa) ocupada += e.dur / 1000
+    fimDaTarefa = Math.max(fimDaTarefa, e.ts + e.dur)
+  }
+
   const resumoPorQuadro = Object.fromEntries(
     Object.entries(porQuadro).map(([tipo, valores]) => {
       const ordenados = [...valores].sort((a, b) => a - b)
@@ -286,6 +289,7 @@ function analisarTrace(texto, duracao) {
 
   return {
     quadrosDaPrincipal: inicios.length,
+    ocupada: arredondar((ocupada / (duracao * 1000)) * 100),
     porQuadro: resumoPorQuadro,
     forcados: {
       layouts: forcados.layouts,
@@ -298,6 +302,14 @@ function analisarTrace(texto, duracao) {
     gpuOcupada: arredondar((gpu / (duracao * 1000)) * 100),
     rasterMsPorSegundo: arredondar((raster / duracao) * 1000),
   }
+}
+
+/** Os marcos da página aberta agora (veja instalarMedidor). */
+const lerMarcos = (pagina) => pagina.evaluate(() => window.__medida?.marcos ?? {})
+
+/** Junta os marcos novos aos de antes, sem trocar os que já havia (a página pode ter aberto de novo). */
+function juntarMarcos(marcos, novos) {
+  for (const [nome, quando] of Object.entries(novos)) if (!(nome in marcos)) marcos[nome] = quando
 }
 
 /** Onde estão as partes da página que as fases usam (px de rolagem). */
@@ -457,7 +469,6 @@ async function medirCombinacao(navegador, url, tela, cpu, opcoes) {
   await pagina.setViewport(TELAS[tela])
   const cdp = await pagina.createCDPSession()
   if (cpu > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpu })
-  await cdp.send('Performance.enable')
   await pagina.evaluateOnNewDocument(instalarMedidor)
   if (opcoes.css) {
     await pagina.evaluateOnNewDocument((css) => {
@@ -479,18 +490,25 @@ async function medirCombinacao(navegador, url, tela, cpu, opcoes) {
   const medidas = await pagina.evaluate(medirPagina)
 
   const resultado = { tela, cpu, efeitoAtivo: ativou, fases: {} }
+  /** Os marcos da página (veja instalarMedidor), juntados de todas as vezes que ela abriu. */
+  const marcos = {}
   for (const fase of opcoes.fases) {
     if (!FASES[fase]) continue
+    // (uma fase pode abrir a página de novo, e as marcas de antes iriam junto)
+    juntarMarcos(marcos, await lerMarcos(pagina))
     await ANTES[fase]?.({ pagina, medidas, tela, cpu })
     const inicio = await pagina.evaluate(() => performance.now())
     const posicaoInicial = await pagina.evaluate(() => window.scrollY)
     await pagina.tracing.start({ categories: CATEGORIAS })
-    const metricasAntes = await lerMetricas(cdp)
     const relogio = Date.now()
     const chegou = await FASES[fase]({ cdp, pagina, centro, medidas, opcoes, tela })
     const duracao = (Date.now() - relogio) / 1000
-    const metricasDepois = await lerMetricas(cdp)
     const trace = await pagina.tracing.stop()
+    // o buraco negro preso no alto da página (o modo lento) ou desligado no fim da fase
+    const efeito = await pagina.evaluate(() => {
+      const fundo = document.querySelector('.buraco-negro')
+      return { ativo: !!fundo?.hasAttribute('data-ativo'), preso: !!fundo?.hasAttribute('data-preso') }
+    })
     const fim = await pagina.evaluate(() => performance.now())
     const daPagina = await pagina.evaluate(
       (inicio, fim) => {
@@ -511,11 +529,7 @@ async function medirCombinacao(navegador, url, tela, cpu, opcoes) {
       velocidadeAtingida: Math.round(Math.abs(chegou - posicaoInicial) / Math.max(0.001, duracao)),
       quadrosDaPagina: resumirIntervalos(daPagina.quadros),
       tarefasLongas: { quantas: longas.length, totalMs: Math.round(longas.reduce((a, b) => a + b, 0)), maiorMs: Math.round(Math.max(0, ...longas)) },
-      principal: {
-        ocupadaMs: Math.round((metricasDepois.TaskDuration - metricasAntes.TaskDuration) * 1000),
-        porcento: arredondar(((metricasDepois.TaskDuration - metricasAntes.TaskDuration) / duracao) * 100),
-        scriptMs: Math.round((metricasDepois.ScriptDuration - metricasAntes.ScriptDuration) * 1000),
-      },
+      efeito,
       quadrosLongos: {
         quantos: daPagina.quadrosLongos.length,
         bloqueioMs: Math.round(daPagina.quadrosLongos.reduce((a, [, , b]) => a + b, 0)),
@@ -524,9 +538,9 @@ async function medirCombinacao(navegador, url, tela, cpu, opcoes) {
       trace: trace ? analisarTrace(new TextDecoder().decode(trace), duracao) : null,
     }
   }
-  const marcos = await pagina.evaluate(() => window.__medida.marcos)
+  juntarMarcos(marcos, await lerMarcos(pagina))
   resultado.marcos = Object.fromEntries(Object.entries(marcos).map(([k, v]) => [k, Math.round(v)]))
-  resultado.modoLento = 'modoLento' in marcos
+  resultado.modoLento = 'modoLento' in marcos || Object.values(resultado.fases).some((f) => f.efeito.preso)
   await contexto.close()
   return resultado
 }
@@ -547,7 +561,7 @@ function imprimir(resultados) {
         '>16,7': f.quadrosDaPagina.acima16,
         '>33': f.quadrosDaPagina.acima33,
         longas: f.tarefasLongas.quantas,
-        'ocupada%': f.principal?.porcento ?? '-',
+        'ocupada%': t?.ocupada ?? '-',
         'est+lay': t ? arredondar(t.porQuadro.estilo.media + t.porQuadro.layout.media, 2) : '-',
         pintura: t ? t.porQuadro.pintura.media : '-',
         forcados: t ? t.forcados.layouts + t.forcados.estilos : '-',
@@ -555,7 +569,8 @@ function imprimir(resultados) {
         semRaster: t ? t.compositor.semRaster : '-',
         'motor p95': t ? t.motor.p95 : '-',
         'gpu%': t ? t.gpuOcupada : '-',
-        lento: r.modoLento ? 'SIM' : '',
+        // o efeito no fim da fase: preso no alto da página (o modo lento) ou desligado
+        lento: f.efeito?.preso ? 'SIM' : f.efeito?.ativo === false ? 'desligado' : '',
       })
     }
   }

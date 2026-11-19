@@ -29,8 +29,8 @@
 // trás dela; as animações correm junto com ela, na mesma etapa, e a tira nunca se descola do
 // original na beira da cortina, por mais rápida que seja a rolagem. Ao JavaScript resta pôr as
 // fatias no lugar com antecedência, enquanto a página se aproxima delas (veja preparar), trocar a
-// foto quando o original muda (o mouse em cima, o tema, o que o React redesenhar) e levar às fatias
-// o quadro atual dos vídeos.
+// foto quando o original muda (o mouse em cima, o tema, o que o React redesenhar) e dizer ao pintor
+// dos vídeos (veja telas.ts) que trecho de que vídeo cada fatia mostra.
 //
 // Os blocos são os que já têm animação de entrada ([data-reveal] e .enter). As linhas soltas da
 // página (a borda de cima das seções e das listas) entram como blocos de uma fatia só, desenhadas
@@ -38,7 +38,9 @@
 
 import { ACELERACAO, type Faixa } from './faixa.ts'
 import { elementosDe, enquadrar, fotografar, soltarFoto, type Foto, type Fotos } from './fotos.ts'
+import type { Recorte } from './pintor.ts'
 import type { Relogio } from './rolagem.ts'
+import { criarPintor, type Pintor, type Tela } from './telas.ts'
 import { alvoEm, type Alvo, type Caminho } from './trajeto.ts'
 
 /**
@@ -86,55 +88,40 @@ export interface Absorcao {
   preparar(rolagem: number, preparo: Preparo): number
   /** Ficaram fatias por pôr no lugar para o próximo quadro. */
   pendente(): boolean
-  /** A cada quadro, depois de preparar: leva às fatias o quadro atual dos vídeos. */
-  acompanhar(): void
   /** Devolve todos os blocos ao normal e apaga as fatias e as fotos. */
   limpar(): void
 }
 
-/** Um recorte que o original aplica ao vídeo (um overflow com cantos arredondados), relativo a ele (px CSS). */
-interface Recorte {
-  x: number
-  y: number
-  largura: number
-  altura: number
-  /** [horizontal, vertical] de cada canto: em cima à esquerda, em cima à direita, embaixo à direita, embaixo à esquerda. */
-  raios: [number, number][]
-}
-
 interface Video {
+  /** O número dele no pintor (veja telas.ts). */
+  id: number
   elemento: HTMLVideoElement
   /** Posição dentro do bloco e tamanho (px CSS). */
   x: number
   y: number
   largura: number
   altura: number
-  /** O que corta o vídeo no original (os cantos arredondados do cartão): a fonte já sai recortada assim. */
+  /** O que corta o vídeo no original (os cantos arredondados do cartão): as telas mostram o vídeo recortado assim. */
   recortes: Recorte[]
-  /** O quadro atual, recortado como na página, de onde cada tela tira a sua parte. */
-  fonte: HTMLCanvasElement | null
-  /** Pixels da fonte (e das telas das fatias) por px CSS. */
+  /** Pixels das telas por px CSS. */
   escala: number
-  /** A fonte tem um quadro (sem ele, as fatias mostram o pôster, que está na foto). */
-  pintada: boolean
-  /** O tempo do último quadro copiado (onde não há requestVideoFrameCallback). */
-  tempo: number
-  vigia: number
+  /** O pintor já conhece o vídeo. */
+  apresentado: boolean
+  /** Conta as frentes mandadas ao pintor: uma que chega depois de outra mais nova não vale. */
+  frentes: number
 }
 
 /** Uma fatia na tela: um retângulo com o seu pedaço da foto do bloco. */
 interface Tira {
   caixa: HTMLDivElement
-  /** Para cada vídeo do bloco, a tela onde a fatia mostra a parte dele que cai nela. */
-  telas: (HTMLCanvasElement | undefined)[]
+  /** Para cada vídeo do bloco, a tela em que a fatia mostra a parte dele que cai nela, se cair alguma. */
+  telas: (Tela | null)[]
   /** A fatia que ela mostra, ou -1 (ainda sem lugar, ou já fora da página). */
   fatia: number
   /** A animação que a leva pela faixa, presa à rolagem. */
   animacao: Animation | null
   /** O modelo dos quadros-chave dessa animação (veja trajeto). */
   modelo: KeyframeEffect | null
-  /** As telas mudaram de lugar e precisam ser desenhadas de novo. */
-  repintar: boolean
 }
 
 /**
@@ -265,8 +252,10 @@ const ACIMA = 8
  */
 const POR_CIMA = '42'
 /**
- * Margem (px de rolagem) além da urgência em que uma fatia já recebe cada quadro dos vídeos: ela
- * pode aparecer antes de o JavaScript rodar de novo (a urgência já cresce com a velocidade).
+ * A quantos px de rolagem de aparecer a fatia já recebe cada quadro dos vídeos (veja acordarTelas).
+ * As outras recebem o quadro quando chegarem perto: o pintor desenha a tela na hora em que ela
+ * acorda, e se a rolagem a trouxer antes disso, ela aparece por um instante com um quadro anterior,
+ * nunca vazia.
  */
 const PERTO = 12
 /** Quantas fotos são feitas ao mesmo tempo (cada uma espera a imagem carregar, e enquanto isso a outra anda). */
@@ -287,7 +276,6 @@ const ESPERA_DA_ROLAGEM = 300
 /** Depois de uma foto que falhou, quanto esperar (ms) para tentar de novo. */
 const NOVA_TENTATIVA = 3000
 
-const temQuadros = typeof HTMLVideoElement !== 'undefined' && 'requestVideoFrameCallback' in HTMLVideoElement.prototype
 const temOcioso = typeof window !== 'undefined' && 'requestIdleCallback' in window
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
@@ -394,22 +382,24 @@ function medirFrente(elemento: HTMLElement, videos: Video[]): Frente | null {
   return indices.size ? { elementos: [...indices], nos, x0, y0, x1, y1 } : null
 }
 
+/** Numera os vídeos para o pintor (veja telas.ts). */
+let proximoVideo = 0
+
 function medirVideos(elemento: HTMLElement): Video[] {
   const caixa = elemento.getBoundingClientRect()
   return [...elemento.querySelectorAll('video')].map((video) => {
     const r = video.getBoundingClientRect()
     return {
+      id: proximoVideo++,
       elemento: video,
       x: r.left - caixa.left,
       y: r.top - caixa.top,
       largura: r.width,
       altura: r.height,
       recortes: medirRecortes(video, elemento),
-      fonte: null,
       escala: Math.min(window.devicePixelRatio || 1, 2),
-      pintada: false,
-      tempo: -1,
-      vigia: 0,
+      apresentado: false,
+      frentes: 0,
     }
   })
 }
@@ -461,50 +451,6 @@ function modeloDaBorda({ fonte, lado, espessura }: Borda, largura: number): HTML
   return modelo
 }
 
-/** Copia para a fonte o quadro atual do vídeo, recortado como o object-fit: cover da página. */
-function pintarFonte(video: Video): boolean {
-  const { elemento } = video
-  video.pintada = false
-  if (elemento.readyState < 2 || !elemento.videoWidth || !elemento.videoHeight) return false
-  video.fonte ??= document.createElement('canvas')
-  // Tudo fica na placa de vídeo: com o quadro copiado para a memória (willReadFrequently, ou o
-  // vídeo desenhado direto nas telas pequenas das fatias), cada fatia esperaria a placa terminar o
-  // que está fazendo, às vezes por centenas de ms.
-  const contexto = video.fonte.getContext('2d')
-  if (!contexto) return false
-  const w = Math.max(1, Math.round(video.largura * video.escala))
-  const h = Math.max(1, Math.round(video.altura * video.escala))
-  if (video.fonte.width !== w || video.fonte.height !== h) {
-    video.fonte.width = w
-    video.fonte.height = h
-  }
-  const k = Math.max(w / elemento.videoWidth, h / elemento.videoHeight)
-  const sw = w / k
-  const sh = h / k
-  // os cantos que o original corta ficam transparentes (atrás deles, nas fatias, está a foto)
-  const { recortes, escala } = video
-  if (recortes.length) {
-    contexto.clearRect(0, 0, w, h)
-    contexto.save()
-    for (const r of recortes) {
-      contexto.beginPath()
-      contexto.roundRect(r.x * escala, r.y * escala, r.largura * escala, r.altura * escala, r.raios.map(([rx, ry]) => ({ x: rx * escala, y: ry * escala })))
-      contexto.clip()
-    }
-  }
-  contexto.drawImage(elemento, (elemento.videoWidth - sw) / 2, (elemento.videoHeight - sh) / 2, sw, sh, 0, 0, w, h)
-  if (recortes.length) contexto.restore()
-  video.pintada = true
-  return true
-}
-
-function soltarVideo(video: Video) {
-  if (video.vigia) video.elemento.cancelVideoFrameCallback(video.vigia)
-  video.vigia = 0
-  video.fonte = null
-  video.pintada = false
-}
-
 /**
  * A transformação que leva a fatia (`largura` x `altura` px, com o canto de cima à esquerda na
  * origem da camada) ao trapézio entre as linhas `cima` e `baixo`. As duas bordas são horizontais:
@@ -546,9 +492,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   const porAnimar: [Bloco, Tira][] = []
   /** Até quando o quadro pode pôr no lugar as fatias urgentes (veja ORCAMENTO_URGENTE). */
   let limiteUrgente = 0
-  /** A rolagem e a urgência do último preparar: os quadros dos vídeos vão primeiro às fatias que estão perto de aparecer. */
+  /** A rolagem do último preparar. */
   let rolagemAtual = 0
-  let urgenciaAtual = 0
   /** A folga e a faixa de aquecer do último preparar (para a ordem das fotos). */
   let folgaAtual: Folga = [0, 0]
   let aquecerAtual: Folga = [0, 0]
@@ -574,6 +519,9 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   /** A classe da raiz da página (o tema) com que as fotos foram feitas. */
   let tema = document.documentElement.className
   let esperaDoMouse = 0
+  /** O pintor dos vídeos da tira (veja obterPintor), e se já se viu que não há como ligá-lo. */
+  let pintor: Pintor | null = null
+  let semPintor = false
 
   const quantasFatias = (bloco: Bloco) => Math.max(1, Math.ceil(Math.round(bloco.alturaDaGrade * dpr) / pixelsDaFatia))
   /** O trecho da grade do bloco (px CSS a partir do alto dela) que a fatia mostra. */
@@ -792,72 +740,97 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     return baixo > cima ? [cima, baixo] : null
   }
 
-  /**
-   * Põe a tela de uma fatia sobre a parte do vídeo que cai nela (ou a esconde), na posição dela
-   * dentro da fatia (de `de` a `ate` na grade). Só estilo: o desenho fica para depois (desenharTela),
-   * porque cada desenho depois de uma mudança de estilo obrigaria o navegador a recalcular os
-   * estilos ali mesmo.
-   */
-  function posicionarTela(bloco: Bloco, video: Video, tela: HTMLCanvasElement | undefined, de: number, ate: number) {
-    if (!tela) return
-    const trecho = trechoDoVideo(bloco, video, de, ate)
-    if (!trecho) {
-      tela.style.display = 'none'
-      return
+  /** O pintor dos vídeos (veja telas.ts), ligado na primeira vez que uma fatia cruza um vídeo; null onde não há como. */
+  function obterPintor(): Pintor | null {
+    if (!pintor && !semPintor) {
+      pintor = criarPintor()
+      semPintor = pintor === null
     }
-    const [cima, baixo] = trecho
-    const w = Math.max(1, Math.round(video.largura * video.escala))
-    const h = Math.max(1, Math.round((baixo - cima) * video.escala))
-    if (tela.width !== w || tela.height !== h) {
-      tela.width = w
-      tela.height = h
-    }
-    tela.style.left = `${video.x + bloco.x - bloco.esquerda}px`
-    tela.style.top = `${video.y + bloco.y - bloco.topo + cima - de}px`
-    tela.style.width = `${video.largura}px`
-    tela.style.height = `${baixo - cima}px`
-    tela.style.display = ''
+    return pintor
+  }
+
+  /** Apresenta o vídeo ao pintor, com o que fica na frente dele, na primeira vez que uma fatia o mostra. */
+  function apresentar(bloco: Bloco, video: Video) {
+    if (video.apresentado || !pintor) return
+    video.apresentado = true
+    pintor.video(video.id, video.elemento, video)
+    mandarFrente(bloco, video)
   }
 
   /**
-   * Desenha na tela de uma fatia a parte do quadro atual que cai nela (ou nada, com o pôster da foto
-   * à vista) e, por cima, o que fica na frente do vídeo.
+   * Manda ao pintor o que fica na frente do vídeo (veja Frente): a foto da frente, recortada na área
+   * do vídeo, e o retângulo que ela cobre nele.
    */
-  function desenharTela(bloco: Bloco, video: Video, tela: HTMLCanvasElement | undefined, de: number, ate: number) {
-    const trecho = trechoDoVideo(bloco, video, de, ate)
-    const contexto = trecho && tela?.getContext('2d')
-    if (!trecho || !tela || !contexto) return
-    const [cima, baixo] = trecho
-    const temQuadro = video.pintada && video.fonte !== null
-    // um quadro sem cantos recortados cobre a tela inteira: nada do anterior sobra
-    if (!temQuadro || video.recortes.length) contexto.clearRect(0, 0, tela.width, tela.height)
-    if (temQuadro && video.fonte) {
-      const sy = Math.min(video.fonte.height - 1, Math.round(cima * video.escala))
-      const sh = Math.max(1, Math.min(video.fonte.height - sy, tela.height))
-      contexto.drawImage(video.fonte, 0, sy, tela.width, sh, 0, 0, tela.width, sh)
-    }
-    // a frente, só no pedaço desta tela que ela cobre (nas outras fatias, nada)
+  function mandarFrente(bloco: Bloco, video: Video) {
+    const p = pintor
+    if (!p || !video.apresentado) return
+    const vez = ++video.frentes
     const { fotoDaFrente, frente } = bloco
-    if (!fotoDaFrente || !frente) return
-    const x0 = Math.max(0, frente.x0 - video.x)
-    const x1 = Math.min(video.largura, frente.x1 - video.x)
-    const y0 = Math.max(cima, frente.y0 - video.y)
-    const y1 = Math.min(baixo, frente.y1 - video.y)
-    if (x1 <= x0 || y1 <= y0) return
-    const gx = video.x + bloco.x - bloco.esquerda
-    const gy = video.y + bloco.y - bloco.topo
-    const k = video.escala
-    contexto.drawImage(
-      fotoDaFrente,
-      (gx + x0) * dpr,
-      (gy + y0) * dpr,
-      (x1 - x0) * dpr,
-      (y1 - y0) * dpr,
-      x0 * k,
-      (y0 - cima) * k,
-      (x1 - x0) * k,
-      (y1 - y0) * k,
+    const x0 = frente ? Math.max(0, frente.x0 - video.x) : 0
+    const x1 = frente ? Math.min(video.largura, frente.x1 - video.x) : 0
+    const y0 = frente ? Math.max(0, frente.y0 - video.y) : 0
+    const y1 = frente ? Math.min(video.altura, frente.y1 - video.y) : 0
+    if (!fotoDaFrente || x1 <= x0 || y1 <= y0) {
+      p.frente(video.id, null)
+      return
+    }
+    // a área do vídeo na foto da frente (que cobre a grade do bloco, em pixels da tela), em pixels inteiros
+    const gx = (video.x + bloco.x - bloco.esquerda) * dpr
+    const gy = (video.y + bloco.y - bloco.topo) * dpr
+    const sx = Math.floor(gx)
+    const sy = Math.floor(gy)
+    const sw = Math.max(1, Math.ceil(gx + video.largura * dpr) - sx)
+    const sh = Math.max(1, Math.ceil(gy + video.altura * dpr) - sy)
+    const escala = dpr
+    createImageBitmap(fotoDaFrente, sx, sy, sw, sh).then(
+      (imagem) => {
+        if (vez !== video.frentes || pintor !== p) {
+          imagem.close()
+          return
+        }
+        p.frente(video.id, { imagem, dpr: escala, x: gx - sx, y: gy - sy, x0, y0, x1, y1 })
+      },
+      () => {},
     )
+  }
+
+  /**
+   * Põe na fatia (de `de` a `ate` na grade) a tela do vídeo `i`, sobre a parte dele que cai nela,
+   * ou a devolve à reserva, se a fatia não cruza o vídeo. Quem desenha na tela é o pintor.
+   */
+  function porTela(bloco: Bloco, tira: Tira, i: number, de: number, ate: number) {
+    const video = bloco.videos[i]
+    const trecho = video ? trechoDoVideo(bloco, video, de, ate) : null
+    const atual = tira.telas[i] ?? null
+    const p = video && trecho ? obterPintor() : null
+    if (!video || !trecho || !p) {
+      if (atual) pintor?.devolver(atual)
+      tira.telas[i] = null
+      return
+    }
+    apresentar(bloco, video)
+    const tela = atual ?? p.pegar()
+    if (!atual) {
+      tira.telas[i] = tela
+      tira.caixa.append(tela.canvas)
+    }
+    const [cima, baixo] = trecho
+    const { style } = tela.canvas
+    style.left = `${video.x + bloco.x - bloco.esquerda}px`
+    style.top = `${video.y + bloco.y - bloco.topo + cima - de}px`
+    style.width = `${video.largura}px`
+    style.height = `${baixo - cima}px`
+    const largura = Math.max(1, Math.round(video.largura * video.escala))
+    const altura = Math.max(1, Math.round((baixo - cima) * video.escala))
+    p.mostrar(tela, video.id, largura, altura, cima, baixo)
+  }
+
+  /** As telas da fatia voltam para a reserva do pintor. */
+  function devolverTelas(tira: Tira) {
+    tira.telas.forEach((tela, i) => {
+      if (tela) pintor?.devolver(tela)
+      tira.telas[i] = null
+    })
   }
 
   /**
@@ -882,14 +855,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       caixa.style.backgroundImage = 'var(--foto)'
       caixa.style.backgroundRepeat = 'no-repeat'
     }
-    const telas = bloco.videos.map((): HTMLCanvasElement => {
-      const tela = document.createElement('canvas')
-      tela.style.cssText = 'position:absolute;overflow:visible;display:none'
-      caixa.append(tela)
-      return tela
-    })
     grupoDo(bloco).append(caixa)
-    return { caixa, telas, fatia: -1, animacao: null, modelo: null, repintar: false }
+    return { caixa, telas: bloco.videos.map(() => null), fatia: -1, animacao: null, modelo: null }
   }
 
   /** Põe a fatia no lugar: o pedaço da foto que ela mostra e as telas dos vídeos sobre a parte que cai nela. */
@@ -911,13 +878,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       style.backgroundSize = `${bloco.larguraDaGrade}px ${bloco.alturaDaGrade}px`
       style.backgroundPosition = `0 ${-de}px`
     }
-    bloco.videos.forEach((video, i) => {
-      const tela = tira.telas[i]
-      if (!tela) return
-      if (trechoDoVideo(bloco, video, de, ate)) vigiar(bloco, video, i)
-      posicionarTela(bloco, video, tela, de, ate)
-    })
-    tira.repintar = tira.telas.some(Boolean)
+    bloco.videos.forEach((_, i) => porTela(bloco, tira, i, de, ate))
   }
 
   /** Marca a fatia para ser presa à rolagem, no trajeto do seu lugar (veja animarPendentes). */
@@ -960,6 +921,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     tira.animacao = null
     tira.modelo = null
     tira.fatia = -1
+    devolverTelas(tira)
     tira.caixa.remove()
     const i = bloco.tiras.indexOf(tira)
     if (i >= 0) bloco.tiras.splice(i, 1)
@@ -1036,42 +998,17 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     return novas
   }
 
-  /** As fatias que mostram o vídeo agora. */
-  function tirasDoVideo(bloco: Bloco, video: Video): Tira[] {
-    return bloco.tiras.filter((tira) => tira.fatia >= 0 && trechoDoVideo(bloco, video, ...trechoDaFatia(bloco, tira.fatia)))
-  }
-
   /**
-   * A fatia pode aparecer nos próximos quadros. As outras, postas com antecedência, ainda estão
-   * escondidas abaixo da faixa (ou já foram engolidas): não precisam de cada quadro dos vídeos.
+   * Só as telas das fatias que estão na faixa, ou quase, recebem cada quadro dos vídeos (veja PERTO).
+   * As outras, postas com antecedência, ainda esperam a vez (ou já foram engolidas): cada tela
+   * redesenhada é um quadro a mais para a placa de vídeo compor.
    */
-  const pertoDeAparecer = (bloco: Bloco, tira: Tira) => distancia(bloco, tira.fatia, rolagemAtual) <= urgenciaAtual + PERTO
-
-  /**
-   * Copia o quadro da fonte para as fatias que mostram o vídeo e estão perto de aparecer: todas as
-   * que aparecem ficam sempre no mesmo quadro. As outras recebem o quadro quando chegarem perto.
-   */
-  function pintarTodas(bloco: Bloco, video: Video, i: number) {
-    for (const tira of tirasDoVideo(bloco, video)) {
-      if (pertoDeAparecer(bloco, tira)) desenharTela(bloco, video, tira.telas[i], ...trechoDaFatia(bloco, tira.fatia))
-      else tira.repintar = true
+  function acordarTelas(bloco: Bloco, rolagem: number) {
+    if (!pintor) return
+    for (const tira of bloco.tiras) {
+      const perto = tira.fatia >= 0 && distancia(bloco, tira.fatia, rolagem) <= PERTO
+      for (const tela of tira.telas) if (tela) pintor.acordar(tela, perto)
     }
-  }
-
-  /**
-   * A cada quadro novo do vídeo (onde o navegador avisa), as fatias recebem esse mesmo quadro no
-   * mesmo momento em que o original o mostra: não há uma linha em que a imagem pule de um quadro
-   * para outro.
-   */
-  function vigiar(bloco: Bloco, video: Video, i: number) {
-    if (!temQuadros || video.vigia) return
-    const aoQuadro = () => {
-      video.vigia = video.elemento.requestVideoFrameCallback(aoQuadro)
-      if (!tirasDoVideo(bloco, video).length) return
-      const tinha = video.pintada
-      if (pintarFonte(video) || tinha) pintarTodas(bloco, video, i)
-    }
-    video.vigia = video.elemento.requestVideoFrameCallback(aoQuadro)
   }
 
   function apagarTiras(bloco: Bloco) {
@@ -1079,11 +1016,11 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       if (tira.animacao) relogio.soltar(tira.animacao)
       tira.animacao = null
       tira.fatia = -1
+      devolverTelas(tira)
     }
     bloco.tiras = []
     bloco.grupo?.remove()
     bloco.grupo = null
-    for (const video of bloco.videos) soltarVideo(video)
   }
 
   /**
@@ -1272,7 +1209,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       soltarFoto(antiga)
     }
     bloco.fotoDaFrente = frente
-    bloco.videos.forEach((video, i) => pintarTodas(bloco, video, i))
+    for (const video of bloco.videos) mandarFrente(bloco, video)
     // sem foto, as fatias não apareciam (o bloco estava por cima da cortina): agora aparecem
     if (bloco.elevado && !bloco.focado) elevar(bloco, false)
   }
@@ -1282,12 +1219,18 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     elevar(bloco, false)
   }
 
-  /** O bloco saiu da página: as fatias e as fotos vão embora. */
+  /** O bloco saiu da página: as fatias, as fotos e os vídeos dele no pintor vão embora. */
   function esquecer(bloco: Bloco) {
     devolver(bloco)
     soltarFoto(bloco.foto)
     bloco.foto = null
     bloco.fotoDaFrente = null
+    for (const video of bloco.videos) {
+      if (video.apresentado) pintor?.esquecer(video.id)
+      video.apresentado = false
+      // (uma frente que ainda esteja a caminho não vale mais)
+      video.frentes++
+    }
   }
 
   /** Os títulos fixos das seções param no alto da tela, dentro da faixa: ficam por cima da cortina e da tampa. */
@@ -1490,7 +1433,6 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       limiteUrgente = agora + Math.max(orcamento, ORCAMENTO_URGENTE)
       if (rolagem !== rolagemAtual) rolouEm = agora
       rolagemAtual = rolagem
-      urgenciaAtual = urgencia
       folgaAtual = folga
       aquecerAtual = [acima, abaixo]
       obterCamada()
@@ -1522,37 +1464,11 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
           // sem fatias, o grupo do bloco sai também (a foto fica, para quando ele voltar)
           if (!bloco.tiras.length && bloco.grupo) apagarTiras(bloco)
         }
+        if (bloco.videos.length) acordarTelas(bloco, rolagem)
       }
       animarPendentes()
       if (falta) agendarFotos(semFoto, true)
       return novas
-    },
-
-    acompanhar() {
-      // Vídeos: as telas já foram postas no lugar (posicionarTela) junto com o resto do estilo; aqui
-      // só o desenho. Sem requestVideoFrameCallback, o quadro novo é descoberto aqui; e até o vídeo
-      // ter o primeiro quadro (ele só carrega quando aparece na tela), tenta a cada vez.
-      for (const bloco of blocos) {
-        if (!bloco.videos.length || !bloco.tiras.some((tira) => tira.fatia >= 0)) continue
-        bloco.videos.forEach((video, i) => {
-          const tinha = video.pintada
-          const tempo = video.elemento.currentTime
-          if (!tinha || (!temQuadros && tempo !== video.tempo)) {
-            video.tempo = tempo
-            if (pintarFonte(video) || tinha) {
-              pintarTodas(bloco, video, i)
-              return
-            }
-          }
-          for (const tira of bloco.tiras) {
-            if (tira.repintar && tira.fatia >= 0 && pertoDeAparecer(bloco, tira)) {
-              desenharTela(bloco, video, tira.telas[i], ...trechoDaFatia(bloco, tira.fatia))
-            }
-          }
-        })
-        // as que ainda estão longe recebem o quadro quando chegarem perto
-        for (const tira of bloco.tiras) if (tira.fatia < 0 || pertoDeAparecer(bloco, tira)) tira.repintar = false
-      }
     },
 
     limpar() {
@@ -1577,6 +1493,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       document.removeEventListener('pointerout', aoMexerMouse)
       camada?.remove()
       camada = null
+      pintor?.destruir()
+      pintor = null
       porAnimar.length = 0
       incompleto = false
     },

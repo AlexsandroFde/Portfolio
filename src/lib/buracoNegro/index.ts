@@ -400,11 +400,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       absorcao.definirCena(cenaDaAbsorcao())
       absorcao.medir()
       prenderEntradas()
-      // na hora, e não no próximo quadro: um bloco que mudou de tamanho perdeu as fatias (e as fatias
-      // novas precisam já do quadro dos vídeos)
+      // na hora, e não no próximo quadro: um bloco que mudou de tamanho perdeu as fatias
       relogio.acertar(window.scrollY)
       preparar(window.scrollY)
-      absorcao.acompanhar()
     }
     enviarRolagem(window.scrollY, performance.now())
     ignorar = 2
@@ -501,8 +499,6 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       // uma vez, e esse quadro pesa mais que os de rolar: ele não diz se o aparelho dá conta.
       if (preparar(s) > 6) ignorar = Math.max(ignorar, 2)
     }
-    // o que muda no original sem rolagem (os quadros dos vídeos) chega às fatias
-    absorcao.acompanhar()
     avaliarDesempenho(intervalo)
   }
 
@@ -590,7 +586,6 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       if (!comecou || !motorPronto || preso) return
       absorcao.medir()
       preparar(window.scrollY)
-      absorcao.acompanhar()
     })
   })
   const principal = document.querySelector('main')

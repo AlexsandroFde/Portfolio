@@ -1,5 +1,6 @@
 import { criarAbsorcao, temBlocos, type Cena as CenaDaAbsorcao, type Folga } from './absorcao.ts'
 import { forcaEm, type Faixa } from './faixa.ts'
+import { fotografarTopo, type Peca } from './fotos.ts'
 import { definirQueda, quandoMedirMergulho, quandoVoltar, trechoDoMergulho, type Queda } from './mergulho.ts'
 import type { Cores, DoMotor } from './motor.ts'
 import { criarPonte } from './ponte.ts'
@@ -48,6 +49,23 @@ const MAPA = { porPixel: 1.4, minima: 24, maxima: 48 }
  * mergulho.ts): sem o aviso, a janela se abre no véu da página.
  */
 const ESPERA_DO_TUNEL = 500
+/**
+ * A foto do topo do site, para a volta ao topo (veja fotografarTopo): quanto ela espera (ms) depois
+ * de o que ela mostra mudar (as transições da troca de tema, o redimensionamento), e de novo, se a
+ * página não estiver como no topo (no meio da volta, com o menu do celular aberto).
+ */
+const ESPERA_DA_FOTO = { mudou: 600, deNovo: 1500 }
+/**
+ * Quanto além do fim da entrada (ms) a tela de cima espera o motor avisar que o site chegou: sem o
+ * aviso, ela some e a página aparece do mesmo jeito.
+ */
+const ESPERA_DA_CHEGADA = 1500
+/**
+ * Em quanto tempo (ms) a tela de cima esmaece quando o site chega: a foto e a página mostram o mesmo,
+ * mas o texto da página é suavizado em cores (subpixel) e o da foto, em cinza, e trocadas de uma vez
+ * as letras piscariam.
+ */
+const SUMIR = 160
 
 // Converte qualquer cor CSS em RGBA de 0 a 1 (o canvas 2D normaliza o texto da cor).
 const sonda = document.createElement('canvas').getContext('2d')
@@ -168,6 +186,17 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
    * seções e os blocos que a absorção põe por cima da cortina ficam por cima dela também.
    */
   const tampa = criarCanvasFixo(41)
+  /**
+   * A tela de cima: na volta ao topo com a foto do topo do site, cobre a tela toda, cabeçalho
+   * incluído (z-index 55, abaixo só do véu do mergulho), com o site chegando, desenhado pelo motor.
+   * A página fica parada no topo, por baixo, já desenhada, e aparece quando ela se esvazia, com o site
+   * no lugar (veja Queda, em mergulho.ts). Escondida no resto do tempo.
+   */
+  const telaDeCima = document.createElement('canvas')
+  telaDeCima.className = 'print-hidden'
+  telaDeCima.setAttribute('aria-hidden', 'true')
+  telaDeCima.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100vh;height:100lvh;z-index:55;pointer-events:none;display:none'
+  document.body.append(telaDeCima)
   /** As animações com que a cortina e a tampa aparecem ao rolar (veja prenderEntradas). */
   let entradas: Animation[] = []
 
@@ -217,6 +246,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     canvas,
     cortina,
     tampa,
+    telaDeCima,
     {
       cores: lerCores(),
       // a imagem no canto é a menor que o buraco negro tem: o mapa fica um pouco mais fino que ela
@@ -264,24 +294,146 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   }
 
   /**
-   * A queda e o túnel da volta ao topo (veja mergulho.ts) ficam com o motor enquanto ele anima o
-   * buraco negro: a entrada é marcada nele, e a promessa se cumpre quando ele avisa que o túnel já
-   * cobre a tela.
+   * A queda e a volta ao topo (veja mergulho.ts) ficam com o motor enquanto ele anima o buraco negro:
+   * a entrada é marcada nele, e `cobriu` se cumpre quando ele avisa que o túnel já cobre a tela. Com a
+   * foto do topo do site pronta no motor (e ainda valendo), é ele que desenha o site chegando, na tela
+   * de cima, e `chegou` se cumpre quando o site chega e a tela de cima se esvazia.
    */
   let aoCobrir: ((cobriu: boolean) => void) | null = null
+  let aoChegar: (() => void) | null = null
+  let esperaDaChegada = 0
+  /** A tela de cima esmaecendo (veja SUMIR), e a vez da entrada a que ela pertence. */
+  let sumindo: Animation | null = null
+  let vezDaEntrada = 0
+  /**
+   * O site chegou (ou a entrada com a foto foi desfeita): a tela de cima some, esmaecendo (o
+   * navegador anima a opacidade dela, fora da thread principal) ou de uma vez, e a rolagem volta
+   * quando ela já sumiu (antes disso, rolar descolaria a página da foto).
+   */
+  function chegar(esmaecer = false) {
+    window.clearTimeout(esperaDaChegada)
+    const vez = vezDaEntrada
+    const fim = () => {
+      if (vez !== vezDaEntrada) return
+      telaDeCima.style.display = 'none'
+      sumindo?.cancel()
+      sumindo = null
+      aoChegar?.()
+      aoChegar = null
+    }
+    if (!esmaecer || telaDeCima.style.display === 'none') {
+      fim()
+      return
+    }
+    sumindo = telaDeCima.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SUMIR, easing: 'ease-in', fill: 'forwards' })
+    sumindo.finished.then(fim, fim)
+  }
   const queda: Queda = {
     entrar(inicio, duracao) {
       aoCobrir?.(false)
-      return new Promise((resolver) => {
+      chegar()
+      vezDaEntrada++
+      const comFoto = fotoNoMotor !== null && fotoNoMotor === chaveDaFoto()
+      const marcar = (foto: boolean) => ponte.enviar({ tipo: 'entrada', inicio: performance.timeOrigin + inicio, duracao, comFoto: foto })
+      const chegou = new Promise<void>((resolver) => {
+        if (!comFoto) return
+        aoChegar = resolver
+        telaDeCima.style.display = ''
+        esperaDaChegada = window.setTimeout(chegar, inicio + duracao + ESPERA_DA_CHEGADA - performance.now())
+      })
+      const cobriu = new Promise<boolean>((resolver) => {
         aoCobrir = resolver
-        ponte.enviar({ tipo: 'entrada', inicio: performance.timeOrigin + inicio, duracao })
+        marcar(comFoto)
         window.setTimeout(() => {
           if (aoCobrir !== resolver) return
           aoCobrir = null
           resolver(false)
+          // O motor não respondeu a tempo: a página traz o site ela mesma, e ele, quando voltar,
+          // desenha sem a foto (a tela de cima, escondida, fica vazia).
+          if (!comFoto) return
+          marcar(false)
+          window.clearTimeout(esperaDaChegada)
+          telaDeCima.style.display = 'none'
+          aoChegar = null
         }, ESPERA_DO_TUNEL)
       })
+      return { comFoto, cobriu, chegou }
     },
+  }
+
+  // ---------- a foto do topo do site, para a volta ao topo ----------
+  /** A chave da foto que o motor tem pronta (veja chaveDaFoto), ou null. */
+  let fotoNoMotor: string | null = null
+  /** A chave da última foto pedida (feita, enviada ou em andamento). */
+  let fotoPedida: string | null = null
+  let esperaDaFoto = 0
+
+  /** O que muda a foto do topo: o tamanho da tela e a densidade dela, o tema e as fontes. */
+  const chaveDaFoto = () =>
+    `${largura}x${recipiente.clientHeight}@${window.devicePixelRatio || 1} ${cores.escuro ? 'escuro' : 'claro'} ${document.fonts?.status ?? ''}`
+
+  /**
+   * As peças do topo do site: o que o conteúdo mostra na primeira tela com a página no topo (as
+   * seções que caem nela, na posição delas na página) e, por cima, o cabeçalho.
+   */
+  function pecasDoTopo(): Peca[] {
+    const altura = recipiente.clientHeight
+    const pecas: Peca[] = []
+    const rolagem = window.scrollY
+    for (const filho of document.querySelector('main')?.children ?? []) {
+      if (!(filho instanceof HTMLElement)) continue
+      const caixa = filho.getBoundingClientRect()
+      const y = caixa.top + rolagem
+      if (!caixa.width || y >= altura || y + caixa.height <= 0) continue
+      pecas.push({ elemento: filho, x: caixa.left, y, largura: caixa.width, altura: caixa.height })
+    }
+    const cabecalho = document.querySelector('header')
+    // (fixo no alto: sem as medidas da tela, que pegariam o puxão do mergulho)
+    if (cabecalho) pecas.push({ elemento: cabecalho, x: 0, y: 0, largura: cabecalho.offsetWidth, altura: cabecalho.offsetHeight })
+    return pecas
+  }
+
+  /** O cabeçalho como ele é no topo: sem a marca de página rolada nem a seção ativa no menu. */
+  function comoNoTopo(copia: HTMLElement) {
+    copia.removeAttribute('data-rolado')
+    for (const ativo of copia.querySelectorAll('[aria-current]')) ativo.removeAttribute('aria-current')
+  }
+
+  /** Pede uma foto nova do topo, se o que ela mostra mudou, para depois das transições. */
+  function pedirFoto() {
+    if (preso || desligado || !motorPronto) return
+    const chave = chaveDaFoto()
+    if (chave === fotoPedida) return
+    window.clearTimeout(esperaDaFoto)
+    esperaDaFoto = window.setTimeout(() => void fazerFoto(), ESPERA_DA_FOTO.mudou)
+  }
+
+  async function fazerFoto() {
+    if (preso || desligado || !motorPronto) return
+    const chave = chaveDaFoto()
+    if (chave === fotoPedida) return
+    // No meio da volta ao topo (a página anda), ou com o menu do celular aberto, a página não está
+    // como no topo: fica para depois.
+    if (raiz.style.overflow === 'hidden' || document.querySelector('#menu-movel:not([hidden])')) {
+      esperaDaFoto = window.setTimeout(() => void fazerFoto(), ESPERA_DA_FOTO.deNovo)
+      return
+    }
+    fotoPedida = chave
+    const altura = recipiente.clientHeight
+    try {
+      const foto = await fotografarTopo(pecasDoTopo(), largura, altura, window.devicePixelRatio || 1, comoNoTopo)
+      // (mudou de novo enquanto ela era feita: vale a próxima)
+      if (desligado || chave !== chaveDaFoto()) {
+        foto.close()
+        if (fotoPedida === chave) fotoPedida = null
+        pedirFoto()
+        return
+      }
+      ponte.enviar({ tipo: 'foto', foto, largura, altura, chave }, [foto])
+    } catch {
+      // Sem a foto (onde o navegador não deixa ler a imagem do SVG, no Safari), a página traz o site
+      // na volta ao topo, como sem o motor. A chave fica: não adianta tentar de novo.
+    }
   }
 
   /**
@@ -436,6 +588,8 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     }
     enviarRolagem(window.scrollY, performance.now())
     ignorar = 2
+    // o topo do site pode ter mudado (o tamanho da tela, as fontes)
+    pedirFoto()
   }
 
   /** A rolagem deste quadro da página vai para o motor (veja rolagemEm, em motor.ts). */
@@ -563,6 +717,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     definirQueda(null)
     aoCobrir?.(false)
     aoCobrir = null
+    chegar()
     pausar()
     desligarAbsorcao()
     raiz.style.removeProperty('--topo-livre')
@@ -589,6 +744,12 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       case 'cobriu':
         aoCobrir?.(true)
         aoCobrir = null
+        break
+      case 'foto':
+        fotoNoMotor = mensagem.pronta ? mensagem.chave : null
+        break
+      case 'chegou':
+        chegar(true)
         break
     }
   }
@@ -630,6 +791,8 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     if (novas.escuro === cores.escuro && novas.tinta.join() === cores.tinta.join()) return
     cores = novas
     ponte.enviar({ tipo: 'cores', cores })
+    // o topo do site no tema novo, para a próxima volta
+    pedirFoto()
   })
   aoMudarTema.observe(raiz, { attributes: true, attributeFilter: ['class'] })
 
@@ -694,6 +857,8 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     definirQueda(null)
     aoCobrir?.(false)
     aoCobrir = null
+    chegar()
+    window.clearTimeout(esperaDaFoto)
     pausar()
     cancelAnimationFrame(esperaMedida)
     cancelAnimationFrame(esperaBlocos)
@@ -715,6 +880,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     regua.remove()
     cortina.remove()
     tampa.remove()
+    telaDeCima.remove()
     raiz.style.removeProperty('--topo-livre')
     recipiente.removeAttribute('data-preso')
     recipiente.style.height = ''

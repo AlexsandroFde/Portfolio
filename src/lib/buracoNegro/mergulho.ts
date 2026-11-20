@@ -4,9 +4,9 @@
 // quem cai (veja queda.frag): o espaço em volta se torce num redemoinho, as coisas correm para fora em
 // rastros, a luz se separa em cores, a visão se fecha num túnel, e o cabeçalho é puxado para dentro.
 // Aí estamos dentro dele: a página volta ao topo, e no escuro acende-se um ponto de luz que se abre
-// numa janela redonda, por onde o site vem lá do fundo, por um túnel de luz, girando e crescendo até
-// ocupar a tela (veja entrada.ts). Dentro do buraco negro está o topo do site, e a rolagem recomeça:
-// um laço sem fim.
+// numa janela redonda, por onde o site vem lá do fundo, arredondado como numa bola, ainda na vista de
+// quem cai, até ocupar a tela (veja entrada.ts). Dentro do buraco negro está o topo do site, e a
+// rolagem recomeça: um laço sem fim.
 //
 // Como a absorção, o mergulho depende só da posição da rolagem: rolando devagar ou rápido, cada
 // posição mostra a mesma imagem, e rolando para cima ele volta atrás. O trajeto do buraco negro
@@ -14,10 +14,13 @@
 // véu por cima de tudo, preso à rolagem, que cobre também o cabeçalho e o que sobrar do disco. Só a
 // volta ao topo anda no tempo: lá dentro, no topo, não há mais para onde rolar.
 //
-// Na volta, o navegador anima o cabeçalho e o conteúdo, e o motor do buraco negro desenha atrás deles
-// o túnel e a janela (veja definirQueda), os dois a partir do mesmo instante e pela mesma curva. Sem
-// o motor (sem WebGL, ou num aparelho lento), a janela é um furo no véu, e o site chega igual. Com o
-// movimento reduzido, o topo só aparece com um fade.
+// Na volta, o motor do buraco negro desenha tudo (veja definirQueda): o site chegando, a partir de
+// uma foto do topo dele, numa tela por cima da página, que fica parada no topo, por baixo, e aparece
+// no lugar da foto quando o site chega. Sem a foto (ainda não feita, ou onde o navegador não a deixa
+// ler), o navegador anima o cabeçalho e o conteúdo, e o motor desenha atrás deles a janela e o
+// escuro, os dois a partir do mesmo instante e pela mesma curva. Sem o motor (sem WebGL, ou num
+// aparelho lento), a janela é um furo no véu, e o site chega igual. Com o movimento reduzido, o topo
+// só aparece com um fade.
 
 import { ENTRADA, pontosDaEntrada } from './entrada.ts'
 import { criarRelogio } from './rolagem.ts'
@@ -54,12 +57,15 @@ interface Trecho {
 }
 
 /**
- * Quem desenha a queda e o túnel da volta: o motor do buraco negro (veja index.ts). `entrar` marca a
- * entrada para começar no instante `inicio` (ms da linha do tempo da página) e durar `duracao` ms, e
- * avisa (true) quando o túnel já cobre a tela; com false, o motor não respondeu a tempo.
+ * Quem desenha a queda e a volta: o motor do buraco negro (veja index.ts). `entrar` marca a entrada
+ * para começar no instante `inicio` (ms da linha do tempo da página) e durar `duracao` ms. Com a foto
+ * do topo do site (`comFoto`), o motor desenha o próprio site chegando, por cima da página, e
+ * `chegou` se cumpre quando ele chega e a página aparece no lugar dele; sem ela, quem traz o site são
+ * as animações da página. `cobriu` se cumpre (true) quando o túnel já cobre a tela; com false, o motor
+ * não respondeu a tempo (e, com a foto, desistiu dela: a página traz o site).
  */
 export interface Queda {
-  entrar(inicio: number, duracao: number): Promise<boolean>
+  entrar(inicio: number, duracao: number): { comFoto: boolean; cobriu: Promise<boolean>; chegou: Promise<void> }
 }
 
 let trecho: Trecho | null = null
@@ -224,27 +230,33 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   }
 
   /**
-   * Dentro do buraco negro, com a tela toda preta: o site vem lá do fundo (veja trazerOSite). Com o
-   * motor no ar, ele desenha o túnel atrás do site, e o véu da página, que segura o preto até ali,
-   * sai assim que o túnel está na tela. Sem ele (ou se ele não responder a tempo), a janela se abre no
-   * próprio véu. O buraco negro já voltou ao canto, atrás do site, e aparece pela janela quando ela
-   * chega lá.
+   * Dentro do buraco negro, com a tela toda preta: o site vem lá do fundo. Com o motor no ar e a foto
+   * do topo pronta, ele desenha o site chegando, por cima da página parada no topo; sem a foto, a
+   * página traz o site (veja trazerOSite) e o motor desenha a janela e o escuro atrás dele. O véu da
+   * página, que segura o preto até ali, sai assim que o motor está na tela. Sem ele (ou se ele não
+   * responder a tempo), a janela se abre no próprio véu, e a página traz o site. O buraco negro já
+   * voltou ao canto, atrás do site, e aparece pela janela quando ela chega lá.
    */
   function entrar() {
     pular()
     const inicio = (document.timeline.currentTime as number) + ANTECEDENCIA_DA_ENTRADA
-    void trazerOSite(inicio).then(terminar)
     // o véu segura o preto (por cima da animação que o prende à rolagem, que no topo o apaga)
     const segurar = veu.animate([{ opacity: 1 }, { opacity: 1 }], { duration: ENTRADA.duracao * 2, fill: 'both' })
     const motor = queda
     if (!motor) {
+      void trazerOSite(inicio).then(terminar)
       segurar.cancel()
       abrirJanela(inicio)
       return
     }
-    void motor.entrar(inicio, ENTRADA.duracao).then((cobriu) => {
+    const entrada = motor.entrar(inicio, ENTRADA.duracao)
+    if (entrada.comFoto) void entrada.chegou.then(terminar)
+    else void trazerOSite(inicio).then(terminar)
+    void entrada.cobriu.then((cobriu) => {
       segurar.cancel()
-      if (!cobriu) abrirJanela(inicio)
+      if (cobriu) return
+      abrirJanela(inicio)
+      if (entrada.comFoto) void trazerOSite(inicio).then(terminar)
     })
   }
 

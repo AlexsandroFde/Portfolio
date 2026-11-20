@@ -1,15 +1,16 @@
-// O worker do buraco negro: recebe da página o canvas do fundo, a cortina e a tampa (OffscreenCanvas,
-// transferidos de lá, veja ponte.ts) e roda neles o motor (motor.ts), com o laço de quadros dele,
-// longe da thread principal.
+// O worker do buraco negro: recebe da página o canvas do fundo, a cortina, a tampa e a tela de cima
+// (OffscreenCanvas, transferidos de lá, veja ponte.ts) e roda neles o motor (motor.ts), com o laço
+// de quadros dele, longe da thread principal.
 
 import { criarMotor, type Inicio, type Motor, type ParaOMotor } from './motor.ts'
 
-/** O que a página manda primeiro: os três canvas e o resto do que o motor precisa para começar. */
+/** O que a página manda primeiro: os quatro canvas e o resto do que o motor precisa para começar. */
 export interface Iniciar extends Inicio {
   tipo: 'iniciar'
   canvas: OffscreenCanvas
   cortina: OffscreenCanvas
   tampa: OffscreenCanvas
+  topo: OffscreenCanvas
 }
 
 /** O escopo do worker (os tipos do TypeScript aqui são os da página). */
@@ -24,7 +25,7 @@ let motor: Motor | null = null
 
 escopo.addEventListener('message', ({ data }) => {
   if (data.tipo === 'iniciar') {
-    motor ??= criarMotor(data.canvas, data.cortina, data.tampa, data, (mensagem) => escopo.postMessage(mensagem))
+    motor ??= criarMotor(data.canvas, data.cortina, data.tampa, data.topo, data, (mensagem) => escopo.postMessage(mensagem))
     return
   }
   motor?.receber(data)

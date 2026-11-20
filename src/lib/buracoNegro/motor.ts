@@ -1,19 +1,19 @@
 // O motor do buraco negro: o laço que o desenha, quadro a quadro, no canvas do fundo da página, na
-// cortina e na tampa (veja index.ts). Roda num worker (veja trabalhador.ts e ponte.ts), fora da thread
-// principal: o que pesa nela (a absorção, os vídeos, o React) não atrasa nem um quadro
-// do buraco negro, que gira e anda junto com a rolagem como o resto da página, que o navegador rola
-// também fora dela. Sem worker, o mesmo motor roda na thread principal.
+// cortina, na tampa e, na volta ao topo, na tela de cima (veja index.ts). Roda num worker (veja
+// trabalhador.ts e ponte.ts), fora da thread principal: o que pesa nela (a absorção, os vídeos, o
+// React) não atrasa nem um quadro do buraco negro, que gira e anda junto com a rolagem como o resto
+// da página, que o navegador rola também fora dela. Sem worker, o mesmo motor roda na thread principal.
 //
 // Quase nada é calculado aqui: o caminho da luz em volta do buraco negro já foi traçado uma vez, no
 // mapa dos raios (veja geodesicas.frag), e o trajeto dele pela página está tabelado, uma posição
 // para cada pixel de rolagem (veja trajeto.ts). A cada quadro, o motor só escolhe a posição na
 // tabela, move o gás do disco sobre o mapa (a rotação) e compõe a imagem. No mergulho, a imagem
-// passa pela queda (queda.frag), vista por quem cai; na entrada, o motor desenha o túnel por onde o
-// site chega (entrada.ts e entrada.frag), no mesmo passo das animações da página.
+// passa pela vista de quem cai (queda.frag); na entrada, o motor desenha o site chegando, pela
+// janela, na mesma vista (entrada.ts e entrada.frag).
 
-import { curvaDaEntrada } from './entrada.ts'
+import { curvaDaEntrada, vistaDaEntrada } from './entrada.ts'
 import { HORIZONTE, esmaecimento, forcaEm, type Faixa } from './faixa.ts'
-import { criarRenderizador, type Entrada, type Renderizador, type Rgb, type Rgba, type Tela } from './renderizador.ts'
+import { criarRenderizador, type Entrada, type Renderizador, type Rgb, type Rgba, type Tela, type Vista } from './renderizador.ts'
 import {
   GIRO,
   INCLINACAO,
@@ -76,10 +76,17 @@ export type ParaOMotor =
   /** Preso: o buraco negro fica parado no alto da página, sem animação (movimento reduzido, aparelho lento). */
   | { tipo: 'modo'; preso: boolean }
   /**
-   * A entrada (veja entrada.ts) começa no instante `inicio` (ms desde a época) e dura `duracao` ms:
-   * as animações da página começam no mesmo instante.
+   * A entrada (veja entrada.ts) começa no instante `inicio` (ms desde a época) e dura `duracao` ms.
+   * Com `comFoto`, o motor desenha o próprio site chegando (a foto do topo dele), na tela de cima,
+   * por cima da página parada no topo, e avisa quando ele chegou; sem ela, as animações da página
+   * trazem o site, a partir do mesmo instante, e o motor desenha só a janela e o escuro atrás dele.
    */
-  | { tipo: 'entrada'; inicio: number; duracao: number }
+  | { tipo: 'entrada'; inicio: number; duracao: number; comFoto: boolean }
+  /**
+   * A foto do topo do site (veja fotos.ts), pré-multiplicada, e a tela que ela cobre (px CSS). A
+   * `chave` volta no aviso de que ela ficou pronta.
+   */
+  | { tipo: 'foto'; foto: ImageBitmap; largura: number; altura: number; chave: string }
   | { tipo: 'visivel'; visivel: boolean }
   | { tipo: 'destruir' }
 
@@ -97,6 +104,13 @@ export type DoMotor =
   | { tipo: 'lento' }
   /** O primeiro quadro da entrada foi desenhado: o túnel já cobre a tela, e o véu da página pode sair. */
   | { tipo: 'cobriu' }
+  /** A foto do topo do site com esta chave está pronta para a entrada (ou não pôde ser usada). */
+  | { tipo: 'foto'; chave: string; pronta: boolean }
+  /**
+   * O site da entrada com a foto chegou: a tela de cima ficou com o último quadro dela (o site no
+   * lugar, como a página), e o canvas, por baixo da página, já tem a cena de sempre.
+   */
+  | { tipo: 'chegou' }
 
 export interface Motor {
   receber(mensagem: ParaOMotor): void
@@ -140,6 +154,26 @@ const SUAVIZAR = 0.012
  * parte deles (PARADA); o resto vem com a rolagem, até RAPIDA px/s.
  */
 const RASTRO = { porQueda: 0.055, maximo: 0.18, parada: 0.35, rapida: 1500 }
+
+/**
+ * A vista de quem cai com o mergulho em `m` (de 0 a 1) e os rastros em `rastro` (veja queda.frag):
+ * o redemoinho, mais forte no meio da queda, com o disco à vista, e mais calmo quando a sombra já
+ * toma a tela; a poeira, que aparece quando a queda engrena e some no horizonte, andando cada vez
+ * mais depressa (o buraco negro também cresce cada vez mais rápido); as cores que se separam, a luz
+ * que azula, o túnel que se fecha e, perto do horizonte, o tremor.
+ */
+function vistaNaQueda(m: number, rastro: number): Vista {
+  return {
+    rastro,
+    redemoinho: 0.9 * suave(0.05, 0.45, m) * (1 - 0.6 * suave(0.5, 0.9, m)),
+    tremor: 1.8 * suave(0.5, 0.9, m),
+    separa: 0.007 * suave(0.15, 0.85, m),
+    viagem: 4 * m * m,
+    poeira: suave(0.08, 0.35, m) * (1 - suave(0.88, 0.97, m)),
+    azul: suave(0.35, 0.95, m),
+    tunel: 0.55 * suave(0.2, 0.95, m),
+  }
+}
 /**
  * A massa do mouse, que curva e revela a malha em volta dele (veja cena.glsl): em quanto tempo (s)
  * ela alcança o ponteiro (com essa inércia ela fica um pouco para trás quando ele corre, e o atraso
@@ -164,10 +198,17 @@ const cancelarQuadro: (id: number) => void =
   typeof cancelAnimationFrame === 'function' ? (id) => cancelAnimationFrame(id) : (id) => clearTimeout(id)
 
 /**
- * Liga o motor no canvas, na cortina e na tampa (um canvas cada, ou o OffscreenCanvas de cada um,
- * num worker). `avisar` leva as mensagens do motor para a página.
+ * Liga o motor no canvas, na cortina, na tampa e na tela de cima (um canvas cada, ou o
+ * OffscreenCanvas de cada um, num worker). `avisar` leva as mensagens do motor para a página.
  */
-export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Inicio, avisar: (mensagem: DoMotor) => void): Motor {
+export function criarMotor(
+  canvas: Tela,
+  cortina: Tela,
+  tampa: Tela,
+  topo: Tela,
+  inicio: Inicio,
+  avisar: (mensagem: DoMotor) => void,
+): Motor {
   let renderizador: Renderizador | null = criarRenderizador(canvas, inicio.densidade)
   if (!renderizador) {
     avisar({ tipo: 'falhou' })
@@ -175,6 +216,12 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
   }
   const pincel = (cortina as HTMLCanvasElement).getContext('2d')
   const pincelDaTampa = (tampa as HTMLCanvasElement).getContext('2d')
+  /**
+   * A tela de cima: na entrada com a foto, por cima da página (até do cabeçalho), a mesma imagem do
+   * canvas, copiada a cada quadro. A página fica parada no topo, por baixo dela, já desenhada, e
+   * aparece quando ela se esvazia, no fim.
+   */
+  const pincelDoTopo = (topo as HTMLCanvasElement).getContext('2d')
   /** Onde se recorta, a cada quadro, o pedaço da cortina em volta da sombra (veja desenharTampa). */
   const furo: Tela = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(1, 1) : document.createElement('canvas')
   const pincelDoFuro = (furo as HTMLCanvasElement).getContext('2d')
@@ -212,8 +259,16 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
   let suavizada = Number.NaN
   /** Quão rápido a rolagem desenhada anda (px/s), suavizado: alonga os rastros da queda. */
   let velocidade = 0
-  /** A entrada em andamento: quando começa (ms desde a época), quanto dura e quantos quadros já teve. */
-  let entrada: { inicio: number; duracao: number; quadros: number } | null = null
+  /**
+   * A entrada em andamento: quando começa (ms desde a época), quanto dura, quantos quadros já teve,
+   * se é o motor que desenha o site (com a foto, na tela de cima) e se ele já chegou (o último quadro
+   * dela já foi desenhado: no próximo, a tela de cima se esvazia).
+   */
+  let entrada: { inicio: number; duracao: number; quadros: number; comFoto: boolean; chegou: boolean } | null = null
+  /** A foto do topo do site, guardada para refazer a textura se a placa de vídeo resetar. */
+  let foto: { imagem: ImageBitmap; largura: number; altura: number } | null = null
+  /** A textura da foto está pronta para a entrada. */
+  let fotoPronta = false
   // De -1 a 1: positiva enquanto a página rola para baixo (absorve), negativa para cima (cospe).
   // Segue o sentido da rolagem, e não a velocidade (veja quadro).
   let atividade = 0
@@ -257,6 +312,14 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
         tela.width = w
         tela.height = hc
       }
+    }
+    // A tela de cima cobre a tela toda, como o canvas. O primeiro desenho nela cria os recursos dela
+    // na placa de vídeo: é feito já, escondido, e não no primeiro quadro da volta ao topo.
+    if (topo.width !== w || topo.height !== h) {
+      topo.width = w
+      topo.height = h
+      pincelDoTopo?.drawImage(canvas, 0, 0, 1, 1, 0, 0, 1, 1)
+      pincelDoTopo?.clearRect(0, 0, 1, 1)
     }
   }
 
@@ -325,11 +388,22 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
     return Math.min(RASTRO.maximo, RASTRO.porQueda * Math.max(0, queda)) * suave(0.02, 0.25, mergulho) * embalo
   }
 
-  /** O que a entrada mostra com ela em `u` (de 0 a 1): o site, a janela e o meio da tela. */
-  function quadroDaEntrada(u: number, largura: number, alturaTela: number): Entrada {
+  /**
+   * O que a entrada mostra com ela em `u` (de 0 a 1): o site, a janela, o meio da tela e quanto o
+   * site vem arredondado (só com a foto: sem ela, quem traz o site é a página, plano).
+   */
+  function quadroDaEntrada(u: number, largura: number, alturaTela: number, comFoto: boolean, bojo: number): Entrada {
     const ponto = curvaDaEntrada(u)
     const meiaDiagonal = Math.hypot(largura / 2, alturaTela / 2)
-    return { u, vistaX: largura / 2, vistaY: alturaTela / 2, escala: ponto.escala, torcao: ponto.torcao, janela: ponto.janela * meiaDiagonal }
+    return {
+      u,
+      vistaX: largura / 2,
+      vistaY: alturaTela / 2,
+      escala: ponto.escala,
+      janela: ponto.janela * meiaDiagonal,
+      bojo: comFoto ? bojo : 0,
+      comFoto,
+    }
   }
 
   /**
@@ -401,10 +475,19 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
     const mergulho = preso || u !== null ? 0 : progressoDoMergulho(palco, rolagem)
     // A massa do mouse fica na página: some no começo do mergulho, e na entrada não existe.
     const cursor = preso || u !== null || Number.isNaN(massa.x) ? 0 : presenca * (1 - suave(0, MASSA_NO_MERGULHO, mergulho))
+    // A vista de quem cai: na queda e, já dentro do buraco negro, na entrada.
+    let vista: Vista | null = null
+    let quadroDeEntrada: Entrada | null = null
+    if (u !== null) {
+      const { bojo, ...resto } = vistaDaEntrada(u)
+      vista = { ...resto, redemoinho: 0, tremor: 0 }
+      quadroDeEntrada = quadroDaEntrada(u, tamanho.largura, palco.alturaTela, entrada?.comFoto ?? false, bojo)
+    } else if (mergulho > 0) {
+      vista = vistaNaQueda(mergulho, palco.mergulho ? rastroEm(tabela, palco.mergulho, rolagem, mergulho) : 0)
+    }
     r.desenhar({
-      mergulho,
-      rastro: mergulho > 0 && palco.mergulho ? rastroEm(tabela, palco.mergulho, rolagem, mergulho) : 0,
-      entrada: u === null ? null : quadroDaEntrada(u, tamanho.largura, palco.alturaTela),
+      vista,
+      entrada: quadroDeEntrada,
       largura: tamanho.largura,
       altura: tamanho.altura,
       centroX: b.x,
@@ -427,6 +510,11 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
       agito,
       ...cores,
     })
+    // Na entrada com a foto, o quadro vai também para a tela de cima, por cima da página.
+    if (quadroDeEntrada?.comFoto && pincelDoTopo) {
+      pincelDoTopo.globalCompositeOperation = 'copy'
+      pincelDoTopo.drawImage(canvas, 0, 0)
+    }
     // O alto do quadro vai também para a cortina, no mesmo quadro, sobre o fundo da página (ela
     // cobre a faixa com o que está atrás da página ali), e dela para a tampa. Cópias de imagem na
     // placa de vídeo: desenhar o buraco negro mais vezes custaria o desenho em dobro.
@@ -545,13 +633,29 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
     if (entrada) {
       // (a massa do mouse volta aos poucos depois, com o site já no lugar)
       presenca = 0
+      ultimoDesenho = agora
+      // Com a foto, o último quadro da entrada (o site no lugar, pixel por pixel) ficou na tela de
+      // cima, e o canvas, por baixo da página, já recebeu a cena de sempre: a página esmaece a tela
+      // de cima, e a página de verdade, parada ali embaixo, aparece no lugar da foto. (O aviso vai no
+      // quadro seguinte: se o canvas chegar à tela um quadro depois, a tela de cima ainda o cobre.)
+      if (entrada.chegou) {
+        entrada = null
+        desenhar(s)
+        avisar({ tipo: 'chegou' })
+        return
+      }
       const u = Math.min(1, Math.max(0, (instante - entrada.inicio) / entrada.duracao))
       desenhar(s, u)
-      ultimoDesenho = agora
       if (++entrada.quadros === 2) avisar({ tipo: 'cobriu' })
       if (u >= 1) {
-        entrada = null
-        desenhada = Number.NaN
+        if (entrada.comFoto) {
+          // o canvas, por baixo da página, já recebe a cena de sempre (a tela de cima guarda a entrada)
+          desenhar(s)
+          entrada.chegou = true
+        } else {
+          entrada = null
+          desenhada = Number.NaN
+        }
       }
       return
     }
@@ -642,6 +746,9 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
     renderizador = null
     ativo = false
     avisouPronto = false
+    // (a página esconde a tela de cima e mostra o site ela mesma)
+    entrada = null
+    pincelDoTopo?.clearRect(0, 0, topo.width, topo.height)
     avisar({ tipo: 'perdido' })
   })
   eventos.addEventListener('webglcontextrestored', () => {
@@ -651,6 +758,8 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
       avisar({ tipo: 'falhou' })
       return
     }
+    // a textura da foto se foi com o contexto
+    fotoPronta = renderizador.definirFoto(foto)
     ajustarTamanho()
     retomar()
   })
@@ -700,8 +809,20 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
           preso = m.preso
           desenhada = Number.NaN
           break
-        case 'entrada':
-          entrada = { inicio: m.inicio, duracao: m.duracao, quadros: 0 }
+        case 'entrada': {
+          const comFoto = m.comFoto && fotoPronta
+          // A página desistiu da foto no meio (o motor demorou a responder) e traz o site ela mesma:
+          // a tela de cima, que ela esconde, fica vazia, e o canvas passa a desenhar sem a foto.
+          if (entrada?.comFoto && !comFoto) pincelDoTopo?.clearRect(0, 0, topo.width, topo.height)
+          const quadros = entrada?.inicio === m.inicio ? entrada.quadros : 0
+          entrada = { inicio: m.inicio, duracao: m.duracao, quadros, comFoto, chegou: false }
+          break
+        }
+        case 'foto':
+          foto?.imagem.close()
+          foto = { imagem: m.foto, largura: m.largura, altura: m.altura }
+          fotoPronta = renderizador?.definirFoto(foto) ?? false
+          avisar({ tipo: 'foto', chave: m.chave, pronta: fotoPronta })
           break
         case 'visivel':
           visivel = m.visivel
@@ -712,6 +833,8 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
           pausar()
           renderizador?.destruir()
           renderizador = null
+          foto?.imagem.close()
+          foto = null
           return
       }
       retomar()

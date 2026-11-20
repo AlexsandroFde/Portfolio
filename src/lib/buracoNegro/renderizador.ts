@@ -22,14 +22,40 @@ export type Rgba = readonly [number, number, number, number]
 export interface Entrada {
   /** De 0 a 1: quanto a entrada já andou. */
   u: number
-  /** O meio da tela, em volta do qual o site cresce e gira. */
+  /** O meio da tela, em volta do qual o site cresce. */
   vistaX: number
   vistaY: number
-  /** O tamanho do site (fração do normal) e quanto os riscos do túnel ainda torcem (rad). */
+  /** O tamanho do site (fração do normal). */
   escala: number
-  torcao: number
   /** O raio da janela em volta do site. */
   janela: number
+  /** De 0 a 1: quanto o site vem arredondado (0 sem a foto: a página traz o site, plano). */
+  bojo: number
+  /** O site é a foto do topo (veja definirFoto), e não a página, por cima. */
+  comFoto: boolean
+}
+
+/**
+ * A vista de quem cai (veja queda.frag), na queda e na entrada: a força de cada parte do efeito.
+ * Medidas como nos uniforms de mesmo nome.
+ */
+export interface Vista {
+  /** O comprimento dos rastros, em fração da distância ao meio da tela. */
+  rastro: number
+  /** Quanto o espaço gira perto da sombra (rad). */
+  redemoinho: number
+  /** Quanto a vista treme (px CSS). */
+  tremor: number
+  /** Quanto as cores se separam. */
+  separa: number
+  /** Quanto os grãos de poeira já andaram. */
+  viagem: number
+  /** De 0 a 1: quanto da poeira aparece. */
+  poeira: number
+  /** De 0 a 1: quanto a luz de fora fica mais azul (tema escuro). */
+  azul: number
+  /** Quanto as bordas escurecem. */
+  tunel: number
 }
 
 /** Tudo o que o desenho de um quadro precisa. Medidas em px CSS, relativas ao canvas. */
@@ -56,11 +82,9 @@ export interface Quadro {
   sentido: number
   /** De -1 a 1: positivo enquanto a página desce, negativo enquanto sobe. */
   atividade: number
-  /** De 0 a 1: quanto já se mergulhou (0 fora do mergulho: sem a queda). */
-  mergulho: number
-  /** O comprimento dos rastros da queda, em fração da distância ao meio da tela. */
-  rastro: number
-  /** A entrada (a volta ao topo, por dentro do buraco negro), ou null fora dela. */
+  /** A vista de quem cai (na queda e na entrada), ou null: a cena como ela é. */
+  vista: Vista | null
+  /** A entrada (a volta ao topo, por dentro do buraco negro), ou null fora dela. Vem com a vista. */
   entrada: Entrada | null
   /**
    * A massa do mouse (veja motor.ts): onde ela está, quanto aparece (0 a desliga) e quanto o mouse
@@ -88,6 +112,11 @@ export interface Renderizador {
    */
   tracar(): boolean
   mapaPronto(): boolean
+  /**
+   * A foto do topo do site (veja fotos.ts), que a entrada desenha chegando, e a tela que ela cobre
+   * (px CSS). Devolve se ela ficou pronta para o desenho.
+   */
+  definirFoto(foto: { imagem: ImageBitmap; largura: number; altura: number } | null): boolean
   desenhar(quadro: Quadro): void
   destruir(): void
 }
@@ -111,8 +140,9 @@ const INCLINACAO_DO_MAPA = INCLINACAO + SUBIDA / 2
 /** Em quantos quadros o mapa é traçado: cada um traça uma faixa dele, sem pesar no quadro. */
 const TRECHOS = 8
 /**
- * No mergulho, quanto a cena passa da tela de cada lado, em frações da meia diagonal dela: o que a
- * queda traz de perto da beira (veja queda.frag) já vem desenhado.
+ * Na vista de quem cai, quanto a cena passa da tela de cada lado, em frações da meia diagonal dela: o
+ * que a queda traz de perto da beira (veja queda.frag) já vem desenhado. A entrada usa a mesma
+ * textura, do mesmo tamanho (trocar de tamanho na volta ao topo recriaria a textura bem ali).
  */
 const MARGEM_DA_QUEDA = 0.15
 
@@ -156,7 +186,17 @@ const UNIFORMS_CENA = [
   'uCursor',
 ] as const
 const UNIFORMS_COMPOSICAO = [...UNIFORMS_CENA, 'uMargem'] as const
-const UNIFORMS_ENTRADA = [...UNIFORMS_CENA, 'uEntrada', 'uVista', 'uEscalaVista', 'uTorcao', 'uJanela'] as const
+const UNIFORMS_ENTRADA = [
+  ...UNIFORMS_CENA,
+  'uMargem',
+  'uEntrada',
+  'uVista',
+  'uEscalaVista',
+  'uJanela',
+  'uBojo',
+  'uFoto',
+  'uTamanhoDaFoto',
+] as const
 const UNIFORMS_QUEDA = [
   'uCena',
   'uMargem',
@@ -164,8 +204,14 @@ const UNIFORMS_QUEDA = [
   'uTamanho',
   'uCentro',
   'uRaio',
-  'uMergulho',
   'uRastro',
+  'uRedemoinho',
+  'uTremor',
+  'uSepara',
+  'uViagem',
+  'uPoeira',
+  'uAzul',
+  'uTunel',
   'uTempo',
   'uSentido',
   'uFundo',
@@ -269,6 +315,20 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
   const quadroDaNevoa = quadroDe(nevoa)
   const quadroDoDisco = quadroDe(disco)
   gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+  /**
+   * A foto do topo do site (veja definirFoto), com mipmaps: a entrada a lê pequena, lá no fundo, e
+   * sem eles o texto viraria chuvisco. Sem foto, um pixel transparente no lugar dela.
+   */
+  const semFoto = textura(gl.RGBA8, gl.NEAREST, 1, 1)
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4))
+  let foto: { textura: WebGLTexture; largura: number; altura: number } | null = null
+
+  function soltarFoto() {
+    if (!foto) return
+    gl!.deleteTexture(foto.textura)
+    foto = null
+  }
 
   /**
    * A cena do quadro, do tamanho do canvas, para a queda distorcer (veja queda.frag). Criada na
@@ -441,7 +501,7 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
         gl.viewport(0, 0, 1, 1)
         gl.enable(gl.SCISSOR_TEST)
         gl.scissor(0, 0, 1, 1)
-        const unidades = [cruzamento1, cruzamento2, disco, nevoa, nevoa]
+        const unidades = [cruzamento1, cruzamento2, disco, nevoa, nevoa, semFoto]
         unidades.forEach((t, i) => {
           gl.activeTexture(gl.TEXTURE0 + i)
           gl.bindTexture(gl.TEXTURE_2D, t)
@@ -453,7 +513,7 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
         }
         aquecer(programas.disco, { uCruzamento1: 0, uCruzamento2: 1 })
         aquecer(programas.composicao, { uDisco: 2, uNevoa: 3 })
-        aquecer(programas.entrada, { uDisco: 2, uNevoa: 3 })
+        aquecer(programas.entrada, { uDisco: 2, uNevoa: 3, uFoto: 5 })
         aquecer(programas.queda, { uCena: 4 })
         gl.disable(gl.SCISSOR_TEST)
       }
@@ -462,14 +522,38 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
       return mapaPronto()
     },
 
+    definirFoto(nova) {
+      soltarFoto()
+      if (!nova || gl.isContextLost()) return false
+      const { imagem, largura: fl, altura: fa } = nova
+      const t = gl.createTexture()
+      gl.bindTexture(gl.TEXTURE_2D, t)
+      gl.texStorage2D(gl.TEXTURE_2D, Math.floor(Math.log2(Math.max(imagem.width, imagem.height, 1))) + 1, gl.RGBA8, imagem.width, imagem.height)
+      try {
+        // (a imagem já vem pré-multiplicada: numa ImageBitmap, o WebGL usa as opções dela)
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, imagem)
+      } catch {
+        // uma imagem que o navegador não deixa ler (no Safari, a de um SVG com foreignObject)
+        gl.deleteTexture(t)
+        return false
+      }
+      gl.generateMipmap(gl.TEXTURE_2D)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      foto = { textura: t, largura: fl, altura: fa }
+      return true
+    },
+
     desenhar(q) {
       if (!mapaPronto()) return
       const achatar = Math.sin(INCLINACAO_DO_MAPA) / Math.sin(q.inclinacao)
       const w = canvas.width
       const h = canvas.height
       const s = q.entrada
-      // no mergulho, a cena passa um pouco da tela de cada lado (px CSS)
-      const margem = !s && q.mergulho > 0 ? Math.round(MARGEM_DA_QUEDA * Math.hypot(q.largura / 2, q.altura / 2)) : 0
+      // na vista de quem cai, a cena passa um pouco da tela de cada lado (px CSS)
+      const margem = q.vista ? Math.round(MARGEM_DA_QUEDA * Math.hypot(q.largura / 2, q.altura / 2)) : 0
 
       // 1. O disco deste quadro, no trecho do mapa que aparece. Na entrada, a cena aparece pela janela,
       // reduzida: o que se vê dela é o círculo da janela, desfeito o tamanho.
@@ -503,23 +587,9 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
         gl.disable(gl.SCISSOR_TEST)
       }
 
-      // 2a. Na entrada: a cena pela janela, e o túnel em volta dela.
-      if (s) {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-        gl.viewport(0, 0, w, h)
-        const u = usar(programas.entrada)
-        definirCena(u, q, achatar, w, h)
-        gl.uniform1f(u.uEntrada, s.u)
-        gl.uniform2f(u.uVista, s.vistaX, s.vistaY)
-        gl.uniform1f(u.uEscalaVista, s.escala)
-        gl.uniform1f(u.uTorcao, s.torcao)
-        gl.uniform1f(u.uJanela, s.janela)
-        gl.drawArrays(gl.TRIANGLES, 0, 3)
-        return
-      }
-
-      // 2b. Fora do mergulho: a cena, como ela é.
-      if (q.mergulho <= 0) {
+      // 2a. Fora da queda e da entrada: a cena, como ela é.
+      const vista = q.vista
+      if (!vista) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null)
         gl.viewport(0, 0, w, h)
         const u = usar(programas.composicao)
@@ -529,7 +599,8 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
         return
       }
 
-      // 2c. No mergulho: a cena numa textura um pouco maior que a tela, e a queda, que a distorce, na tela.
+      // 2b. Na queda e na entrada: a imagem numa textura um pouco maior que a tela (a cena, ou o site
+      // chegando pela janela), e a vista de quem cai, que a distorce, na tela.
       const pixelsDaMargem = Math.round(margem * (w / q.largura))
       const cenaDaQueda = obterCenaDoMergulho(w + 2 * pixelsDaMargem, h + 2 * pixelsDaMargem)
       // (a margem em px CSS, medida de volta nos pixels inteiros da textura)
@@ -537,10 +608,33 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
       const margemY = pixelsDaMargem / (h / q.altura)
       gl.bindFramebuffer(gl.FRAMEBUFFER, cenaDaQueda.quadro)
       gl.viewport(0, 0, cenaDaQueda.w, cenaDaQueda.h)
-      const uc = usar(programas.composicao)
-      definirCena(uc, q, achatar, cenaDaQueda.w, cenaDaQueda.h)
-      gl.uniform2f(uc.uMargem, margemX, margemY)
+      if (s) {
+        // A entrada não tem o redemoinho nem o tremor da queda: a vista de quem cai só lê dentro da
+        // tela (e um pouco além, nas cores separadas). A margem da textura fica como está.
+        const alem = Math.min(pixelsDaMargem, Math.ceil(0.02 * Math.hypot(w, h)))
+        const borda = pixelsDaMargem - alem
+        gl.enable(gl.SCISSOR_TEST)
+        gl.scissor(borda, borda, cenaDaQueda.w - 2 * borda, cenaDaQueda.h - 2 * borda)
+        const ue = usar(programas.entrada)
+        definirCena(ue, q, achatar, cenaDaQueda.w, cenaDaQueda.h)
+        gl.uniform2f(ue.uMargem, margemX, margemY)
+        gl.uniform1f(ue.uEntrada, s.u)
+        gl.uniform2f(ue.uVista, s.vistaX, s.vistaY)
+        gl.uniform1f(ue.uEscalaVista, s.escala)
+        gl.uniform1f(ue.uJanela, s.janela)
+        const comFoto = s.comFoto && foto !== null
+        gl.uniform1f(ue.uBojo, comFoto ? s.bojo : 0)
+        gl.activeTexture(gl.TEXTURE5)
+        gl.bindTexture(gl.TEXTURE_2D, comFoto ? foto!.textura : semFoto)
+        gl.uniform1i(ue.uFoto, 5)
+        gl.uniform2f(ue.uTamanhoDaFoto, foto?.largura ?? q.largura, foto?.altura ?? q.altura)
+      } else {
+        const uc = usar(programas.composicao)
+        definirCena(uc, q, achatar, cenaDaQueda.w, cenaDaQueda.h)
+        gl.uniform2f(uc.uMargem, margemX, margemY)
+      }
       gl.drawArrays(gl.TRIANGLES, 0, 3)
+      gl.disable(gl.SCISSOR_TEST)
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
       gl.viewport(0, 0, w, h)
@@ -553,8 +647,14 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
       gl.uniform2f(u.uTamanho, q.largura, q.altura)
       gl.uniform2f(u.uCentro, q.centroX, q.centroY)
       gl.uniform1f(u.uRaio, q.raio)
-      gl.uniform1f(u.uMergulho, q.mergulho)
-      gl.uniform1f(u.uRastro, q.rastro)
+      gl.uniform1f(u.uRastro, vista.rastro)
+      gl.uniform1f(u.uRedemoinho, vista.redemoinho)
+      gl.uniform1f(u.uTremor, vista.tremor)
+      gl.uniform1f(u.uSepara, vista.separa)
+      gl.uniform1f(u.uViagem, vista.viagem)
+      gl.uniform1f(u.uPoeira, vista.poeira)
+      gl.uniform1f(u.uAzul, vista.azul)
+      gl.uniform1f(u.uTunel, vista.tunel)
       gl.uniform1f(u.uTempo, q.tempo)
       gl.uniform1f(u.uSentido, q.sentido)
       gl.uniform3f(u.uFundo, ...q.fundo)
@@ -568,9 +668,10 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
         gl.deleteProgram(p.programa)
         for (const shader of p.shaders) gl.deleteShader(shader)
       }
-      for (const t of [cruzamento1, cruzamento2, nevoa, disco]) gl.deleteTexture(t)
+      for (const t of [cruzamento1, cruzamento2, nevoa, disco, semFoto]) gl.deleteTexture(t)
       for (const f of [quadroDoMapa, quadroDaNevoa, quadroDoDisco]) gl.deleteFramebuffer(f)
       soltarCenaDoMergulho()
+      soltarFoto()
       tracadas = 0
       compilado = false
     },

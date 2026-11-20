@@ -297,16 +297,20 @@ function vez(urgente: boolean): Promise<void> {
 }
 
 /**
- * O SVG com o clone do bloco, no modo pedido: o bloco sem a frente dos vídeos, ou só a frente. O
- * SVG tem o tamanho da foto em pixels da tela, e o clone, o zoom da tela: é assim que o navegador
- * desenha a página numa tela de alta densidade (com as bordas e o texto nos mesmos pixels). Um SVG
- * em px CSS esticado na hora de desenhar sairia borrado.
+ * O clone de `elemento` para uma foto, sem ids repetidos e sem as animações de entrada, com o que
+ * ele herda dos ancestrais e o zoom da tela, em (`esquerda`, `topo`) px CSS dentro do quadro da
+ * foto. O `mouse` (veja Pedido) vira a marca no clone. Devolve também os elementos do clone, na
+ * ordem do documento (veja elementosDe).
  */
-async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): Promise<string> {
-  const { elemento, x, y, largura, altura, dpr, frente, vivos, mouse } = pedido
-  const quadro = enquadrar(x, y, largura, altura, dpr)
-  const w = Math.round(quadro.largura * dpr)
-  const h = Math.round(quadro.altura * dpr)
+function clonar(
+  elemento: HTMLElement,
+  esquerda: number,
+  topo: number,
+  largura: number,
+  altura: number,
+  dpr: number,
+  mouse: Element | null,
+): { clone: HTMLElement; copias: Element[] } {
   const originais = elementosDe(elemento)
   const clone = elemento.cloneNode(true) as HTMLElement
   const copias = elementosDe(clone)
@@ -332,8 +336,8 @@ async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): 
   Object.assign(clone.style, {
     zoom: String(dpr),
     position: 'absolute',
-    left: `${x - quadro.esquerda}px`,
-    top: `${y - quadro.topo}px`,
+    left: `${esquerda}px`,
+    top: `${topo}px`,
     width: `${largura}px`,
     height: `${altura}px`,
     margin: '0',
@@ -342,13 +346,55 @@ async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): 
     rotate: 'none',
     scale: 'none',
   })
+  return { clone, copias }
+}
+
+/**
+ * O SVG com o `conteudo` (os clones) num quadro de `w` x `h` pixels da tela, com as regras de estilo
+ * da página. O tema (a classe dark) e o idioma vêm da raiz da página.
+ */
+function documento(conteudo: HTMLElement[], w: number, h: number, css: string): string {
+  const raiz = document.documentElement
+  const fundo = document.createElement('div')
+  for (const { name, value } of raiz.attributes) if (name !== 'style' && name !== 'id') fundo.setAttribute(name, value)
+  fundo.style.cssText = `position:relative;width:${w}px;height:${h}px;margin:0;padding:0;overflow:hidden`
+  fundo.append(...conteudo)
+  const corpo = new XMLSerializer().serializeToString(fundo)
+  const fonte = getComputedStyle(raiz).fontSize
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" style="font-size:${fonte}">` +
+    `<style><![CDATA[${css}]]></style>` +
+    `<foreignObject x="0" y="0" width="${w}" height="${h}">${corpo}</foreignObject></svg>`
+  )
+}
+
+/**
+ * O SVG com o clone do bloco, no modo pedido: o bloco sem a frente dos vídeos, ou só a frente. O
+ * SVG tem o tamanho da foto em pixels da tela, e o clone, o zoom da tela: é assim que o navegador
+ * desenha a página numa tela de alta densidade (com as bordas e o texto nos mesmos pixels). Um SVG
+ * em px CSS esticado na hora de desenhar sairia borrado.
+ */
+async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): Promise<string> {
+  const { elemento, x, y, largura, altura, dpr, frente, vivos, mouse } = pedido
+  const quadro = enquadrar(x, y, largura, altura, dpr)
+  const w = Math.round(quadro.largura * dpr)
+  const h = Math.round(quadro.altura * dpr)
+  const { clone, copias } = clonar(elemento, x - quadro.esquerda, y - quadro.topo, largura, altura, dpr, mouse)
   // a frente dos vídeos fica numa foto à parte, desenhada por cima de cada quadro deles
   if (modo === 'frente') clone.style.visibility = 'hidden'
   for (const i of frente) (copias[i] as (Element & ElementCSSInlineStyle) | undefined)?.style.setProperty('visibility', modo === 'frente' ? 'visible' : 'hidden')
   // o que se anima sem parar fica fora das duas (as fatias o mostram vivo)
   for (const i of vivos) (copias[i] as (Element & ElementCSSInlineStyle) | undefined)?.style.setProperty('visibility', 'hidden')
+  await embutir(elemento, clone)
+  return documento([clone], w, h, css)
+}
 
-  // Imagens: embutidas, na versão que a página mostra (ou mostraria).
+/**
+ * Embute no clone as imagens do original, na versão que a página mostra (ou mostraria): um SVG usado
+ * como imagem não busca nada fora dele. Os vídeos viram um espaço vazio do mesmo tamanho (o pôster
+ * continua atrás; os quadros vão nas telas das fatias).
+ */
+async function embutir(elemento: HTMLElement, clone: HTMLElement) {
   const imagens = [...elemento.querySelectorAll('img')]
   const copiasDasImagens = [...clone.querySelectorAll('img')]
   await Promise.all(
@@ -374,20 +420,6 @@ async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): 
     espaco.append(...copia.childNodes)
     copia.replaceWith(espaco)
   })
-
-  const raiz = document.documentElement
-  const fundo = document.createElement('div')
-  // o tema (a classe dark) e o idioma vêm da raiz da página
-  for (const { name, value } of raiz.attributes) if (name !== 'style' && name !== 'id') fundo.setAttribute(name, value)
-  fundo.style.cssText = `position:relative;width:${w}px;height:${h}px;margin:0;padding:0;overflow:hidden`
-  fundo.append(clone)
-  const corpo = new XMLSerializer().serializeToString(fundo)
-  const fonte = getComputedStyle(raiz).fontSize
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" style="font-size:${fonte}">` +
-    `<style><![CDATA[${css}]]></style>` +
-    `<foreignObject x="0" y="0" width="${w}" height="${h}">${corpo}</foreignObject></svg>`
-  )
 }
 
 async function carregar(svg: string): Promise<HTMLImageElement> {
@@ -468,4 +500,57 @@ export async function fotografar(pedido: Pedido): Promise<Fotos> {
 /** Solta a imagem de uma foto que não é mais usada. */
 export function soltarFoto(foto: Foto | null) {
   if (foto?.url.startsWith('blob:')) URL.revokeObjectURL(foto.url)
+}
+
+/** Uma peça da foto do topo: o elemento e onde ele fica com a página no topo (px CSS). */
+export interface Peca {
+  elemento: HTMLElement
+  x: number
+  y: number
+  largura: number
+  altura: number
+}
+
+/**
+ * A foto do topo do site: a tela (`largura` x `altura` px CSS, a partir do canto de cima à esquerda)
+ * como ela fica com a página no topo, com as peças (o cabeçalho e o que o conteúdo mostra ali), cada
+ * uma no lugar dela, sobre um fundo transparente (o buraco negro e a malha são do motor). Sai num
+ * SVG só, na resolução da tela, como as dos blocos, e vira uma ImageBitmap pré-multiplicada, que vai
+ * para o worker sem cópia: é com ela que o motor desenha o site chegando na volta ao topo (veja
+ * entrada.frag). `ajustar` muda o clone de cada peça antes da foto (o cabeçalho, que muda com a
+ * rolagem, fica como ele é no topo). Leva alguns ms numa tarefa só: espera um tempo ocioso.
+ */
+export async function fotografarTopo(
+  pecas: Peca[],
+  largura: number,
+  altura: number,
+  dpr: number,
+  ajustar: (copia: HTMLElement) => void,
+): Promise<ImageBitmap> {
+  const css = await obterEstilo()
+  const quadro = enquadrar(0, 0, largura, altura, dpr)
+  const w = Math.round(quadro.largura * dpr)
+  const h = Math.round(quadro.altura * dpr)
+  const clones = await Promise.all(
+    pecas.map(async ({ elemento, x, y, largura: lp, altura: ap }) => {
+      const { clone } = clonar(elemento, x, y, lp, ap, dpr, null)
+      ajustar(clone)
+      await embutir(elemento, clone)
+      return clone
+    }),
+  )
+  const imagem = await carregar(documento(clones, w, h, css))
+  await vez(false)
+  const tela = document.createElement('canvas')
+  tela.width = w
+  tela.height = h
+  const contexto = tela.getContext('2d')
+  if (!contexto) throw new Error('sem contexto 2d')
+  contexto.drawImage(imagem, 0, 0)
+  try {
+    return await createImageBitmap(tela, { premultiplyAlpha: 'premultiply' })
+  } finally {
+    tela.width = 0
+    tela.height = 0
+  }
 }

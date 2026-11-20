@@ -80,14 +80,16 @@ export function Header() {
 
   return (
     <header
+      // Rolada, a página passa por trás do cabeçalho, desfocada. A marca fica num atributo: a foto do
+      // topo do site, que o buraco negro mostra na volta ao topo, tira a marca do clone e mostra o
+      // cabeçalho como ele é no topo (veja lib/buracoNegro/index.ts).
+      data-rolado={scrolled ? '' : undefined}
       className={cx(
         'print-hidden fixed inset-x-0 top-0 z-50 border-b transition-[background-color,border-color] duration-300',
         // Com o menu aberto o fundo fica opaco, para o conteúdo não aparecer por trás.
         menuOpen
           ? 'border-line bg-bg'
-          : scrolled
-            ? 'border-line bg-bg/80 backdrop-blur-lg'
-            : 'border-transparent',
+          : 'border-transparent data-[rolado]:border-line data-[rolado]:bg-bg/80 data-[rolado]:backdrop-blur-lg',
       )}
     >
       <div className="wrap flex h-16 items-center justify-between gap-4">

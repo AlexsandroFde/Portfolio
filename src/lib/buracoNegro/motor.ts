@@ -67,8 +67,11 @@ export type ParaOMotor =
   | { tipo: 'faixa'; faixa: Faixa; plena: number }
   /** A rolagem `s` no quadro da página que começou em `t` (ms desde a época, veja performance.timeOrigin). */
   | { tipo: 'rolagem'; s: number; t: number; salto?: boolean }
-  /** O ponteiro, de -0,5 a 0,5 em cada eixo a partir do meio da tela. */
-  | { tipo: 'ponteiro'; x: number; y: number }
+  /**
+   * O ponteiro, na tela (px CSS), e se é o mouse sobre a página (`dentro`): fora da janela, ou num
+   * toque, a massa do mouse some.
+   */
+  | { tipo: 'ponteiro'; x: number; y: number; dentro: boolean }
   | { tipo: 'cores'; cores: Cores }
   /** Preso: o buraco negro fica parado no alto da página, sem animação (movimento reduzido, aparelho lento). */
   | { tipo: 'modo'; preso: boolean }
@@ -137,6 +140,16 @@ const SUAVIZAR = 0.012
  * parte deles (PARADA); o resto vem com a rolagem, até RAPIDA px/s.
  */
 const RASTRO = { porQueda: 0.055, maximo: 0.18, parada: 0.35, rapida: 1500 }
+/**
+ * A massa do mouse, que curva e revela a malha em volta dele (veja cena.glsl): em quanto tempo (s)
+ * ela alcança o ponteiro (com essa inércia ela fica um pouco para trás quando ele corre, e o atraso
+ * de o ponteiro chegar da thread principal não se vê), em quanto tempo ela aparece e some quando o
+ * mouse entra e sai da janela, e a agitação: a velocidade (px/s) em que ela é plena e em quanto
+ * tempo ela sobe e assenta (com o mouse parado, a malha em volta dele fica mais fraca).
+ */
+const MASSA = { seguir: 0.075, aparece: 0.25, some: 0.45, rapida: 900, agita: 0.08, assenta: 1.4 }
+/** Até que fração do mergulho a massa do mouse some: na queda, a vista é de quem cai. */
+const MASSA_NO_MERGULHO = 0.2
 
 interface Amostra {
   s: number
@@ -207,10 +220,17 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
   let sentido = 0
   let ultimaRolagem = -Infinity
 
-  // Paralaxe leve com o mouse: a câmera acompanha o ponteiro.
+  // Paralaxe leve com o mouse: a câmera acompanha o ponteiro (de -0,5 a 0,5 em cada eixo, a partir
+  // do meio da tela).
   const alvo = { x: 0, y: 0 }
   const atual = { x: 0, y: 0 }
   let ultimoPonteiro = -Infinity
+  // A massa do mouse (veja MASSA): o ponteiro como chegou (px CSS), onde a massa está (NaN: vai
+  // direto para o ponteiro no próximo quadro), quanto ela aparece e quanto o mouse se mexe (de 0 a 1).
+  const ponteiro = { x: 0, y: 0, dentro: false }
+  const massa = { x: Number.NaN, y: Number.NaN }
+  let presenca = 0
+  let agito = 0
 
   // desempenho, medido em janelas de ~1 s de quadros (os intervalos entre eles, em s)
   let janelaTempo = 0
@@ -379,6 +399,8 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
     const desloc = Math.min(rolagem, palco.fimDoCaminho) * PARALAXE_MALHA
     const malhaX = (tamanho.largura - palco.celula) / 2
     const mergulho = preso || u !== null ? 0 : progressoDoMergulho(palco, rolagem)
+    // A massa do mouse fica na página: some no começo do mergulho, e na entrada não existe.
+    const cursor = preso || u !== null || Number.isNaN(massa.x) ? 0 : presenca * (1 - suave(0, MASSA_NO_MERGULHO, mergulho))
     r.desenhar({
       mergulho,
       rastro: mergulho > 0 && palco.mergulho ? rastroEm(tabela, palco.mergulho, rolagem, mergulho) : 0,
@@ -399,6 +421,10 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
       giro: GIRO + atual.x * 0.05,
       sentido: SENTIDO,
       atividade,
+      cursorX: cursor > 0 ? massa.x : 0,
+      cursorY: cursor > 0 ? massa.y : 0,
+      cursor,
+      agito,
       ...cores,
     })
     // O alto do quadro vai também para a cortina, no mesmo quadro, sobre o fundo da página (ela
@@ -511,11 +537,14 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
     const suavizar = 1 - Math.exp(-dt * 2.5)
     atual.x += (alvo.x - atual.x) * suavizar
     atual.y += (alvo.y - atual.y) * suavizar
+    const massaAnda = moverMassa(dt)
 
     // Na entrada, um quadro a cada atualização da tela, no passo das animações da página. A página
     // tira o véu dela quando sabe que o túnel já está na tela: o aviso vai no segundo quadro, quando
     // o primeiro com certeza já chegou lá.
     if (entrada) {
+      // (a massa do mouse volta aos poucos depois, com o site já no lugar)
+      presenca = 0
       const u = Math.min(1, Math.max(0, (instante - entrada.inicio) / entrada.duracao))
       desenhar(s, u)
       ultimoDesenho = agora
@@ -528,12 +557,47 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
     }
 
     // com movimento, um quadro a cada atualização da tela; parado, 30 por segundo bastam
-    const movendo = rolou || atividade !== 0 || agora - ultimoPonteiro < 400
+    const movendo = rolou || atividade !== 0 || massaAnda || agora - ultimoPonteiro < 400
     if (movendo || agora - ultimoDesenho >= 1000 / 30 - 4) {
       ultimoDesenho = agora
       desenhar(s)
     }
     avaliarDesempenho(intervalo)
+  }
+
+  /**
+   * A massa do mouse segue o ponteiro com inércia, aparece e some com ele e se agita com a
+   * velocidade dele (veja MASSA). Devolve se ela ainda está a caminho (do ponteiro ou de aparecer ou
+   * sumir): até chegar, um quadro a cada atualização da tela. A agitação assenta devagar, e para isso
+   * os 30 quadros por segundo da página parada bastam.
+   */
+  function moverMassa(dt: number): boolean {
+    if (Number.isNaN(massa.x)) {
+      if (!ponteiro.dentro) return false
+      massa.x = ponteiro.x
+      massa.y = ponteiro.y
+    }
+    const antesX = massa.x
+    const antesY = massa.y
+    const seguir = 1 - Math.exp(-dt / MASSA.seguir)
+    massa.x += (ponteiro.x - massa.x) * seguir
+    massa.y += (ponteiro.y - massa.y) * seguir
+    // (o finzinho não se vê)
+    const chegou = Math.hypot(ponteiro.x - massa.x, ponteiro.y - massa.y) < 0.05
+    if (chegou) {
+      massa.x = ponteiro.x
+      massa.y = ponteiro.y
+    }
+    const metaPresenca = ponteiro.dentro ? 1 : 0
+    presenca += (metaPresenca - presenca) * (1 - Math.exp(-dt / (metaPresenca > presenca ? MASSA.aparece : MASSA.some)))
+    const apareceu = Math.abs(metaPresenca - presenca) < 0.002
+    if (apareceu) presenca = metaPresenca
+    if (dt > 0) {
+      const meta = Math.min(1, Math.hypot(massa.x - antesX, massa.y - antesY) / dt / MASSA.rapida)
+      agito += (meta - agito) * (1 - Math.exp(-dt / (meta > agito ? MASSA.agita : MASSA.assenta)))
+      if (meta === 0 && agito < 0.002) agito = 0
+    }
+    return !chegou || !apareceu
   }
 
   function laco(agora: number) {
@@ -617,8 +681,15 @@ export function criarMotor(canvas: Tela, cortina: Tela, tampa: Tela, inicio: Ini
           receberRolagem(m.s, m.t, m.salto ?? false)
           break
         case 'ponteiro':
-          alvo.x = m.x
-          alvo.y = m.y
+          if (tamanho) {
+            alvo.x = m.x / tamanho.largura - 0.5
+            alvo.y = m.y / tamanho.altura - 0.5
+          }
+          // o mouse que volta à janela, com a massa já sumida, não vem arrastando ela de onde saiu
+          if (m.dentro && !ponteiro.dentro && presenca < 0.05) massa.x = massa.y = Number.NaN
+          ponteiro.x = m.x
+          ponteiro.y = m.y
+          ponteiro.dentro = m.dentro
           ultimoPonteiro = performance.now()
           break
         case 'cores':

@@ -62,6 +62,14 @@ export interface Quadro {
   rastro: number
   /** A entrada (a volta ao topo, por dentro do buraco negro), ou null fora dela. */
   entrada: Entrada | null
+  /**
+   * A massa do mouse (veja motor.ts): onde ela está, quanto aparece (0 a desliga) e quanto o mouse
+   * se mexe (de 0 a 1).
+   */
+  cursorX: number
+  cursorY: number
+  cursor: number
+  agito: number
   linha: Rgba
   tinta: Rgb
   texto: Rgb
@@ -145,6 +153,7 @@ const UNIFORMS_CENA = [
   'uDominio',
   'uDisco',
   'uNevoa',
+  'uCursor',
 ] as const
 const UNIFORMS_COMPOSICAO = [...UNIFORMS_CENA, 'uMargem'] as const
 const UNIFORMS_ENTRADA = [...UNIFORMS_CENA, 'uEntrada', 'uVista', 'uEscalaVista', 'uTorcao', 'uJanela'] as const
@@ -388,6 +397,7 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
     gl.uniform3f(u.uTexto, ...q.texto)
     gl.uniform3f(u.uFundo, ...q.fundo)
     gl.uniform1f(u.uEscuro, q.escuro ? 1 : 0)
+    gl.uniform4f(u.uCursor, q.cursorX, q.cursorY, q.cursor, q.agito)
   }
 
   return {

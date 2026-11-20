@@ -667,14 +667,19 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     enviarRolagem(rolagemAnterior, performance.now(), true)
   })
 
+  // O ponteiro vai para o motor: a câmera o acompanha de leve, e o mouse é uma pequena massa que
+  // curva a malha em volta dele (veja cena.glsl). Um toque (num aparelho com mouse e tela de toque)
+  // não é o mouse passando, e o mouse que sai da janela leva a massa junto.
   const aoMoverPonteiro = (evento: PointerEvent) => {
-    ponte.enviar({
-      tipo: 'ponteiro',
-      x: evento.clientX / window.innerWidth - 0.5,
-      y: evento.clientY / window.innerHeight - 0.5,
-    })
+    ponte.enviar({ tipo: 'ponteiro', x: evento.clientX, y: evento.clientY, dentro: evento.pointerType !== 'touch' })
   }
-  if (ponteiroFino.matches) window.addEventListener('pointermove', aoMoverPonteiro, { passive: true })
+  const aoSairPonteiro = (evento: PointerEvent) => {
+    if (evento.relatedTarget === null) ponte.enviar({ tipo: 'ponteiro', x: evento.clientX, y: evento.clientY, dentro: false })
+  }
+  if (ponteiroFino.matches) {
+    window.addEventListener('pointermove', aoMoverPonteiro, { passive: true })
+    document.addEventListener('pointerout', aoSairPonteiro, { passive: true })
+  }
 
   void aposEntrada(hero).then(() => {
     if (desligado) return
@@ -702,6 +707,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     pararDeOuvirVolta()
     pararDeOuvirMergulho()
     window.removeEventListener('pointermove', aoMoverPonteiro)
+    document.removeEventListener('pointerout', aoSairPonteiro)
     desligarAbsorcao()
     rolagemSuave.destruir()
     ponte.destruir()

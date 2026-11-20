@@ -24,6 +24,16 @@ uniform float uEscuro;      // 1 no tema escuro, 0 no claro
 uniform vec4 uDominio;      // o trecho do plano da imagem coberto pelo mapa (rs, y para cima)
 uniform sampler2D uDisco;   // o disco neste quadro, pré-multiplicado (veja disco.frag)
 uniform sampler2D uNevoa;   // a névoa do mapa: em R a parte alta, em G a baixa (veja nevoa.frag)
+uniform vec4 uCursor;       // o mouse: onde a massa dele está (px CSS, y para baixo), quanto ele aparece (0 desliga) e quanto se mexe (de 0 a 1)
+
+// O mouse é uma pequena massa (veja motor.ts): curva a malha em volta dele, como o buraco negro, e
+// a revela num círculo. O núcleo amacia a lente no meio (sem sombra nem dobra: a malha ali só
+// aparece ampliada), a força é a fração do núcleo ao quadrado (abaixo de 1, a malha não se dobra
+// sobre si mesma), e a lente some até o alcance. Medidas em px CSS.
+const float CURSOR_NUCLEO = 46.0;
+const float CURSOR_FORCA = 0.72;
+const float CURSOR_ALCANCE = 190.0;
+const float CURSOR_RAIO = 230.0;   // até onde a malha aparece em volta dele
 
 // A cena no ponto p (px CSS, y para baixo), pré-multiplicada. `escala` são os pixels da tela por px
 // CSS da cena: as bordas finas (as linhas da malha, a da sombra) ficam com um pixel da tela.
@@ -42,6 +52,15 @@ vec4 cena(vec2 p, float escala) {
     float desvio = k / max(rp - uRaio, 1e-3) * sino(rp, uRaio * 9.0);
     fonte -= d / max(rp, 1e-3) * desvio;
   }
+  // A lente do mouse soma o desvio dela ao do buraco negro (as duas massas no mesmo plano).
+  vec2 dc = p - uCursor.xy;
+  float rc = length(dc);
+  float cursor = uCursor.z;
+  if (cursor > 0.0) {
+    float nucleo2 = CURSOR_NUCLEO * CURSOR_NUCLEO;
+    float desvioC = CURSOR_FORCA * nucleo2 * rc / (rc * rc + nucleo2) * sino(rc, CURSOR_ALCANCE);
+    fonte -= dc / max(rc, 1e-3) * desvioC * cursor;
+  }
   vec2 g = (fonte + vec2(0.0, uDesloc) - vec2(uMalhaX + 0.5, 0.5)) / uCelula;
   vec2 fw = max(fwidth(g), vec2(1e-6));
   vec2 dist = abs(fract(g + 0.5) - 0.5) / fw;
@@ -55,8 +74,24 @@ vec4 cena(vec2 p, float escala) {
   float mascara = clamp(1.0 - length(m) / 0.72, 0.0, 1.0);
   if (temBuraco) mascara = max(mascara, 0.85 * (1.0 - smoothstep(uRaio * 3.0, uRaio * 8.0, rp)));
   float reforco = temBuraco ? 1.0 + 1.4 * sino(rp, uRaio * 4.5) : 1.0;
+  // Em volta do mouse: a malha aparece num círculo, mais forte perto dele e enquanto ele se mexe,
+  // e tinge-se com a cor de destaque.
+  float perto = 0.0;
+  vec3 corDaLinha = uLinha.rgb;
+  if (cursor > 0.0) {
+    float viva = 0.6 + 0.4 * uCursor.w;
+    perto = cursor * (1.0 - smoothstep(CURSOR_RAIO * 0.2, CURSOR_RAIO, rc));
+    mascara = max(mascara, 0.95 * perto * viva);
+    reforco *= 1.0 + 2.4 * cursor * sino(rc, CURSOR_RAIO * 0.42) * viva;
+    corDaLinha = mix(uLinha.rgb, uTinta, 0.85 * perto);
+  }
   float aMalha = linha * mascara * 0.7 * uLinha.a * reforco;
-  vec4 cor = vec4(uLinha.rgb * aMalha, aMalha);
+  vec4 cor = vec4(corDaLinha * aMalha, aMalha);
+  // No tema escuro, um brilho fraco da cor de destaque em volta da massa do mouse.
+  if (cursor > 0.0 && uEscuro > 0.5) {
+    vec3 luz = uTinta * (0.06 + 0.05 * uCursor.w) * sino(rc, CURSOR_NUCLEO * 2.8) * cursor;
+    cor = sobre(vec4(luz, max(luz.r, max(luz.g, luz.b))), cor);
+  }
 
   // ---------------- buraco negro ----------------
   if (temBuraco) {

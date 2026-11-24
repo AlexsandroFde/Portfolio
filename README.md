@@ -349,7 +349,7 @@ A vista é a de quem cai (`queda.frag`):
 - a luz se separa em cores nas bordas, como numa lente forte;
 - a visão se fecha num túnel, escurecendo as bordas, e no tema escuro a luz de fora fica mais azul e mais forte;
 - perto do horizonte, a vista treme;
-- o cabeçalho é puxado para dentro e some.
+- o cabeçalho é puxado para dentro e some, e o botão do som, no canto, também: anda na direção do buraco negro, estica-se e some.
 
 A cena é desenhada numa textura um pouco maior que a tela, e a queda só a lê em outros pontos: nenhum raio é traçado, e o mergulho custa no motor o mesmo que o resto da página. Perto do fim, a tela passa a mirar acima do centro da sombra, para a faixa do disco que a cruza sair por baixo e sobrar só o preto, e um véu preto preso à rolagem apaga o que sobra, cabeçalho incluído.
 
@@ -387,7 +387,7 @@ A lógica fica em `mergulho.ts` (o véu, a janela sem o motor, o cabeçalho e a 
 
 ### O som
 
-O site também tem som, desligado até alguém pedir. O botão do alto-falante, no cabeçalho (no celular, dentro do menu), liga e desliga, e a escolha fica guardada para a próxima visita. Nada é baixado para tocar: tudo é sintetizado na hora com a Web Audio API, a partir de osciladores, ruído e filtros, como o buraco negro sai dos shaders.
+O site também tem som, desligado até alguém pedir. O botão fica no canto de baixo da tela, discreto, e é uma onda: desligado, uma linha reta; tocando, ela ondula com a música que sai, cresce com o volume, pulsa com o pulso e salta com o chirp de cada clique. No mergulho, o buraco negro o engole junto com o cabeçalho, e ele volta com o site. A escolha fica guardada para a próxima visita. Nada é baixado para tocar: tudo é sintetizado na hora com a Web Audio API, a partir de osciladores, ruído e filtros, como o buraco negro sai dos shaders.
 
 O fundo é um coro, no clima da versão lenta e com eco de *Choral Chambers*, de Christopher Larkin (da trilha de *Hollow Knight: Silksong*), que serviu de referência: ré menor, na mesma afinação dela, vozes escuras, acordes longos que se fundem uns nos outros e um eco de catedral. E, como ela, a música começa de um jeito e termina de outro: a faixa abre só com as vozes do meio, ganha um grave fundo e cresce até o fim, mais forte, mais clara e com notas que pulsam. Aqui, quem a faz crescer é a leitura. Os acordes, a ordem deles, as vozes e a melodia são próprios.
 
@@ -428,6 +428,8 @@ O som acompanha o que se vê. Com o buraco negro parado no alto da página (movi
 As camadas novas não esperam o compasso: entram aos poucos com a rolagem, cada uma no seu trecho da página (`ENTRA`). O grave fundo é um órgão de pedal (um oscilador com seis harmônicos, para se ouvir também em alto-falantes pequenos, que quase não tocam a fundamental), uma oitava abaixo do baixo do coro, e anda com ele. O descante, a quinta voz, desce do lá agudo e sobe de volta a ele ao longo do ciclo, mudando junto com o soprano. O pulso são cordas graves repetindo a nota do grave, uma oitava acima, a cada batida e, no fim, a cada meia batida, com a oitava de cima no contratempo. Quando um compasso termina, as vozes que vão por passo à nota seguinte já chegam a ela com o conjunto que sai, e as que saltam, saltam com o que entra: a nota de passagem não fica soando contra a seguinte. Ao longo da página, a vogal se abre, o filtro do coro clareia de 1,4 a 3,2 kHz, e o fundo vai mais direto para a saída, com menos eco: a música chega mais perto.
 
 **A página não espera o som.** O áudio é feito numa thread própria do navegador. Da thread principal só saem alvos para ele seguir (os volumes, o tom, a vogal, os filtros), e só enquanto a rolagem anda: uns 9 µs por quadro. Os compassos são agendados dois segundos adiante, de meio em meio segundo, cada um com as notas de todas as vozes, o grave e o pulso de uma vez (uns 0,1 ms por compasso). A volta ao topo é agendada inteira de uma vez, no relógio do áudio, para o mesmo instante do túnel: os engasgos da thread principal na hora do salto não a atrasam. Montar os sons, no clique que os liga, leva uns 12 ms; gerar o eco e entregá-lo ao navegador custa uns 40 ms, e isso fica para uma tarefa à parte, logo depois: o coro começa na hora, e o eco chega uma fração de segundo depois.
+
+**O botão.** O som passa por um medidor (um `AnalyserNode`, que o deixa como está) a caminho da saída, e o botão pergunta a ele o volume dos últimos ~20 ms a cada desenho. A onda são duas camadas de senoides presas nas pontas, a da frente e um eco mais fraco, em outro ritmo; o volume abre as duas, sobe depressa e desce devagar, e a onda corre mais rápido com a música cheia. Ela é redesenhada uns 50 vezes por segundo (uns 0,1 ms cada, só enquanto se mexe); desligada e parada, ou com a aba escondida, nada roda. Com o movimento reduzido, ligada, ela fica parada. Ele fica por cima do conteúdo e do cabeçalho, mas abaixo da volta ao topo e do véu do mergulho. No mergulho, é puxado para o meio da tela, para onde o buraco negro desce, numa animação presa à rolagem, como a do cabeçalho: anda um terço do caminho, estica-se nessa direção, afina e some na metade do mergulho; daí em diante, invisível, não responde mais ao mouse nem ao teclado. Na volta, ele está na foto do topo do site e chega com ele (sem a foto, chega com o cabeçalho e o conteúdo, crescendo a partir do meio da tela).
 
 **No celular.** Num celular, ou num aparelho com até quatro núcleos, o coro fica mais leve: um oscilador por voz (também no pulso), sem o fôlego das vozes, e um eco de 3,5 s. No computador, o áudio todo ocupa uns 14% de um núcleo; no modo leve, uns 10%.
 
@@ -485,7 +487,7 @@ Os valores do efeito ficam em constantes com nomes em português, nos arquivos d
 | `faixa.ts`        | `esmaecimento`                          | O esmaecimento ao longo da faixa                                                    |
 |                   | `HORIZONTE`                             | A borda da sombra                                                                   |
 | `mergulho.ts`     | `VEU`                                   | Quando o véu escurece a tela                                                        |
-|                   | `CABECALHO`                             | Quando o cabeçalho é puxado                                                         |
+|                   | `CABECALHO` e `FLUTUANTES`              | Quando o cabeçalho e o botão do som são puxados, e quanto o botão anda até sumir    |
 | `motor.ts`        | `RASTRO`                                | A força dos rastros da queda                                                        |
 |                   | `vistaNaQueda`                          | A força de cada parte da vista de quem cai, na queda                                |
 |                   | `MASSA`                                 | A inércia da massa do mouse, quanto ela leva para aparecer e sumir, e a agitação    |

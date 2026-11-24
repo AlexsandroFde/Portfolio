@@ -68,11 +68,22 @@ export interface Queda {
   entrar(inicio: number, duracao: number): { comFoto: boolean; cobriu: Promise<boolean>; chegou: Promise<void> }
 }
 
+/**
+ * Uma volta ao topo, para quem a acompanha (o som, veja lib/som): quando o site começa a chegar (ms
+ * da linha do tempo da página), por quanto tempo (ms) e se é só o fade do movimento reduzido.
+ */
+export interface Volta {
+  inicio: number
+  duracao: number
+  soFade: boolean
+}
+
 let trecho: Trecho | null = null
 let queda: Queda | null = null
 const ouvintes = new Set<() => void>()
 const medidos = new Set<() => void>()
 const quedas = new Set<() => void>()
+const voltas = new Set<(volta: Volta) => void>()
 
 /** O trecho da rolagem em que se mergulha, ou null se o mergulho não está no ar. */
 export function trechoDoMergulho(): Trecho | null {
@@ -92,6 +103,15 @@ export function quandoMedirMergulho(ouvinte: () => void): () => void {
 export function quandoVoltar(ouvinte: () => void): () => void {
   ouvintes.add(ouvinte)
   return () => ouvintes.delete(ouvinte)
+}
+
+/**
+ * Chama `ouvinte` a cada volta ao topo, logo que ela é marcada, com o instante e a duração dela.
+ * Devolve a função que para de chamar.
+ */
+export function quandoEntrar(ouvinte: (volta: Volta) => void): () => void {
+  voltas.add(ouvinte)
+  return () => voltas.delete(ouvinte)
 }
 
 /** O motor do buraco negro passa a desenhar a queda e o túnel da volta (ou deixa de, com null). */
@@ -240,6 +260,7 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   function entrar() {
     pular()
     const inicio = (document.timeline.currentTime as number) + ANTECEDENCIA_DA_ENTRADA
+    for (const ouvinte of voltas) ouvinte({ inicio, duracao: ENTRADA.duracao, soFade: false })
     // o véu segura o preto (por cima da animação que o prende à rolagem, que no topo o apaga)
     const segurar = veu.animate([{ opacity: 1 }, { opacity: 1 }], { duration: ENTRADA.duracao * 2, fill: 'both' })
     const motor = queda
@@ -273,6 +294,7 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
     // Com o movimento reduzido, só o fade: o véu, que no topo já não cobre nada, vem da tela preta
     // até sumir (esta animação, mais nova, vale por cima da que o prende à rolagem enquanto dura).
     pular()
+    for (const ouvinte of voltas) ouvinte({ inicio: document.timeline.currentTime as number, duracao: FADE, soFade: true })
     veu.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FADE, easing: DESACELERANDO }).finished.then(terminar, terminar)
   }
 

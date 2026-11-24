@@ -58,6 +58,7 @@ O que dá identidade ao site é o fundo. No lugar de uma imagem parada, há um b
 - **O conteúdo cai no buraco negro.** Cada bloco que sobe até o alto da tela é puxado para dentro dele e se estica numa tira contínua, a espaguetificação. Rolando para cima, ele volta pelo mesmo caminho.
 - **Um mergulho depois do rodapé.** A página não acaba no fim: você cai no buraco negro, e o topo do site chega do outro lado, por uma janela redonda.
 - **O cursor tem gravidade.** O mouse é uma pequena massa que curva a malha do fundo em volta dele, com a mesma lente do buraco negro.
+- **Um clique faz ondas.** Cada clique, ou toque, solta uma onda gravitacional que corre pela malha, esticando e apertando o espaço por onde passa.
 - **Fluido mesmo com a página ocupada.** O buraco negro é desenhado num Web Worker, e as fatias da absorção são movidas pelo próprio navegador, junto com a rolagem.
 - **Bilíngue de ponta a ponta.** Português e inglês com o mesmo conteúdo, o TypeScript cobrando as duas línguas em cada texto e o HTML de cada versão pré-renderizado no build.
 - **Currículo pronto para ATS.** O PDF é gerado a cada build a partir dos mesmos dados do site, numa coluna e com texto selecionável.
@@ -211,6 +212,18 @@ O mouse é uma pequena massa que curva a malha em volta dele, com a mesma lente 
 A massa segue o ponteiro com um pouco de inércia (o que também esconde o atraso de o ponteiro chegar da thread principal), fica mais forte enquanto ele se mexe e mais fraca com ele parado, e some quando o mouse sai da janela e no começo do mergulho. No tema escuro, as linhas perto dela puxam para a cor de destaque, com um brilho fraco em volta; no claro, ficam no traço de nanquim.
 
 Quem a desenha é o motor, no mesmo quadro do buraco negro: a página só manda a posição do ponteiro, e o cursor do sistema continua o de sempre. Só o mouse tem massa (um toque não), e com o movimento reduzido ela não aparece.
+
+### Um clique solta uma onda gravitacional
+
+Cada clique solta uma onda gravitacional do ponto em que o botão desceu: um anel que corre para fora, a uns 950 px por segundo, revela a malha por onde passa, na cor de destaque e com um fio de luz fraco na frente, e some depois de quase dois segundos, já do outro lado de uma tela grande.
+
+A malha não ondula como água. Ao passar, a onda estica o espaço num sentido e o aperta no outro, alternando a cada crista, como as ondas gravitacionais de verdade (a polarização "+"): na horizontal e na vertical em relação ao clique, a malha anda para fora e para dentro; nas diagonais, de lado. Ela também enfraquece com a distância, a energia espalhada num anel cada vez maior.
+
+- **No celular também.** Um toque solta a onda quando o dedo sai da tela sem ter arrastado: o dedo que rola a página não faz ondas.
+- **Até quatro ao mesmo tempo.** Com cliques seguidos, a onda mais velha dá lugar à nova.
+- **Só na página.** As ondas somem no começo do mergulho, como a massa do mouse, e não aparecem com o movimento reduzido nem com o buraco negro parado.
+
+Como a massa do mouse, ela é desenhada pelo motor (`cena.glsl`): a página só manda a posição e o instante do clique, e cada pixel soma o deslocamento das ondas que passam por ele. Longe dos anéis, o shader nem faz a conta.
 
 ### A absorção
 
@@ -371,7 +384,7 @@ A lógica fica em `mergulho.ts` (o véu, a janela sem o motor, o cabeçalho e a 
 
 ### Movimento reduzido, aparelhos lentos e alternativas
 
-- **Movimento reduzido.** Quem ativou "reduzir movimento" no sistema vê o buraco negro parado no alto da página, sem absorção e sem a massa do mouse, e fica com a rolagem do navegador. No fim da página, o topo volta só com um fade, e a troca entre as versões do site é direta.
+- **Movimento reduzido.** Quem ativou "reduzir movimento" no sistema vê o buraco negro parado no alto da página, sem absorção, sem a massa do mouse e sem as ondas dos cliques, e fica com a rolagem do navegador. No fim da página, o topo volta só com um fade, e a troca entre as versões do site é direta.
 - **Aparelho lento.** A resolução cai sozinha em aparelhos que não dão conta do desenho, julgado pelo próprio motor, fora da thread principal. Num aparelho lento demais para o desenho ou para a absorção, o buraco negro também fica parado no alto da página, sem absorção.
 - **Como o aparelho é julgado.** Conta o quadro típico de cada segundo (a mediana), e não a média: engasgos isolados, como os de um ou dois segundos que o Windows às vezes tem ao reorganizar a composição da tela quando um vídeo começa a tocar, não desligam o efeito. Na thread principal, o limite é de 12 quadros por segundo: as fatias são presas à rolagem com pelo menos três décimos de segundo de antecedência, e um quadro a cada 80 ms ainda as põe no lugar a tempo (com o limite em 25, o efeito parava ao rolar um pouco mais rápido pelos projetos, nos segundos em que a placa de vídeo fica ocupada).
 - **Sem WebGL.** Sem WebGL 2, fica a malha em CSS de antes. Sem WebGL ou num aparelho lento, o buraco negro não mergulha, mas o véu escurece a tela do mesmo jeito e a janela se abre num furo dele, sem o túnel.
@@ -415,7 +428,9 @@ Os valores do efeito ficam em constantes com nomes em português, nos arquivos d
 | `motor.ts`        | `RASTRO`                                | A força dos rastros da queda                                                        |
 |                   | `vistaNaQueda`                          | A força de cada parte da vista de quem cai, na queda                                |
 |                   | `MASSA`                                 | A inércia da massa do mouse, quanto ela leva para aparecer e sumir, e a agitação    |
+|                   | `ONDA`                                  | Quanto dura a onda de um clique e quando ela começa a enfraquecer                   |
 | `cena.glsl`       | `CURSOR_*`                              | A lente e o círculo da massa do mouse                                               |
+|                   | `ONDA_*`                                | A velocidade, as cristas, a força e o fio de luz das ondas dos cliques              |
 | `entrada.ts`      | `ENTRADA`                               | A duração da entrada, de que tamanho o site aparece lá dentro e a margem da janela |
 |                   | `vistaDaEntrada`                        | O quanto o site vem arredondado e a vista de quem cai na entrada                    |
 | `src/index.css`   | `.mergulho`                             | O tamanho do espaço depois do rodapé                                                |

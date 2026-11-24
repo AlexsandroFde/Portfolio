@@ -72,6 +72,8 @@ export type ParaOMotor =
    * toque, a massa do mouse some.
    */
   | { tipo: 'ponteiro'; x: number; y: number; dentro: boolean }
+  /** Um clique (ou um toque sem arrastar) em `x`, `y` (px CSS, na tela), no instante `t` (ms desde a época): solta uma onda. */
+  | { tipo: 'onda'; x: number; y: number; t: number }
   | { tipo: 'cores'; cores: Cores }
   /** Preso: o buraco negro fica parado no alto da página, sem animação (movimento reduzido, aparelho lento). */
   | { tipo: 'modo'; preso: boolean }
@@ -184,6 +186,13 @@ function vistaNaQueda(m: number, rastro: number): Vista {
 const MASSA = { seguir: 0.075, aparece: 0.25, some: 0.45, rapida: 900, agita: 0.08, assenta: 1.4 }
 /** Até que fração do mergulho a massa do mouse some: na queda, a vista é de quem cai. */
 const MASSA_NO_MERGULHO = 0.2
+/**
+ * As ondas gravitacionais dos cliques (veja cena.glsl): quantas cabem na tela ao mesmo tempo (a mais
+ * velha dá lugar à nova; o mesmo número de cena.glsl), quanto tempo (s) cada uma dura e a partir de
+ * quando (s) ela começa a enfraquecer. A 950 px/s, ela atravessa uma tela grande antes de sumir.
+ */
+const ONDAS = 4
+const ONDA = { dura: 1.8, enfraquece: 0.9 }
 
 interface Amostra {
   s: number
@@ -286,6 +295,9 @@ export function criarMotor(
   const massa = { x: Number.NaN, y: Number.NaN }
   let presenca = 0
   let agito = 0
+  // As ondas dos cliques (veja ONDA): de onde saíram (px CSS, na tela) e quando (ms desde a época).
+  let ondas: { x: number; y: number; t: number }[] = []
+  const ondasDoQuadro = new Float32Array(ONDAS * 4)
 
   // desempenho, medido em janelas de ~1 s de quadros (os intervalos entre eles, em s)
   let janelaTempo = 0
@@ -474,7 +486,20 @@ export function criarMotor(
     const malhaX = (tamanho.largura - palco.celula) / 2
     const mergulho = preso || u !== null ? 0 : progressoDoMergulho(palco, rolagem)
     // A massa do mouse fica na página: some no começo do mergulho, e na entrada não existe.
-    const cursor = preso || u !== null || Number.isNaN(massa.x) ? 0 : presenca * (1 - suave(0, MASSA_NO_MERGULHO, mergulho))
+    const naPagina = preso || u !== null ? 0 : 1 - suave(0, MASSA_NO_MERGULHO, mergulho)
+    const cursor = Number.isNaN(massa.x) ? 0 : presenca * naPagina
+    // As ondas também ficam na página, e somem junto com a massa do mouse.
+    ondasDoQuadro.fill(0)
+    if (naPagina > 0) {
+      const instante = performance.timeOrigin + performance.now()
+      ondas.forEach((onda, i) => {
+        const idade = Math.max(0, (instante - onda.t) / 1000)
+        ondasDoQuadro[i * 4] = onda.x
+        ondasDoQuadro[i * 4 + 1] = onda.y
+        ondasDoQuadro[i * 4 + 2] = idade
+        ondasDoQuadro[i * 4 + 3] = naPagina * (1 - suave(ONDA.enfraquece, ONDA.dura, idade))
+      })
+    }
     // A vista de quem cai: na queda e, já dentro do buraco negro, na entrada.
     let vista: Vista | null = null
     let quadroDeEntrada: Entrada | null = null
@@ -508,6 +533,7 @@ export function criarMotor(
       cursorY: cursor > 0 ? massa.y : 0,
       cursor,
       agito,
+      ondas: ondasDoQuadro,
       ...cores,
     })
     // Na entrada com a foto, o quadro vai também para a tela de cima, por cima da página.
@@ -626,6 +652,8 @@ export function criarMotor(
     atual.x += (alvo.x - atual.x) * suavizar
     atual.y += (alvo.y - atual.y) * suavizar
     const massaAnda = moverMassa(dt)
+    // as ondas que já sumiram saem da lista
+    if (ondas.length > 0) ondas = ondas.filter((onda) => instante - onda.t < ONDA.dura * 1000)
 
     // Na entrada, um quadro a cada atualização da tela, no passo das animações da página. A página
     // tira o véu dela quando sabe que o túnel já está na tela: o aviso vai no segundo quadro, quando
@@ -661,7 +689,7 @@ export function criarMotor(
     }
 
     // com movimento, um quadro a cada atualização da tela; parado, 30 por segundo bastam
-    const movendo = rolou || atividade !== 0 || massaAnda || agora - ultimoPonteiro < 400
+    const movendo = rolou || atividade !== 0 || massaAnda || ondas.length > 0 || agora - ultimoPonteiro < 400
     if (movendo || agora - ultimoDesenho >= 1000 / 30 - 4) {
       ultimoDesenho = agora
       desenhar(s)
@@ -801,12 +829,19 @@ export function criarMotor(
           ponteiro.dentro = m.dentro
           ultimoPonteiro = performance.now()
           break
+        case 'onda':
+          // parado, o buraco negro não anima nada
+          if (preso) break
+          ondas.push({ x: m.x, y: m.y, t: m.t })
+          if (ondas.length > ONDAS) ondas.shift()
+          break
         case 'cores':
           cores = m.cores
           desenhada = Number.NaN
           break
         case 'modo':
           preso = m.preso
+          if (preso) ondas = []
           desenhada = Number.NaN
           break
         case 'entrada': {

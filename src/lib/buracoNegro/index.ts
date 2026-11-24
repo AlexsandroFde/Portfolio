@@ -844,6 +844,31 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     document.addEventListener('pointerout', aoSairPonteiro, { passive: true })
   }
 
+  // Um clique solta uma onda gravitacional na malha (veja cena.glsl), na hora em que o botão desce.
+  // Num toque, só quando o dedo sai sem ter arrastado: o dedo que rola a página não solta onda.
+  let toque: { id: number; x: number; y: number; t: number } | null = null
+  const soltarOnda = (evento: PointerEvent) => {
+    if (preso || desligado) return
+    ponte.enviar({ tipo: 'onda', x: evento.clientX, y: evento.clientY, t: performance.timeOrigin + evento.timeStamp })
+  }
+  const aoApertar = (evento: PointerEvent) => {
+    if (!evento.isPrimary) {
+      toque = null
+      return
+    }
+    if (evento.pointerType === 'touch') toque = { id: evento.pointerId, x: evento.clientX, y: evento.clientY, t: evento.timeStamp }
+    else if (evento.button === 0) soltarOnda(evento)
+  }
+  const aoSoltarToque = (evento: PointerEvent) => {
+    if (!toque || evento.pointerId !== toque.id) return
+    const { x, y, t } = toque
+    toque = null
+    if (evento.type === 'pointerup' && evento.timeStamp - t < 500 && Math.hypot(evento.clientX - x, evento.clientY - y) < 10) soltarOnda(evento)
+  }
+  window.addEventListener('pointerdown', aoApertar, { passive: true })
+  window.addEventListener('pointerup', aoSoltarToque, { passive: true })
+  window.addEventListener('pointercancel', aoSoltarToque, { passive: true })
+
   void aposEntrada(hero).then(() => {
     if (desligado) return
     comecou = true
@@ -873,6 +898,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     pararDeOuvirMergulho()
     window.removeEventListener('pointermove', aoMoverPonteiro)
     document.removeEventListener('pointerout', aoSairPonteiro)
+    window.removeEventListener('pointerdown', aoApertar)
+    window.removeEventListener('pointerup', aoSoltarToque)
+    window.removeEventListener('pointercancel', aoSoltarToque)
     desligarAbsorcao()
     rolagemSuave.destruir()
     ponte.destruir()

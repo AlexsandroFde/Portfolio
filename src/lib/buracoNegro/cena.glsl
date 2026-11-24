@@ -25,6 +25,20 @@ uniform vec4 uDominio;      // o trecho do plano da imagem coberto pelo mapa (rs
 uniform sampler2D uDisco;   // o disco neste quadro, pré-multiplicado (veja disco.frag)
 uniform sampler2D uNevoa;   // a névoa do mapa: em R a parte alta, em G a baixa (veja nevoa.frag)
 uniform vec4 uCursor;       // o mouse: onde a massa dele está (px CSS, y para baixo), quanto ele aparece (0 desliga) e quanto se mexe (de 0 a 1)
+const int ONDAS = 4;        // quantas ondas cabem na tela ao mesmo tempo (o mesmo número de motor.ts)
+uniform vec4 uOndas[ONDAS]; // as ondas gravitacionais dos cliques: de onde saíram (px CSS, y para baixo), a idade (s) e a força (0 desliga)
+
+// Cada clique solta uma onda gravitacional (veja motor.ts): um anel que corre para fora e, ao passar,
+// estica a malha num sentido e a aperta no outro, alternando, como uma onda de verdade faz com o
+// espaço (a polarização "+": na horizontal e na vertical em relação ao clique, a malha anda para
+// fora e para dentro; nas diagonais, de lado). O anel revela a malha por onde passa e enfraquece com
+// a distância, a energia espalhada num anel cada vez maior. Medidas em px CSS e segundos.
+const float ONDA_VELOCIDADE = 950.0;
+const float ONDA_COMPRIMENTO = 52.0;   // de uma crista à outra
+const float ONDA_LARGURA = 40.0;       // o pacote: quantas cristas passam
+const float ONDA_AMPLITUDE = 9.0;      // o maior deslocamento da malha
+const float ONDA_ESPALHA = 220.0;      // a distância em que a amplitude cai a 1/√2
+const float ONDA_FIO = 10.0;           // a largura do fio de luz na frente do anel
 
 // O mouse é uma pequena massa (veja motor.ts): curva a malha em volta dele, como o buraco negro, e
 // a revela num círculo. O núcleo amacia a lente no meio (sem sombra nem dobra: a malha ali só
@@ -61,6 +75,26 @@ vec4 cena(vec2 p, float escala) {
     float desvioC = CURSOR_FORCA * nucleo2 * rc / (rc * rc + nucleo2) * sino(rc, CURSOR_ALCANCE);
     fonte -= dc / max(rc, 1e-3) * desvioC * cursor;
   }
+  // As ondas dos cliques somam o deslocamento delas; `frente` é o quanto um anel passa por aqui, e
+  // `fio`, o quanto a frente dele está bem aqui.
+  float frente = 0.0;
+  float fio = 0.0;
+  for (int i = 0; i < ONDAS; i++) {
+    vec4 o = uOndas[i];
+    if (o.w <= 0.0) continue;
+    vec2 dw = p - o.xy;
+    float rw = length(dw);
+    float x = rw - o.z * ONDA_VELOCIDADE;   // a distância à frente do anel (negativa: já passou)
+    if (abs(x) > ONDA_LARGURA * 3.0) continue;
+    // nasce do nada no ponto do clique e se espalha
+    float alcance = o.w * smoothstep(0.0, 48.0, rw) * inversesqrt(1.0 + rw / ONDA_ESPALHA);
+    float forca = sino(x, ONDA_LARGURA) * alcance;
+    float h = ONDA_AMPLITUDE * forca * sin(TAU * x / ONDA_COMPRIMENTO);
+    vec2 n = dw / max(rw, 1e-3);
+    fonte -= vec2(n.x, -n.y) * h;
+    frente = max(frente, forca);
+    fio = max(fio, sino(x, ONDA_FIO) * alcance);
+  }
   vec2 g = (fonte + vec2(0.0, uDesloc) - vec2(uMalhaX + 0.5, 0.5)) / uCelula;
   vec2 fw = max(fwidth(g), vec2(1e-6));
   vec2 dist = abs(fract(g + 0.5) - 0.5) / fw;
@@ -85,8 +119,19 @@ vec4 cena(vec2 p, float escala) {
     reforco *= 1.0 + 2.4 * cursor * sino(rc, CURSOR_RAIO * 0.42) * viva;
     corDaLinha = mix(uLinha.rgb, uTinta, 0.85 * perto);
   }
+  // Por onde o anel passa, a malha aparece, mais forte, na cor de destaque.
+  if (frente > 0.0) {
+    mascara = max(mascara, frente);
+    reforco *= 1.0 + 2.6 * frente;
+    corDaLinha = mix(corDaLinha, uTinta, frente);
+  }
   float aMalha = linha * mascara * 0.7 * uLinha.a * reforco;
   vec4 cor = vec4(corDaLinha * aMalha, aMalha);
+  // Na frente do anel, um fio de luz fraco na cor de destaque (no tema claro, só um traço da tinta).
+  if (fio > 0.0) {
+    float aFio = fio * (uEscuro > 0.5 ? 0.16 : 0.1);
+    cor = sobre(vec4(uTinta * aFio, aFio), cor);
+  }
   // No tema escuro, um brilho fraco da cor de destaque em volta da massa do mouse.
   if (cursor > 0.0 && uEscuro > 0.5) {
     vec3 luz = uTinta * (0.06 + 0.05 * uCursor.w) * sino(rc, CURSOR_NUCLEO * 2.8) * cursor;

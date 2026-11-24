@@ -93,6 +93,11 @@ export interface Quadro {
   cursorX: number
   cursorY: number
   cursor: number
+  /**
+   * As ondas dos cliques (veja motor.ts), quatro números cada: de onde saíram, a idade (s) e a força
+   * (0 desliga). Tem o tamanho de ONDAS (motor.ts e cena.glsl).
+   */
+  ondas: Float32Array
   agito: number
   linha: Rgba
   tinta: Rgb
@@ -184,6 +189,7 @@ const UNIFORMS_CENA = [
   'uDisco',
   'uNevoa',
   'uCursor',
+  'uOndas',
 ] as const
 const UNIFORMS_COMPOSICAO = [...UNIFORMS_CENA, 'uMargem'] as const
 const UNIFORMS_ENTRADA = [
@@ -458,6 +464,7 @@ export function criarRenderizador(canvas: Tela, densidade: number): Renderizador
     gl.uniform3f(u.uFundo, ...q.fundo)
     gl.uniform1f(u.uEscuro, q.escuro ? 1 : 0)
     gl.uniform4f(u.uCursor, q.cursorX, q.cursorY, q.cursor, q.agito)
+    gl.uniform4fv(u.uOndas, q.ondas)
   }
 
   return {

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useSyncExternalStore, type MouseEvent } from 'react'
 import { useT } from '../i18n/idioma.ts'
 import { ui } from '../i18n/interface.ts'
+import { cx } from '../lib/cx.ts'
+import { botaoFlutuante } from '../lib/estilos.ts'
 import { alternarSom, estadoDoSom, nivelDoSom, ouvirSom, type EstadoDoSom } from '../lib/som/index.ts'
 
 /** No HTML pré-renderizado, e até a página hidratar, o som está desligado. */
@@ -59,11 +61,11 @@ const RETA = ondaEm(CAMADAS.frente, 0, 0)
 
 /**
  * O botão do som (veja lib/som), sempre à vista no canto de baixo da tela, ao lado do link do outro
- * idioma, discreto: cinza, pequeno, sem borda. Ele é uma onda: desligado, uma linha reta; tocando, ela
- * ondula com a música que sai (cresce com o volume, pulsa com o pulso e corre mais depressa quando a
- * música está cheia). Com o som guardado como ligado, mas ainda à espera do primeiro clique na
- * página, ele fica reto: mostra o que se ouve. No mergulho, o buraco negro engole o canto, como ao
- * cabeçalho, e ele volta com o site (veja App.tsx e mergulho.ts).
+ * idioma, discreto: cinza, pequeno, sem borda e sem fundo. Ele é uma onda: desligado, uma linha reta;
+ * tocando, ela ondula com a música que sai (cresce com o volume, pulsa com o pulso e corre mais
+ * depressa quando a música está cheia). Com o som guardado como ligado, mas ainda à espera do primeiro
+ * clique na página, ele fica reto: mostra o que se ouve. No mergulho, o buraco negro engole o canto,
+ * como ao cabeçalho, e ele volta com o site (veja App.tsx e mergulho.ts).
  *
  * A onda é redesenhada só enquanto se mexe, e nunca com a aba escondida: desligada e parada, nada
  * roda.
@@ -160,7 +162,7 @@ export function SoundToggle() {
       type="button"
       data-som=""
       onClick={onClick}
-      className="som-flutuante print-hidden h-9 w-12 place-items-center rounded-full bg-bg/60 text-subtle transition-[color,background-color,scale] duration-300 hover:bg-surface hover:text-fg active:scale-95"
+      className={cx(botaoFlutuante, 'som-flutuante w-12')}
       aria-pressed={tocando}
       aria-label={t(ui.som.rotulo)}
       title={t(tocando ? ui.som.desligar : ui.som.ligar)}

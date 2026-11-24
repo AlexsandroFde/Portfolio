@@ -4,6 +4,14 @@
 export const botaoIcone =
   'grid size-9 place-items-center rounded-full text-muted transition-colors hover:bg-surface hover:text-fg'
 
+/**
+ * Os controles que flutuam no canto de baixo da tela (o outro idioma e o som): sem fundo nenhum, nem
+ * ao passar o mouse, que vira a mãozinha e escurece o texto e a onda. Sem `display`: o do som só
+ * aparece com JavaScript.
+ */
+export const botaoFlutuante =
+  'h-9 cursor-pointer place-items-center rounded-full text-muted transition-[color,scale] duration-300 hover:text-fg active:scale-95'
+
 const botao = 'inline-flex h-11 items-center gap-2 rounded-full px-5 text-sm font-medium transition-colors'
 
 /** Botão principal, preenchido. */

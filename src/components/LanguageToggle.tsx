@@ -2,6 +2,8 @@ import { idsDasSecoes } from '../data/secoes.ts'
 import { useActiveSection } from '../hooks/useActiveSection.ts'
 import { caminhos, useIdioma, useT, type Idioma } from '../i18n/idioma.ts'
 import { ui } from '../i18n/interface.ts'
+import { cx } from '../lib/cx.ts'
+import { botaoFlutuante } from '../lib/estilos.ts'
 
 const langAttr: Record<Idioma, string> = { pt: 'pt-BR', en: 'en' }
 
@@ -22,7 +24,7 @@ export function LanguageToggle() {
       hrefLang={langAttr[outro]}
       lang={langAttr[outro]}
       title={t(ui.outroIdioma.dica)}
-      className="label grid h-9 min-w-9 place-items-center rounded-full px-2 font-medium text-muted transition-colors hover:bg-surface hover:text-fg"
+      className={cx(botaoFlutuante, 'label grid min-w-9 px-2 font-medium')}
     >
       <span>
         {t(ui.outroIdioma.sigla)}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { profile } from '../data/profile.ts'
+import { idsDasSecoes, secoes as links } from '../data/secoes.ts'
 import { useActiveSection } from '../hooks/useActiveSection.ts'
 import { caminhos, useIdioma, useT, type Idioma } from '../i18n/idioma.ts'
 import { ui } from '../i18n/interface.ts'
@@ -7,16 +8,6 @@ import { cx } from '../lib/cx.ts'
 import { botaoIcone } from '../lib/estilos.ts'
 import { Close, Menu, Monogram } from './icons.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
-
-const links = [
-  { id: 'sobre', label: ui.nav.sobre },
-  { id: 'projetos', label: ui.nav.projetos },
-  { id: 'trajetoria', label: ui.nav.trajetoria },
-  { id: 'habilidades', label: ui.nav.habilidades },
-  { id: 'contato', label: ui.nav.contato },
-] as const
-
-const sectionIds = links.map((link) => link.id)
 
 const langAttr: Record<Idioma, string> = { pt: 'pt-BR', en: 'en' }
 
@@ -47,7 +38,7 @@ function OutroIdioma({ secao }: { secao: string | null }) {
 
 export function Header() {
   const t = useT()
-  const active = useActiveSection(sectionIds)
+  const active = useActiveSection(idsDasSecoes)
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 

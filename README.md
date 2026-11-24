@@ -397,13 +397,23 @@ O fundo é um coro, no clima da versão lenta e com eco de *Choral Chambers*, de
 | Nos projetos     | Entra um grave fundo, como um órgão, uma oitava abaixo do coro, e as vozes do meio começam a andar de um acorde para o outro                                                                           |
 | No meio          | Um descante canta por cima, o baixo anda, a vogal se abre e o ciclo de acordes passa a terminar na dominante, que pede a volta ao ré menor                                                               |
 | No fim           | Um pulso de cordas graves bate a cada batida (no contato, a cada meia batida), e por meio ciclo o chão vira o ré do buraco negro. A música está no ponto mais cheio, mais claro e mais perto             |
-| Rolando          | Para baixo, o conteúdo é sugado num sussurro afinado nas notas do coro; para cima, os jatos brilham, nas mesmas notas, três oitavas acima                                                              |
-| Num clique       | A onda gravitacional soa como as que os detectores ouviram: um chirp, um assobio que sobe cada vez mais depressa até a fusão e pousa numa nota do acorde, vindo do lado da tela em que se clicou         |
+| Rolando          | Para baixo, o conteúdo é sugado num sussurro afinado nas notas do coro; para cima, os jatos brilham, nas mesmas notas, duas oitavas acima                                                              |
+| Num clique       | A onda gravitacional soa como as que os detectores ouviram: um chirp, que uma voz do coro canta subindo cada vez mais depressa até a fusão e pousa numa nota do acorde, vindo do lado da tela em que se clicou |
 | No mergulho      | A música inteira desce de tom e fica mais lenta até quase parar, o ronco cresce, o ar corre mais rápido e tudo treme perto do horizonte. Quando o véu fecha a tela, o som acaba de uma vez, e só o eco se perde no escuro |
-| Na volta ao topo | Um tom de vidro acende com o ponto de luz, o site vem num sopro que sobe, e o coro volta mais agudo (o desvio para o azul), num acorde suspenso, que pousa no ré menor junto com o site: a música recomeça como no começo |
-| No resto         | Um tique de vidro ao passar o mouse por links e botões, que vira um arpejo numa lista, e duas notas na troca de tema: descendo para o escuro, subindo para o claro                                     |
+| Na volta ao topo | Uma voz aguda acende com o ponto de luz, o site vem num sopro que sobe, e o coro volta mais agudo (o desvio para o azul), num acorde suspenso, que pousa no ré menor junto com o site: a música recomeça como no começo |
+| No resto         | Uma nota curta do coro ao passar o mouse por links e botões, acima das outras vozes, que vira um arpejo numa lista, e duas notas cantadas na troca de tema: descendo para o escuro, subindo para o claro |
 
 **Tudo em harmonia.** Todo som com nota toca uma nota do acorde que o coro canta naquele momento: o tique, o chirp, as notas do tema, o ponto de luz e o acorde do pouso. Até os ruídos (a sucção, os jatos, o ar da queda e o sopro da volta) passam por filtros afinados nessas notas. As vozes que andam passam por notas da escala, nunca a meio tom de outra voz, e o zumbido em ré cede quando a dominante traz o dó sustenido.
+
+**Os efeitos, no coro.** Os efeitos com nota (o tique, o chirp, as notas do tema, o ponto de luz e o acorde do pouso) são cantados pelo próprio coro: vozes como as dele, dois osciladores dente de serra desafinados um contra o outro, com o vibrato do descante, pela mesma vogal e pelo mesmo brilho que ele tem naquela hora. A vogal dos efeitos é mais aberta, como a dos cantores nas notas agudas: com os formantes estreitos do coro, umas notas do tique soariam uns 10 dB mais baixas que outras; assim, ficam a uns 2 dB. Todos os efeitos soam na mesma catedral do fundo, com o eco na mesma medida, só um pouco mais perto, e crescem com a música: no topo, onde ela é quieta, soam a 60% do volume do fim. Os jatos ficaram uma oitava abaixo (três oitavas acima do coro, eram assobios por cima de tudo), e o baque do pouso segue seco, sem eco, para não embolar o grave.
+
+| Medida                                                           | Antes                              | Agora                             |
+| ---------------------------------------------------------------- | ---------------------------------- | --------------------------------- |
+| Brilho do tique (o centro do espectro; o do fundo, uns 450 Hz)    | 1645 Hz, com 48% acima de 1,5 kHz  | 720 Hz, com 1%                    |
+| Quanto do som dos efeitos cantados vem do eco (no fundo, de 36 a 63%) | 6 a 10%                        | uns 40%                           |
+| O chirp acima do fundo, no topo, no meio e no fim do conteúdo     | 15,8, 10,8 e 6,7 dB                | 8,6, 7,8 e 6,5 dB                 |
+| O tique acima do fundo, no topo, no meio e no fim do conteúdo     | 4,4, -1 e -5,2 dB                  | 3,4, 2,4 e 1,7 dB                 |
+| Brilho do som rolando para cima (com os jatos)                    | 914 Hz, com 22% acima de 1,5 kHz   | 520 Hz, com 2%                    |
 
 **No mergulho, o tempo passa devagar.** O desvio para o vermelho baixa o tom de tudo junto (o coro, o grave, o pulso, os efeitos e os filtros), e por isso nada sai do acorde. Na mesma medida, ele deixa a música mais lenta: perto do horizonte o tempo passa devagar, como na dilatação do tempo, e as batidas se espaçam de verdade. No horizonte, ela para. Ao longo da página não há desvio: longe do horizonte, ele seria pequeno demais para se ouvir, e o que muda ali é a música.
 
@@ -454,7 +464,7 @@ As camadas novas não esperam o compasso: entram aos poucos com a rolagem, cada 
 
 Depois, a forma: de 5 em 5 s, a faixa e uma gravação do percurso da página (do topo ao fim do conteúdo, o mergulho e a volta) foram medidas do mesmo jeito: a energia de cada banda, o brilho, quantas notas soam juntas e a mais aguda delas. Na faixa, o que fica abaixo de 80 Hz vai de -35 dB da energia total, na entrada, a -7 a -15 dB, depois que o grave chega; o que passa de 1,5 kHz, de uns -30 a uns -20 dB, e o volume cresce uns 11 dB até o ponto mais cheio. No site: de -34 a -6 a -9 dB abaixo de 80 Hz, de -29 a -20 dB acima de 1,5 kHz, e uns 9 dB a mais do topo ao fim. O pulso faz o volume de 90 a 700 Hz oscilar uns 18% na batida (sem ele, uns 2%). A partitura que o código gera foi conferida batida a batida, em cada seção: nenhuma nota de passagem, vizinha ou do descante fica a meio tom de outra voz (só a bordadura do soprano, o si bemol sobre o ré menor, um suspiro de propósito).
 
-Os volumes, trecho a trecho: o fundo fica em uns -35,5 dB no topo, -31,5 dB nos projetos, -29,5 dB no meio e -27 dB no fim do conteúdo; o chirp tem pico em -11 dB, o mergulho chega a -23 dB, e no silêncio do horizonte fica só o eco.
+Os volumes, trecho a trecho: o fundo fica em uns -35,5 dB no topo, -31,5 dB nos projetos, -29,5 dB no meio e -27 dB no fim do conteúdo; o chirp passa uns 6,5 a 9 dB por cima dele, o mergulho chega a -23 dB, e no silêncio do horizonte fica só o eco.
 
 </details>
 
@@ -514,8 +524,9 @@ Os valores do efeito ficam em constantes com nomes em português, nos arquivos d
 |                   | `SECOES` e `ENTRA`                      | O que muda em cada seção da música, e em que trecho da página cada camada entra     |
 |                   | `PEDAL`, `GRAVE_DO_PEDAL`, `SUB` e `CORO` | O pedal (e quanto do ré grave dele soa na página), o ré mais grave e as vozes: o desafino, o vibrato, o peso e as trocas |
 |                   | `ORGAO` e `PULSO`                       | O grave fundo e o pulso                                                             |
-|                   | `VOGAL`, `BRILHO` e `NO_TOPO`           | A vogal e o brilho do coro, e quanto do fundo soa no topo da página                 |
-|                   | `VOLUME`, `FUNDO`, `ECO` e `ECO_DURA`   | O volume de cada som, quanto do fundo vai direto e quanto ao eco, e quanto dura o eco |
+|                   | `VOGAL`, `CORPO`, `BRILHO` e `NO_TOPO`  | A vogal e o brilho do coro, e quanto do fundo soa no topo da página                 |
+|                   | `VOGAL_DOS_EFEITOS`                     | O quanto a vogal dos efeitos, que cantam acima do coro, é mais aberta que a dele    |
+|                   | `VOLUME`, `FUNDO`, `EFEITOS` e `ECO_DURA` | O volume de cada som, quanto do fundo vai direto e quanto ao eco, onde os efeitos soam (e quanto deles soa no topo) e quanto dura o eco |
 |                   | `DESVIO`                                | Quanto tudo desce de tom no mergulho, e quanto sobe na volta                        |
 |                   | `ONDA` e `TOQUE`                        | O chirp do clique e o arpejo do mouse                                               |
 |                   | `SILENCIO`                              | Em que parte do mergulho o som se cala                                              |

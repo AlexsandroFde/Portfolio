@@ -16,6 +16,21 @@ export type EstadoDoSom = 'desligado' | 'esperando' | 'tocando'
 const CHAVE = 'som'
 /** O que conta como um gesto que deixa o áudio tocar. */
 const GESTOS = ['pointerdown', 'keydown', 'touchend'] as const
+/**
+ * A taxa de amostragem (Hz) em que o som é feito. A música é escura: gravada a 48 kHz, quase nada
+ * dela passa de 11 kHz (uns 50 dB abaixo do resto). A 24 kHz, tudo até 12 kHz fica, pela metade das
+ * contas (e o eco, a parte mais cara, por um quarto). O navegador passa para a taxa da placa na saída.
+ */
+const TAXA = 24000
+/**
+ * Quanto som o navegador prepara adiantado. Em 'interactive', uns 10 ms no Windows, e menos ainda no
+ * Mac e no Android: qualquer atraso da thread do áudio (o aparelho ocupado, a página engasgada) vira
+ * um buraco na saída, que se ouve como um estalo. Em 'playback', uns 20 ms: o que se ouve chega uns
+ * 10 a 20 ms mais tarde, o que não se nota num tique ou numa onda.
+ */
+const LATENCIA: AudioContextLatencyCategory = 'playback'
+/** Quanto tempo (ms) o som leva para sumir antes de o contexto parar: parar com som saindo estala. */
+const SUMIR = 500
 
 let estado: EstadoDoSom = 'desligado'
 let comecou = false
@@ -25,6 +40,8 @@ let modulo: Promise<typeof import('./regente.ts')> | null = null
 let regente: Regente | null = null
 /** O buraco negro anda com a rolagem (veja definirBuracoNegroAnimado). */
 let animado = false
+/** A parada do contexto, depois de o som sumir (veja pararDepois). */
+let parada = 0
 
 function mudar(novo: EstadoDoSom) {
   if (novo === estado) return
@@ -45,11 +62,24 @@ const carregar = () => (modulo ??= import('./regente.ts'))
 function novoContexto(): AudioContext | null {
   const Contexto = window.AudioContext ?? (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
   if (!Contexto) return null
-  try {
-    return new Contexto({ latencyHint: 'interactive' })
-  } catch {
-    return null
+  // (o navegador que não aceitar a taxa pedida fica com a dele: os sons servem a qualquer uma)
+  for (const opcoes of [{ latencyHint: LATENCIA, sampleRate: TAXA }, { latencyHint: LATENCIA }]) {
+    try {
+      return new Contexto(opcoes)
+    } catch {
+      // tenta sem a taxa
+    }
   }
+  return null
+}
+
+/** Depois de o som sumir, o contexto para (e não gasta nada), se ainda for para parar. */
+function pararDepois() {
+  window.clearTimeout(parada)
+  const ctx = contexto
+  parada = window.setTimeout(() => {
+    if (estado !== 'tocando' || document.hidden) void ctx?.suspend()
+  }, SUMIR)
 }
 
 /**
@@ -60,6 +90,9 @@ function novoContexto(): AudioContext | null {
 function tocar(x?: number) {
   const ctx = (contexto ??= novoContexto())
   if (!ctx) return
+  window.clearTimeout(parada)
+  // parado, o contexto volta do silêncio (veja ligar, em sintese.ts)
+  const parado = ctx.state !== 'running'
   mudar('tocando')
   guardar(true)
   // (se o navegador ainda assim não deixar, o próximo gesto tenta de novo)
@@ -71,7 +104,7 @@ function tocar(x?: number) {
   )
   void carregar().then(({ criarRegente }) => {
     regente ??= criarRegente(ctx, animado)
-    if (estado === 'tocando') regente.ligar(x)
+    if (estado === 'tocando') regente.ligar(x, parado)
   })
 }
 
@@ -79,11 +112,15 @@ function calar() {
   mudar('desligado')
   guardar(false)
   regente?.desligar()
-  const ctx = contexto
-  // depois de o som sumir, o contexto para (e não gasta nada)
-  window.setTimeout(() => {
-    if (estado !== 'tocando') void ctx?.suspend()
-  }, 500)
+  pararDepois()
+}
+
+/** O contexto volta a tocar, do silêncio (o que soava quando ele parou não volta de uma vez). */
+function retomar() {
+  if (!contexto) return
+  window.clearTimeout(parada)
+  regente?.ligar(undefined, contexto.state !== 'running')
+  void contexto.resume()
 }
 
 /** Um gesto na página: com a escolha de som ligado, ele começa (o botão cuida do clique nele mesmo). */
@@ -91,7 +128,7 @@ function aoGesto(evento: Event) {
   if (evento.target instanceof Element && evento.target.closest('[data-som]')) return
   if (estado === 'esperando') tocar()
   // o sistema pode ter pausado o áudio (no iPhone, ao voltar para a aba)
-  else if (estado === 'tocando' && contexto?.state === 'suspended' && !document.hidden) void contexto.resume()
+  else if (estado === 'tocando' && contexto && contexto.state !== 'running' && !document.hidden) retomar()
 }
 
 function comecar() {
@@ -104,11 +141,15 @@ function comecar() {
     // sem armazenamento, o som começa desligado
   }
   for (const gesto of GESTOS) window.addEventListener(gesto, aoGesto, { capture: true, passive: true })
-  // com a aba escondida, o áudio para
+  // Com a aba escondida, o áudio para, depois de sumir; e volta do silêncio.
   document.addEventListener('visibilitychange', () => {
     if (!contexto) return
-    if (document.hidden) void contexto.suspend()
-    else if (estado === 'tocando') void contexto.resume()
+    if (!document.hidden) {
+      if (estado === 'tocando') retomar()
+      return
+    }
+    if (estado === 'tocando') regente?.desligar()
+    pararDepois()
   })
   if (!ligado) return
   mudar('esperando')

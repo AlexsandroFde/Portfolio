@@ -27,8 +27,11 @@ const REGER = 500
 const NIVEL = { de: -44, ate: -22 }
 
 export interface Regente {
-  /** O som liga. Com `x` (px CSS), ele foi ligado pelo botão ali, e a onda do clique soa já. */
-  ligar(x?: number): void
+  /**
+   * O som liga. Com `x` (px CSS), ele foi ligado pelo botão ali, e a onda do clique soa já. Com
+   * `doZero`, o contexto volta de uma parada, e a saída parte do silêncio (veja ligar, em sintese.ts).
+   */
+  ligar(x?: number, doZero?: boolean): void
   desligar(): void
   /** Uma onda saiu de um clique em `x` (px CSS) (veja soltarOnda, em lib/buracoNegro/index.ts). */
   onda(x: number): void
@@ -50,9 +53,10 @@ export function criarRegente(ctx: AudioContext, animado: boolean): Regente {
   // no celular, ou num aparelho com poucos núcleos, o coro fica mais leve (veja criarSons)
   const leve = (navigator.hardwareConcurrency ?? 8) <= 4 || window.matchMedia('(pointer: coarse)').matches
   // Tudo passa por um medidor a caminho da saída (ele deixa o som como está): é de onde o botão tira
-  // o volume. Ele só faz conta quando o botão pergunta.
+  // o volume, dos últimos ~20 ms (1024 amostras a 48 kHz, 512 a 24). Ele só faz conta quando o botão
+  // pergunta.
   const medidor = ctx.createAnalyser()
-  medidor.fftSize = 1024
+  medidor.fftSize = 2 ** Math.round(Math.log2(0.021 * ctx.sampleRate))
   medidor.connect(ctx.destination)
   const amostras = new Float32Array(medidor.fftSize)
   const sons = criarSons(ctx, medidor, leve)
@@ -186,7 +190,7 @@ export function criarRegente(ctx: AudioContext, animado: boolean): Regente {
   }).observe(raiz, { attributes: true, attributeFilter: ['class'] })
 
   return {
-    ligar(x) {
+    ligar(x, doZero) {
       ativo = true
       rolagemAnterior = window.scrollY
       velocidade = 0
@@ -194,7 +198,7 @@ export function criarRegente(ctx: AudioContext, animado: boolean): Regente {
       sons.reger()
       window.clearInterval(regencia)
       regencia = window.setInterval(() => sons.reger(), REGER)
-      sons.ligar(x === undefined ? undefined : ladoDe(x))
+      sons.ligar(x === undefined ? undefined : ladoDe(x), doZero)
     },
 
     desligar() {

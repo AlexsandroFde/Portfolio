@@ -62,8 +62,12 @@ export interface Sons {
    * o coro fica no último acorde.
    */
   reger(): void
-  /** O som aparece; com `pan` (de -1 a 1, o lado do botão), a onda do clique que o ligou soa já. */
-  ligar(pan?: number): void
+  /**
+   * O som aparece; com `pan` (de -1 a 1, o lado do botão), a onda do clique que o ligou soa já. Com
+   * `doZero`, a saída parte do silêncio: o contexto voltou de uma parada (a aba escondida, ou o sistema
+   * que o pausou), e o que soava quando ele parou não pode voltar de uma vez.
+   */
+  ligar(pan?: number, doZero?: boolean): void
   desligar(): void
   /** O chirp de uma onda, vindo do lado `pan`, com a força de 0 a 1 (a onda some no mergulho). */
   onda(pan: number, forca?: number, quando?: number): void
@@ -298,6 +302,31 @@ const ONDA = { espiral: 0.12, de: 420, ate: 800, zumbido: 0.11 }
 const TOQUE = { de: 900, ate: 2300, recomeca: 1.4 }
 
 /**
+ * A taxa de amostragem (Hz) em que a mistura foi feita. O som pode tocar noutra (o site toca a 24 kHz,
+ * veja lib/som/index.ts): o ruído e o eco são gerados de um jeito que soa igual em qualquer taxa.
+ */
+const TAXA_DA_MISTURA = 48000
+
+/**
+ * Quanto da energia do eco, a 48 kHz, fica acima de 12 kHz (o começo da resposta ainda é claro). O
+ * navegador acerta o volume do eco pela energia da resposta inteira: a 24 kHz, que só vai até 12 kHz,
+ * essa parte não existe, e o resto do eco soaria uns 0,7 dB mais forte. O retorno tira a diferença.
+ */
+const ECO_ACIMA_DE_12K = 0.15
+
+/**
+ * A porta dos efeitos (veja despachar): em quanto tempo (s) ela se abre, a partir de quando o efeito
+ * começa a soar de fato.
+ */
+const PORTA = 0.003
+
+/**
+ * Na volta ao topo, em quanto tempo (s) o que ainda soava do fundo some antes de a harmonia recomeçar
+ * (veja voltar).
+ */
+const CORTE = 0.04
+
+/**
  * O fim do mergulho: em que parte dele o som começa a se calar e quando acaba (o véu cobre a tela de
  * 0,8 a 0,96, veja mergulho.ts).
  */
@@ -454,11 +483,15 @@ function ruido(ctx: BaseAudioContext, segundos: number, marrom: boolean): AudioB
   const emenda = Math.round(0.05 * taxa)
   const buffer = ctx.createBuffer(2, n, taxa)
   const bruto = new Float32Array(n + emenda)
+  // Numa taxa mais baixa, cada amostra cobre mais tempo: o ruído fica mais fraco na mesma medida (a
+  // mesma energia em cada faixa de frequência), e o marrom guarda o corte dele, uns 150 Hz.
+  const escala = Math.sqrt(taxa / TAXA_DA_MISTURA)
+  const polo = 1.02 ** (-TAXA_DA_MISTURA / taxa)
   for (let canal = 0; canal < 2; canal++) {
     let integrado = 0
     for (let i = 0; i < bruto.length; i++) {
-      const branco = Math.random() * 2 - 1
-      integrado = (integrado + 0.02 * branco) / 1.02
+      const branco = (Math.random() * 2 - 1) * escala
+      integrado = polo * integrado + (1 - polo) * branco
       bruto[i] = marrom ? integrado * 3.5 : branco
     }
     // o começo é o fim continuando e, aos poucos, o começo de verdade (só a emenda faz a conta: ler
@@ -483,13 +516,18 @@ function catedral(ctx: BaseAudioContext, segundos: number): AudioBuffer {
   const n = Math.round(segundos * taxa)
   const atraso = Math.round(0.03 * taxa)
   const buffer = ctx.createBuffer(2, n, taxa)
+  // (o passo do filtro, para ele fechar dos mesmos uns 7 kHz aos mesmos uns 800 Hz em qualquer taxa)
+  const passo = TAXA_DA_MISTURA / taxa
   for (let canal = 0; canal < 2; canal++) {
     const dados = buffer.getChannelData(canal)
     let filtrado = 0
+    let fecha = 0
     for (let i = atraso; i < n; i++) {
       const t = (i - atraso) / (n - atraso)
-      // um filtro de um polo, cada vez mais fechado
-      filtrado += (0.6 - 0.5 * t) * (Math.random() * 2 - 1 - filtrado)
+      // um filtro de um polo, cada vez mais fechado (o quanto ele fecha muda devagar: a conta é refeita
+      // a cada 32 amostras)
+      if ((i - atraso) % 32 === 0) fecha = 1 - (0.4 + 0.5 * t) ** passo
+      filtrado += fecha * (Math.random() * 2 - 1 - filtrado)
       const entrada = Math.min(1, (i - atraso) / (0.08 * taxa))
       dados[i] = filtrado * Math.exp(-6.9 * t) * entrada
     }
@@ -527,7 +565,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
   const envio = ctx.createGain()
   envio.connect(eco)
   const retorno = ctx.createGain()
-  retorno.gain.value = VOLUME.eco
+  retorno.gain.value = VOLUME.eco * (ctx.sampleRate <= 24000 ? Math.sqrt(1 - ECO_ACIMA_DE_12K) : 1)
   eco.connect(retorno).connect(geral)
 
   /** Leva `no` à saída, com a fração `direto` do sinal direto e a fração `quanto` no eco. */
@@ -547,11 +585,16 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
   vermelho.offset.value = 0
   const azul = ctx.createConstantSource()
   azul.offset.value = 0
+  porBloco(vermelho.offset, azul.offset)
   /** O vermelho de agora, para o tempo da música (veja batidaAgora). */
   let desvio = 0
 
-  /** Liga o desvio de tom a estes parâmetros de tom (cents). Devolve a função que os solta. */
+  /**
+   * Liga o desvio de tom a estes parâmetros de tom (cents), que passam a ser lidos por bloco (veja
+   * porBloco). Devolve a função que os solta.
+   */
   function deslocar(...params: AudioParam[]): () => void {
+    porBloco(...params)
     for (const param of params) {
       vermelho.connect(param)
       azul.connect(param)
@@ -568,15 +611,41 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
     }
   }
 
+  // A porta dos efeitos: um buffer que vai de -1 a 0 em PORTA s, numa curva sem quinas, somado ao
+  // ganho 1 de um nó por onde o efeito passa, abre o efeito a partir de quando ele começa a soar de
+  // fato. Um efeito pedido para agora pode entrar no áudio um pouco depois do instante pedido: o
+  // navegador faz o áudio adiantado, em lotes, e um nó novo só entra no lote seguinte (mais ainda com
+  // a página engasgada). Aí o envelope do efeito, preso ao relógio do áudio, já estaria no meio da
+  // subida, ou depois dela, e o som começaria de uma vez, num estalo. Um buffer toca do começo quando o
+  // nó entra, junto com o efeito: a porta refaz a subida que faltou. A tempo, ela fica dentro da subida
+  // do próprio efeito.
+  const abertura = ctx.createBuffer(1, Math.max(2, Math.round(PORTA * ctx.sampleRate)), ctx.sampleRate)
+  const rampa = abertura.getChannelData(0)
+  for (let i = 0; i < rampa.length; i++) rampa[i] = -0.5 - 0.5 * Math.cos((Math.PI * i) / (rampa.length - 1))
+
   /**
-   * Uma voz que toca uma vez: `no` sai pelo lado `pan`, com a fração `quanto` no eco, e as `fontes`
-   * (já começadas: parar uma fonte antes de ela começar é erro) param em `fim`, quando a voz se
-   * desliga da saída e `soltar` solta o desvio de tom dela.
+   * Uma voz que toca uma vez, a partir de `inicio`: `no` sai pelo lado `pan`, com a fração `quanto` no
+   * eco, e as `fontes` (já começadas: parar uma fonte antes de ela começar é erro) param em `fim`,
+   * quando a voz se desliga da saída e `soltar` solta o desvio de tom dela.
    */
-  function despachar(no: AudioNode, pan: number, quanto: number, fontes: AudioScheduledSourceNode[], fim: number, soltar?: () => void) {
+  function despachar(
+    no: AudioNode,
+    pan: number,
+    quanto: number,
+    fontes: AudioScheduledSourceNode[],
+    inicio: number,
+    fim: number,
+    soltar?: () => void,
+  ) {
+    const porta = ctx.createGain()
+    const abre = ctx.createBufferSource()
+    abre.buffer = abertura
+    abre.connect(porta.gain)
+    abre.start(inicio)
     const lado = ctx.createStereoPanner()
     lado.pan.value = limitar(pan, -1, 1)
-    no.connect(lado)
+    no.connect(porta).connect(lado)
+    // (a saída por último: tudo o que vem antes dela entra no áudio no mesmo lote)
     sair(lado, quanto)
     for (const fonte of fontes) fonte.stop(fim)
     const ultima = fontes.at(-1)
@@ -585,6 +654,32 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
         lado.disconnect()
         soltar?.()
       }
+  }
+
+  /**
+   * Estes parâmetros passam a ser lidos uma vez a cada bloco de 128 amostras (uns 5 ms, a 24 kHz), e
+   * não a cada amostra. Lido a cada amostra, um tom com o vibrato e o desvio ligados nele, ou
+   * deslizando, faz o navegador refazer a conta do oscilador amostra por amostra (uma potência de 2
+   * em cada uma), e o mesmo num filtro (senos, cossenos e divisões, em cada canal). O tom, os filtros e
+   * o lado mudam devagar demais para se ouvir a diferença; os volumes, que fazem as subidas curtas,
+   * continuam amostra por amostra.
+   */
+  function porBloco(...params: AudioParam[]) {
+    for (const param of params) {
+      try {
+        param.automationRate = 'k-rate'
+      } catch {
+        // navegador que não troca o ritmo do parâmetro: fica como estava
+      }
+    }
+  }
+
+  /** Um filtro com os parâmetros lidos por bloco (veja porBloco). */
+  function novoFiltro(tipo: BiquadFilterType): BiquadFilterNode {
+    const no = ctx.createBiquadFilter()
+    no.type = tipo
+    porBloco(no.frequency, no.detune, no.Q, no.gain)
+    return no
   }
 
   /** Segue `param` até cada novo valor com a `constante` de tempo (s), sem refazer o mesmo pedido. */
@@ -630,8 +725,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
   function ruidoAfinado(buffer: AudioBuffer, notas: number[], q: number, saida: AudioNode): BiquadFilterNode[] {
     const fonte = emLaco(buffer)
     return notas.map((nota) => {
-      const filtro = ctx.createBiquadFilter()
-      filtro.type = 'bandpass'
+      const filtro = novoFiltro('bandpass')
       filtro.frequency.value = freq(nota)
       filtro.Q.value = q
       deslocar(filtro.detune)
@@ -648,6 +742,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
   const volta = ctx.createGain()
   volta.gain.value = 0
   const lado = ctx.createStereoPanner()
+  porBloco(lado.pan)
   vivo.connect(volta).connect(lado)
   const fundoSeco = ctx.createGain()
   fundoSeco.gain.value = FUNDO.seco[0]
@@ -664,8 +759,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
   const vozDoCoro = ctx.createGain()
   const coroSaida = ctx.createGain()
   const formantes = VOGAL.fechada.map((f, i) => {
-    const filtro = ctx.createBiquadFilter()
-    filtro.type = 'bandpass'
+    const filtro = novoFiltro('bandpass')
     filtro.frequency.value = f
     filtro.Q.value = VOGAL.q[i]!
     deslocar(filtro.detune)
@@ -676,15 +770,13 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
   })
   oscilar(0.023, 40, formantes[0]!.frequency)
   oscilar(0.017, 60, formantes[1]!.frequency)
-  const corpo = ctx.createBiquadFilter()
-  corpo.type = 'lowpass'
+  const corpo = novoFiltro('lowpass')
   corpo.frequency.value = 700
   deslocar(corpo.detune)
   const corpoGanho = ctx.createGain()
   corpoGanho.gain.value = 0.35
   vozDoCoro.connect(corpo).connect(corpoGanho).connect(coroSaida)
-  const escuro = ctx.createBiquadFilter()
-  escuro.type = 'lowpass'
+  const escuro = novoFiltro('lowpass')
   escuro.frequency.value = 1500
   escuro.Q.value = 0.5
   deslocar(escuro.detune)
@@ -716,6 +808,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
         osc.type = 'sawtooth'
         osc.frequency.value = freq(primeiras[p]!)
         osc.detune.value = desafino
+        porBloco(osc.frequency)
         deslocar(osc.detune)
         osc.connect(parte)
         continuas.push([osc, 0])
@@ -728,8 +821,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
   })
   // o fôlego das vozes, pelos mesmos formantes
   if (!leve) {
-    const folegoFiltro = ctx.createBiquadFilter()
-    folegoFiltro.type = 'highpass'
+    const folegoFiltro = novoFiltro('highpass')
     folegoFiltro.frequency.value = 400
     const folego = ctx.createGain()
     folego.gain.value = VOLUME.folego
@@ -738,8 +830,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
 
   // O pedal (o zumbido do buraco negro), que respira devagar e cede na dominante (veja ornar), e o ré
   // mais grave.
-  const pedalTom = ctx.createBiquadFilter()
-  pedalTom.type = 'lowpass'
+  const pedalTom = novoFiltro('lowpass')
   pedalTom.frequency.value = 260
   pedalTom.Q.value = 0.5
   oscilar(0.047, 60, pedalTom.frequency)
@@ -752,6 +843,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
     osc.type = forma
     osc.frequency.value = freq(nota)
     osc.detune.value = desafino
+    porBloco(osc.frequency)
     deslocar(osc.detune)
     const g = ctx.createGain()
     g.gain.value = nota === PEDAL[0]![0] ? ganho * GRAVE_DO_PEDAL : ganho
@@ -763,14 +855,14 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
   sub.gain.value = 0
   const subOsc = ctx.createOscillator()
   subOsc.frequency.value = freq(SUB)
+  porBloco(subOsc.frequency)
   deslocar(subOsc.detune)
   subOsc.connect(sub).connect(vivo)
   continuas.push([subOsc, 0])
 
   // O grave fundo, que entra depois do topo, como o da faixa: um órgão de pedal, uma oitava abaixo do
   // baixo do coro, que anda com ele. Uma voz só, que respira um instante a cada nota nova.
-  const graveTom = ctx.createBiquadFilter()
-  graveTom.type = 'lowpass'
+  const graveTom = novoFiltro('lowpass')
   graveTom.frequency.value = ORGAO.filtro
   graveTom.Q.value = 0.7
   const graveRespira = ctx.createGain()
@@ -786,8 +878,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
 
   // O pulso, perto do fim: cordas graves repetindo a nota do grave fundo, uma oitava acima, a cada
   // batida (veja pulsar). Entre uma batida e outra, ele quase some.
-  const pulsoTom = ctx.createBiquadFilter()
-  pulsoTom.type = 'lowpass'
+  const pulsoTom = novoFiltro('lowpass')
   pulsoTom.frequency.value = PULSO.filtro[0]
   pulsoTom.Q.value = 1.2
   const pulsoBatida = ctx.createGain()
@@ -808,8 +899,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
 
   // A absorção: rolando para baixo, um sussurro nas notas do coro, uma oitava acima; para cima, o
   // brilho dos jatos, três oitavas acima.
-  const succaoTom = ctx.createBiquadFilter()
-  succaoTom.type = 'lowpass'
+  const succaoTom = novoFiltro('lowpass')
   succaoTom.frequency.value = 2200
   const succao = ctx.createGain()
   succao.gain.value = 0
@@ -829,21 +919,18 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
   const ronco = ctx.createGain()
   ronco.gain.value = 0
   tremor.connect(ronco).connect(vivo)
-  const roncoGrave = ctx.createBiquadFilter()
-  roncoGrave.type = 'lowpass'
+  const roncoGrave = novoFiltro('lowpass')
   roncoGrave.frequency.value = 100
   roncoGrave.Q.value = 0.8
   emLaco(marrom).connect(roncoGrave).connect(tremor)
-  const roncoNota = ctx.createBiquadFilter()
-  roncoNota.type = 'bandpass'
+  const roncoNota = novoFiltro('bandpass')
   roncoNota.frequency.value = freq(PEDAL[0]![0])
   roncoNota.Q.value = 4
   deslocar(roncoNota.detune)
   const roncoNotaGanho = ctx.createGain()
   roncoNotaGanho.gain.value = 2
   emLaco(marrom).connect(roncoNota).connect(roncoNotaGanho).connect(tremor)
-  const correnteAr = ctx.createBiquadFilter()
-  correnteAr.type = 'lowpass'
+  const correnteAr = novoFiltro('lowpass')
   correnteAr.frequency.value = 800
   const corrente = ctx.createGain()
   corrente.gain.value = 0
@@ -1042,12 +1129,11 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
     const ganho = ctx.createGain()
     ganho.gain.value = 0
     ganho.gain.setValueCurveAtTime(amplitudes, t, duracao)
-    const macio = ctx.createBiquadFilter()
-    macio.type = 'lowpass'
+    const macio = novoFiltro('lowpass')
     macio.frequency.value = 2200
     voz.connect(macio).connect(ganho)
     voz.start(t)
-    despachar(ganho, pan, ECO.onda, [voz], t + duracao + 0.02, soltar)
+    despachar(ganho, pan, ECO.onda, [voz], t, t + duracao + 0.02, soltar)
   }
 
   // O tique: um sino pequeno, de parciais da série (sem nada fora do acorde), numa nota do acorde. A
@@ -1081,7 +1167,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
       voz.start(t)
       fontes.push(voz)
     }
-    despachar(ganho, (Math.random() * 2 - 1) * 0.2, ECO.toque, fontes, t + 0.1, deslocar(...tons))
+    despachar(ganho, (Math.random() * 2 - 1) * 0.2, ECO.toque, fontes, t, t + 0.1, deslocar(...tons))
   }
 
   function tema(escuro: boolean, quando = agora()) {
@@ -1107,7 +1193,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
       oitava.connect(g).connect(ganho)
       voz.start(t)
       oitava.start(t)
-      despachar(ganho, i === 0 ? -0.15 : 0.15, ECO.tema, [voz, oitava], t + 0.62, deslocar(voz.detune, oitava.detune))
+      despachar(ganho, i === 0 ? -0.15 : 0.15, ECO.tema, [voz, oitava], t, t + 0.62, deslocar(voz.detune, oitava.detune))
     })
   }
 
@@ -1134,7 +1220,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
       voz.start(t0)
       fontes.push(voz)
     }
-    despachar(ganho, 0, ECO.luz, fontes, t0 + duracao, deslocar(...tons))
+    despachar(ganho, 0, ECO.luz, fontes, t0, t0 + duracao, deslocar(...tons))
   }
 
   /**
@@ -1155,16 +1241,14 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
     const fonte = ctx.createBufferSource()
     fonte.buffer = branco
     fonte.loop = true
-    const clarear = ctx.createBiquadFilter()
-    clarear.type = 'lowpass'
+    const clarear = novoFiltro('lowpass')
     clarear.frequency.setValueCurveAtTime(claro, t0, duracao)
     const ganho = ctx.createGain()
     ganho.gain.value = 0
     ganho.gain.setValueCurveAtTime(ganhos, t0, duracao)
     const tons: AudioParam[] = []
     for (const nota of [62, 69, 74, 77, 81, 86]) {
-      const filtro = ctx.createBiquadFilter()
-      filtro.type = 'bandpass'
+      const filtro = novoFiltro('bandpass')
       filtro.frequency.value = freq(nota)
       filtro.Q.value = 16
       tons.push(filtro.detune)
@@ -1172,7 +1256,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
     }
     clarear.connect(ganho)
     fonte.start(t0, Math.random() * branco.duration)
-    despachar(ganho, 0, ECO.sopro, [fonte], t0 + duracao, deslocar(...tons))
+    despachar(ganho, 0, ECO.sopro, [fonte], t0, t0 + duracao, deslocar(...tons))
   }
 
   /** O site pousa: o acorde da tônica, que se abre e se apaga devagar, e um baque grave de leve, do ré ao ré de baixo. */
@@ -1193,7 +1277,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
       voz.frequency.value = freq(nota)
       voz.connect(ganho)
       voz.start(t)
-      despachar(ganho, pan, ECO.acorde, [voz], t + 3.25, deslocar(voz.detune))
+      despachar(ganho, pan, ECO.acorde, [voz], t, t + 3.25, deslocar(voz.detune))
     }
     if (!comBaque) return
     const baque = ctx.createOscillator()
@@ -1205,7 +1289,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
     ganho.gain.exponentialRampToValueAtTime(0.0001, t + 0.45)
     baque.connect(ganho)
     baque.start(t)
-    despachar(ganho, 0, 0, [baque], t + 0.5, deslocar(baque.detune))
+    despachar(ganho, 0, 0, [baque], t, t + 0.5, deslocar(baque.detune))
   }
 
   const seguir = {
@@ -1292,9 +1376,10 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
       }
     },
 
-    ligar(pan) {
+    ligar(pan, doZero = false) {
       const t = agora()
       geral.gain.cancelScheduledValues(t)
+      if (doZero) geral.gain.setValueAtTime(0, t)
       geral.gain.setTargetAtTime(VOLUME.geral, t, 0.03)
       // o coro vem do silêncio, devagar
       volta.gain.cancelScheduledValues(t)
@@ -1315,11 +1400,18 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
 
     voltar(comeco, duracao, soFade) {
       const t = agora()
-      const t0 = Math.max(comeco, t)
+      // O fundo já devia estar calado aqui (veja SILENCIO), mas numa rolagem rápida, ou com a página
+      // engasgada, o véu fecha a tela antes de ele se calar de todo. O que ainda soa some em CORTE s,
+      // sem estalo, e só então a harmonia recomeça: os saltos de volume e de tom abaixo ficam para
+      // `calado`, e a volta, para depois dele.
+      const calado = t + CORTE
+      const t0 = Math.max(comeco, calado)
       // O silêncio do fim do mergulho fica até o ponto de luz acender, e o fundo volta enquanto o site
       // chega (a página já está no topo, e o estado, como lá).
       volta.gain.cancelScheduledValues(t)
-      volta.gain.setValueAtTime(0, t)
+      volta.gain.setValueAtTime(volta.gain.value, t)
+      volta.gain.setTargetAtTime(0, t, CORTE / 6)
+      volta.gain.setValueAtTime(0, calado)
       volta.gain.setValueAtTime(0, t0 + (soFade ? 0 : 0.12 * duracao))
       volta.gain.linearRampToValueAtTime(1, t0 + (soFade ? 1 : 0.95) * duracao)
       // A harmonia recomeça, com tudo ainda calado: um conjunto do coro já com o acorde suspenso, que
@@ -1330,16 +1422,16 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
       trocas = trocas.filter((troca) => troca.t <= t)
       for (const conjunto of conjuntos) {
         conjunto.gain.cancelScheduledValues(t)
-        conjunto.gain.setValueAtTime(0, t)
+        conjunto.gain.setValueAtTime(0, calado)
       }
       for (const osc of [...vozes.flat(2), graveVoz, ...pulsoVozes]) osc.frequency.cancelScheduledValues(t)
       for (const filtro of [...filtrosDaSuccao, ...filtrosDoJato, ...filtrosDaCorrente]) filtro.frequency.cancelScheduledValues(t)
       graveRespira.gain.cancelScheduledValues(t)
-      graveRespira.gain.setValueAtTime(1, t)
+      graveRespira.gain.setValueAtTime(1, calado)
       pulsoBatida.gain.cancelScheduledValues(t)
-      pulsoBatida.gain.setValueAtTime(PULSO.repouso, t)
+      pulsoBatida.gain.setValueAtTime(PULSO.repouso, calado)
       pedalCede.gain.cancelScheduledValues(t)
-      pedalCede.gain.setValueAtTime(1, t)
+      pedalCede.gain.setValueAtTime(1, calado)
       // a música recomeça do topo, na câmara (o tempo da volta já não tem o vermelho)
       progresso = 0
       secao = 0
@@ -1349,14 +1441,14 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
       const tonica = vezDe(TONICA, 0, 0)
       const comSuspenso = ativo
       const comTonica = 1 - ativo
-      afinar(comSuspenso, suspensa, t)
-      afinar(comTonica, tonica, t)
+      afinar(comSuspenso, suspensa, calado)
+      afinar(comTonica, tonica, calado)
       notaDoGrave = suspensa.acorde.vozes[0] - 12
-      graveVoz.frequency.setValueAtTime(freq(notaDoGrave), t)
+      graveVoz.frequency.setValueAtTime(freq(notaDoGrave), calado)
       if (!soFade) {
         conjuntos[comSuspenso]!.gain.setTargetAtTime(1, t0, 0.6)
         conjuntos[comSuspenso]!.gain.setTargetAtTime(0, pousa, 1.2)
-        afinarRuidos(suspensa.acorde, t)
+        afinarRuidos(suspensa.acorde, calado)
         lembrar(t0, suspensa.acorde)
       }
       conjuntos[comTonica]!.gain.setTargetAtTime(1, pousa, 0.5)
@@ -1371,7 +1463,7 @@ export function criarSons(ctx: BaseAudioContext, destino: AudioNode, leve = fals
       }
       // o coro chega mais agudo, a luz vindo na nossa direção, e assenta no tom de sempre
       azul.offset.cancelScheduledValues(t)
-      azul.offset.setValueAtTime(0, t)
+      azul.offset.setValueAtTime(0, calado)
       azul.offset.setValueAtTime(DESVIO.azul, t0)
       azul.offset.setTargetAtTime(0, t0 + 0.3 * duracao, 0.22 * duracao)
       luz(t0, duracao)

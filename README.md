@@ -59,6 +59,7 @@ O que dá identidade ao site é o fundo. No lugar de uma imagem parada, há um b
 - **Um mergulho depois do rodapé.** A página não acaba no fim: você cai no buraco negro, e o topo do site chega do outro lado, por uma janela redonda.
 - **O cursor tem gravidade.** O mouse é uma pequena massa que curva a malha do fundo em volta dele, com a mesma lente do buraco negro.
 - **Um clique faz ondas.** Cada clique, ou toque, solta uma onda gravitacional que corre pela malha, esticando e apertando o espaço por onde passa.
+- **Uma música que cresce com a página.** Para quem liga o som, um coro sintetizado na hora, sem arquivos, começa só com as vozes, longe e escuro, e ganha um grave fundo, um descante e um pulso até o fim do conteúdo; no mergulho, tudo desce de tom e fica mais lento, cada clique soa como uma onda gravitacional de verdade, numa nota do acorde, e o horizonte cala tudo.
 - **Fluido mesmo com a página ocupada.** O buraco negro é desenhado num Web Worker, e as fatias da absorção são movidas pelo próprio navegador, junto com a rolagem.
 - **Bilíngue de ponta a ponta.** Português e inglês com o mesmo conteúdo, o TypeScript cobrando as duas línguas em cada texto e o HTML de cada versão pré-renderizado no build.
 - **Currículo pronto para ATS.** O PDF é gerado a cada build a partir dos mesmos dados do site, numa coluna e com texto selecionável.
@@ -73,6 +74,7 @@ O que dá identidade ao site é o fundo. No lugar de uma imagem parada, há um b
 | Estilo    | Tailwind CSS 4, tema claro e escuro, fontes Geist e Geist Mono                                       |
 | Gráficos  | WebGL 2 com shaders GLSL próprios, desenhado num Web Worker com `OffscreenCanvas`                    |
 | Animação  | Animações presas à rolagem (`ViewTimeline` e `ScrollTimeline`) e View Transitions entre as páginas |
+| Som       | Web Audio API, com tudo sintetizado na hora, sem arquivos de áudio nem bibliotecas                  |
 | Currículo | PDF impresso pelo Chrome ou Edge com `puppeteer-core`                                                |
 | Qualidade | Oxlint e um script próprio que mede a fluidez das animações                                          |
 | Deploy    | GitHub Actions publicando no GitHub Pages                                                            |
@@ -117,6 +119,7 @@ Todo o conteúdo fica em arquivos de dados, separados dos componentes. Para atua
 | Página de erro 404                                                 | `src/components/NotFound.tsx`  |
 | Cores, fontes e animações                                          | `src/index.css`                |
 | Buraco negro do fundo da página                                    | `src/lib/buracoNegro/`         |
+| Efeitos sonoros                                                    | `src/lib/som/`                 |
 | Título, descrição e prévia de compartilhamento                     | `index.html` e `en/index.html` |
 
 ### Projetos
@@ -382,6 +385,64 @@ A lógica fica em `mergulho.ts` (o véu, a janela sem o motor, o cabeçalho e a 
 
 </details>
 
+### O som
+
+O site também tem som, desligado até alguém pedir. O botão do alto-falante, no cabeçalho (no celular, dentro do menu), liga e desliga, e a escolha fica guardada para a próxima visita. Nada é baixado para tocar: tudo é sintetizado na hora com a Web Audio API, a partir de osciladores, ruído e filtros, como o buraco negro sai dos shaders.
+
+O fundo é um coro, no clima da versão lenta e com eco de *Choral Chambers*, de Christopher Larkin (da trilha de *Hollow Knight: Silksong*), que serviu de referência: ré menor, na mesma afinação dela, vozes escuras, acordes longos que se fundem uns nos outros e um eco de catedral. E, como ela, a música começa de um jeito e termina de outro: a faixa abre só com as vozes do meio, ganha um grave fundo e cresce até o fim, mais forte, mais clara e com notas que pulsam. Aqui, quem a faz crescer é a leitura. Os acordes, a ordem deles, as vozes e a melodia são próprios.
+
+| Quando           | O que se ouve                                                                                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| No topo          | Só o coro, longe e escuro, numa vogal fechada ("u"), quase parado: o soprano suspira dentro de cada acorde, sobre o zumbido do buraco negro, em ré                                                     |
+| Nos projetos     | Entra um grave fundo, como um órgão, uma oitava abaixo do coro, e as vozes do meio começam a andar de um acorde para o outro                                                                           |
+| No meio          | Um descante canta por cima, o baixo anda, a vogal se abre e o ciclo de acordes passa a terminar na dominante, que pede a volta ao ré menor                                                               |
+| No fim           | Um pulso de cordas graves bate a cada batida (no contato, a cada meia batida), e por meio ciclo o chão vira o ré do buraco negro. A música está no ponto mais cheio, mais claro e mais perto             |
+| Rolando          | Para baixo, o conteúdo é sugado num sussurro afinado nas notas do coro; para cima, os jatos brilham, nas mesmas notas, três oitavas acima                                                              |
+| Num clique       | A onda gravitacional soa como as que os detectores ouviram: um chirp, um assobio que sobe cada vez mais depressa até a fusão e pousa numa nota do acorde, vindo do lado da tela em que se clicou         |
+| No mergulho      | A música inteira desce de tom e fica mais lenta até quase parar, o ronco cresce, o ar corre mais rápido e tudo treme perto do horizonte. Quando o véu fecha a tela, o som acaba de uma vez, e só o eco se perde no escuro |
+| Na volta ao topo | Um tom de vidro acende com o ponto de luz, o site vem num sopro que sobe, e o coro volta mais agudo (o desvio para o azul), num acorde suspenso, que pousa no ré menor junto com o site: a música recomeça como no começo |
+| No resto         | Um tique de vidro ao passar o mouse por links e botões, que vira um arpejo numa lista, e duas notas na troca de tema: descendo para o escuro, subindo para o claro                                     |
+
+**Tudo em harmonia.** Todo som com nota toca uma nota do acorde que o coro canta naquele momento: o tique, o chirp, as notas do tema, o ponto de luz e o acorde do pouso. Até os ruídos (a sucção, os jatos, o ar da queda e o sopro da volta) passam por filtros afinados nessas notas. As vozes que andam passam por notas da escala, nunca a meio tom de outra voz, e o zumbido em ré cede quando a dominante traz o dó sustenido.
+
+**No mergulho, o tempo passa devagar.** O desvio para o vermelho baixa o tom de tudo junto (o coro, o grave, o pulso, os efeitos e os filtros), e por isso nada sai do acorde. Na mesma medida, ele deixa a música mais lenta: perto do horizonte o tempo passa devagar, como na dilatação do tempo, e as batidas se espaçam de verdade. No horizonte, ela para. Ao longo da página não há desvio: longe do horizonte, ele seria pequeno demais para se ouvir, e o que muda ali é a música.
+
+O som acompanha o que se vê. Com o buraco negro parado no alto da página (movimento reduzido ou aparelho lento), a música ainda cresce com a leitura, mas o zumbido fica como no topo, sem a sucção, a queda e as ondas, e no fim da página o topo volta só com o acorde.
+
+<details>
+<summary><strong>Como o som é feito</strong></summary>
+
+<br>
+
+**Só para quem liga.** O navegador não deixa uma página tocar som antes de um clique ou de uma tecla, e um portfólio que faz barulho sem pedir incomoda. O botão começa desligado; ligado, o contexto de áudio é criado no próprio clique, e a onda dele é o primeiro som. Quem deixou o som ligado o ouve de novo na próxima visita, a partir do primeiro clique ou tecla (para o navegador, rolar a roda não é um gesto). O código dos sons só é baixado quando o som liga, ou logo no começo, quando a escolha guardada é de som ligado. Com a aba escondida, o áudio para.
+
+**O coro.** São dois conjuntos de cinco vozes (baixo, tenor, contralto, soprano e descante): um canta o acorde, e o outro espera calado o seguinte, que entra enquanto o primeiro some, sem emenda. Cada voz são dois osciladores dente de serra, desafinados um contra o outro, com vibrato, e todas passam pelos mesmos três formantes, os de uma vogal, que se abre ao longo da página e desce de tom junto com as notas no mergulho (como numa gravação tocada mais devagar). O pedal são dois senos em ré; o de baixo e um ré ainda mais grave, a gravidade, só crescem perto do buraco negro. O eco é o de uma catedral, gerado uma vez: ruído que decai em 6 s e escurece com o tempo, com os dois canais independentes, para o eco se abrir de um lado ao outro.
+
+**Uma passacalha.** O chão da música é um ciclo de oito compassos que se repete do começo ao fim, i, VI, III, VII, i, iv, VI, VII em ré menor, um acorde por compasso, cada um com oito batidas de 1,1 s. O que muda ao longo da página é o que se canta sobre ele, como nas variações de uma passacalha. As seções (`SECOES`) são quatro, e cada uma só começa no início de um compasso:
+
+- **A câmara** (o topo): só o coro, quase parado. O soprano faz uma bordadura dentro de cada acorde, e o contralto passa de uma nota à outra.
+- **O chão** (a partir de 15% da página): o tenor e o contralto andam, por notas de passagem da escala nas últimas batidas, ou, quando a nota fica de um acorde para o outro, bordam a vizinha, um tom acima ou abaixo e nunca a meio tom de uma nota do acorde (aí soaria como erro, e não como enfeite).
+- **O pleno** (a partir de 45%): o baixo também anda, e o último compasso vira na metade para a dominante, lá maior, com a escala de passagem levando o dó sustenido.
+- **O horizonte** (a partir de 72%): o grave fundo fica no ré nos quatro primeiros compassos, e o pulso bate.
+
+As camadas novas não esperam o compasso: entram aos poucos com a rolagem, cada uma no seu trecho da página (`ENTRA`). O grave fundo é um órgão de pedal (um oscilador com seis harmônicos, para se ouvir também em alto-falantes pequenos, que quase não tocam a fundamental), uma oitava abaixo do baixo do coro, e anda com ele. O descante, a quinta voz, desce do lá agudo e sobe de volta a ele ao longo do ciclo, mudando junto com o soprano. O pulso são cordas graves repetindo a nota do grave, uma oitava acima, a cada batida e, no fim, a cada meia batida, com a oitava de cima no contratempo. Quando um compasso termina, as vozes que vão por passo à nota seguinte já chegam a ela com o conjunto que sai, e as que saltam, saltam com o que entra: a nota de passagem não fica soando contra a seguinte. Ao longo da página, a vogal se abre, o filtro do coro clareia de 1,4 a 3,2 kHz, e o fundo vai mais direto para a saída, com menos eco: a música chega mais perto.
+
+**A página não espera o som.** O áudio é feito numa thread própria do navegador. Da thread principal só saem alvos para ele seguir (os volumes, o tom, a vogal, os filtros), e só enquanto a rolagem anda: uns 9 µs por quadro. Os compassos são agendados dois segundos adiante, de meio em meio segundo, cada um com as notas de todas as vozes, o grave e o pulso de uma vez (uns 0,1 ms por compasso). A volta ao topo é agendada inteira de uma vez, no relógio do áudio, para o mesmo instante do túnel: os engasgos da thread principal na hora do salto não a atrasam. Montar os sons, no clique que os liga, leva uns 12 ms; gerar o eco e entregá-lo ao navegador custa uns 40 ms, e isso fica para uma tarefa à parte, logo depois: o coro começa na hora, e o eco chega uma fração de segundo depois.
+
+**No celular.** Num celular, ou num aparelho com até quatro núcleos, o coro fica mais leve: um oscilador por voz (também no pulso), sem o fôlego das vozes, e um eco de 3,5 s. No computador, o áudio todo ocupa uns 14% de um núcleo; no modo leve, uns 10%.
+
+**De onde vem cada efeito.** O chirp segue a conta da espiral de dois buracos negros antes da fusão: faltando τ para ela, a frequência é proporcional a τ^(-3/8), e a amplitude, à frequência elevada a 2/3. A sucção, os jatos, o ar da queda e o sopro da volta são ruído em filtros estreitos, afinados nas notas do acorde, que trocam junto com ele. O ronco é ruído grave, com uma parte afinada no ré. Um limitador na saída segura os picos.
+
+**Os eventos.** O regente (`src/lib/som/regente.ts`) tira da rolagem quanto da página já se leu (por onde a música vai), quanto o buraco negro já se aproximou e em que parte do mergulho se está. A onda e o estado do buraco negro vêm de `index.ts`, e a volta ao topo vem de um aviso de `mergulho.ts`, com o instante e a duração dela. O tique só soa quando o mouse se mexe: rolando, o conteúdo passa por baixo dele parado, e o navegador também avisa que ele entrou nos links que chegam.
+
+**Como foi comparado e medido.** A faixa de referência foi decodificada no navegador e analisada: a tonalidade, a afinação, o espectro médio (escuro, quase sem nada acima de 2 kHz), o tamanho do eco (uns 8 s até -60 dB) e o ritmo dos acordes. O coro foi gravado num `OfflineAudioContext` e ajustado até bater com ela: ré menor, a mesma afinação, o mesmo centro de brilho (uns 690 Hz, contra 650 na faixa), um eco do mesmo tamanho e o espectro médio a uns 5 dB dela, banda a banda.
+
+Depois, a forma: de 5 em 5 s, a faixa e uma gravação do percurso da página (do topo ao fim do conteúdo, o mergulho e a volta) foram medidas do mesmo jeito: a energia de cada banda, o brilho, quantas notas soam juntas e a mais aguda delas. Na faixa, o que fica abaixo de 80 Hz vai de -35 dB da energia total, na entrada, a -7 a -15 dB, depois que o grave chega; o que passa de 1,5 kHz, de uns -30 a uns -20 dB, e o volume cresce uns 11 dB até o ponto mais cheio. No site: de -34 a -6 a -9 dB abaixo de 80 Hz, de -29 a -20 dB acima de 1,5 kHz, e uns 9 dB a mais do topo ao fim. O pulso faz o volume de 90 a 700 Hz oscilar uns 18% na batida (sem ele, uns 2%). A partitura que o código gera foi conferida batida a batida, em cada seção: nenhuma nota de passagem, vizinha ou do descante fica a meio tom de outra voz (só a bordadura do soprano, o si bemol sobre o ré menor, um suspiro de propósito).
+
+Os volumes, trecho a trecho: o fundo fica em uns -35,5 dB no topo, -31,5 dB nos projetos, -29,5 dB no meio e -27 dB no fim do conteúdo; o chirp tem pico em -11 dB, o mergulho chega a -23 dB, e no silêncio do horizonte fica só o eco.
+
+</details>
+
 ### Movimento reduzido, aparelhos lentos e alternativas
 
 - **Movimento reduzido.** Quem ativou "reduzir movimento" no sistema vê o buraco negro parado no alto da página, sem absorção, sem a massa do mouse e sem as ondas dos cliques, e fica com a rolagem do navegador. No fim da página, o topo volta só com um fade, e a troca entre as versões do site é direta.
@@ -394,7 +455,7 @@ A lógica fica em `mergulho.ts` (o véu, a janela sem o motor, o cabeçalho e a 
 
 ### Parâmetros para ajustar
 
-Os valores do efeito ficam em constantes com nomes em português, nos arquivos de `src/lib/buracoNegro/`. Só o tamanho do espaço do mergulho fica no `index.css`.
+Os valores do efeito ficam em constantes com nomes em português, nos arquivos de `src/lib/buracoNegro/`, e os do som, em `src/lib/som/`. Só o tamanho do espaço do mergulho fica no `index.css`.
 
 <details>
 <summary><strong>Ver todos os parâmetros</strong></summary>
@@ -434,6 +495,18 @@ Os valores do efeito ficam em constantes com nomes em português, nos arquivos d
 | `entrada.ts`      | `ENTRADA`                               | A duração da entrada, de que tamanho o site aparece lá dentro e a margem da janela |
 |                   | `vistaDaEntrada`                        | O quanto o site vem arredondado e a vista de quem cai na entrada                    |
 | `src/index.css`   | `.mergulho`                             | O tamanho do espaço depois do rodapé                                                |
+| `som/sintese.ts`  | `AFINACAO`, `BATIDA` e `CHAO`           | A afinação, a batida e o ciclo de acordes: as vozes, a melodia, o descante e a virada |
+|                   | `SECOES` e `ENTRA`                      | O que muda em cada seção da música, e em que trecho da página cada camada entra     |
+|                   | `PEDAL`, `GRAVE_DO_PEDAL`, `SUB` e `CORO` | O pedal (e quanto do ré grave dele soa na página), o ré mais grave e as vozes: o desafino, o vibrato, o peso e as trocas |
+|                   | `ORGAO` e `PULSO`                       | O grave fundo e o pulso                                                             |
+|                   | `VOGAL`, `BRILHO` e `NO_TOPO`           | A vogal e o brilho do coro, e quanto do fundo soa no topo da página                 |
+|                   | `VOLUME`, `FUNDO`, `ECO` e `ECO_DURA`   | O volume de cada som, quanto do fundo vai direto e quanto ao eco, e quanto dura o eco |
+|                   | `DESVIO`                                | Quanto tudo desce de tom no mergulho, e quanto sobe na volta                        |
+|                   | `ONDA` e `TOQUE`                        | O chirp do clique e o arpejo do mouse                                               |
+|                   | `SILENCIO`                              | Em que parte do mergulho o som se cala                                              |
+| `som/regente.ts`  | `RAPIDEZ`                               | A velocidade de rolagem em que a sucção, os jatos e o ar da queda soam inteiros     |
+|                   | `ENTRE_TOQUES`                          | O menor intervalo entre dois tiques do mouse                                        |
+|                   | `REGER`                                 | De quanto em quanto tempo os próximos compassos são agendados                       |
 
 </details>
 
@@ -451,6 +524,7 @@ Os valores do efeito ficam em constantes com nomes em português, nos arquivos d
 - As fotos de todos os blocos são feitas no começo, com o tempo que sobra entre os quadros, e depois só quando o original muda.
 - A barra do navegador do celular, que some e volta conforme a rolagem, muda a altura da janela, mas não a da absorção: a faixa, a força do puxão e o trajeto do buraco negro usam a altura da tela grande (`100lvh`, a da tela com a barra escondida, medida por uma régua invisível), que só muda quando o celular gira ou a janela muda de tamanho. Antes, cada ida ou volta da barra refazia todas as fatias: num celular emulado, uns 23 ms de JavaScript na thread principal e, com a CPU 4 vezes mais lenta, uns 115 ms (agora, uns 6 ms).
 - Desenhar o buraco negro custa pouco em qualquer tamanho, já que nenhum raio é traçado depois do mapa: o mergulho, em que ele cobre a tela inteira, pesa o mesmo que o canto, sem perder resolução.
+- O som, para quem o liga, é feito numa thread própria do navegador: a página só manda alvos para ele seguir enquanto a rolagem anda, uns 9 µs por quadro, e no celular o coro fica mais leve.
 
 ### Números medidos
 
@@ -528,7 +602,8 @@ O endereço do site usado nas meta tags (`VITE_SITE_URL`) fica no `.env`. No dep
 │   ├── hooks/                     # hooks do React
 │   ├── i18n/                      # idiomas e textos fixos da interface
 │   ├── lib/                       # utilitários
-│   │   └── buracoNegro/           # o buraco negro do fundo (WebGL)
+│   │   ├── buracoNegro/           # o buraco negro do fundo (WebGL)
+│   │   └── som/                   # os efeitos sonoros (Web Audio)
 │   ├── index.css                  # tema e estilos globais
 │   ├── main.tsx                   # entrada no navegador (português e inglês)
 │   ├── main-404.tsx               # entrada da página de erro
@@ -567,6 +642,14 @@ O endereço do site usado nas meta tags (`VITE_SITE_URL`) fica no `.env`. No dep
 | `queda.frag`                  | A vista de quem cai                                                                       |
 | `entrada.frag`                | O site chegando pela janela redonda                                                       |
 | `comum.glsl`                  | Constantes e funções comuns aos shaders                                                   |
+
+E os do som, em `src/lib/som/`:
+
+| Arquivo       | Papel                                                                                        |
+| ------------- | -------------------------------------------------------------------------------------------- |
+| `index.ts`    | O botão liga e desliga por aqui: a escolha guardada, o contexto de áudio e o resto sob pedido |
+| `regente.ts`  | Acompanha a página (a rolagem, o mergulho, a volta ao topo, o mouse, o tema) e conduz os sons |
+| `sintese.ts`  | A música (o coro, as seções, a harmonia) e os efeitos, de osciladores, ruído e filtros, sem saber nada da página |
 
 </details>
 

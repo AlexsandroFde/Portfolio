@@ -2,7 +2,8 @@
 // tela, até não sobrar nada da página à vista; depois, no trecho do mergulho, cai-se no buraco negro.
 // Ele desce até o meio da tela e cresce até a sombra dele preencher a tela inteira, e a vista é a de
 // quem cai (veja queda.frag): o espaço em volta se torce num redemoinho, as coisas correm para fora em
-// rastros, a luz se separa em cores, a visão se fecha num túnel, e o cabeçalho é puxado para dentro.
+// rastros, a luz se separa em cores, a visão se fecha num túnel, e o cabeçalho e o botão do som, no
+// canto, são puxados para dentro.
 // Aí estamos dentro dele: a página volta ao topo, e no escuro acende-se um ponto de luz que se abre
 // numa janela redonda, por onde o site vem lá do fundo, arredondado como numa bola, ainda na vista de
 // quem cai, até ocupar a tela (veja entrada.ts). Dentro do buraco negro está o topo do site, e a
@@ -32,6 +33,12 @@ const VEU = { de: 0.8, ate: 0.96 }
  * na direção dele e some, antes de a queda apertar.
  */
 const CABECALHO = { de: 0.06, ate: 0.5 }
+/**
+ * Em que parte do mergulho o que flutua no canto da tela (o botão do som, veja SoundToggle.tsx,
+ * marcado com data-flutuante) é puxado para o buraco negro, e que fração do caminho até o meio da
+ * tela ele anda: estica-se na direção dele, afina e some, logo depois do cabeçalho.
+ */
+const FLUTUANTES = { de: 0.1, ate: 0.5, caminho: 0.3 }
 /**
  * A janela, sem o motor: a borda brilha como o anel de luz em volta da sombra, e a luz se espalha
  * `brilho` px no escuro.
@@ -142,6 +149,10 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   let escurecer: Animation | null = null
   /** O cabeçalho sendo puxado para dentro, preso à rolagem (só com o motor desenhando a queda). */
   let puxar: Animation | null = null
+  /** O que flutua no canto da tela e o puxão de cada um, também preso à rolagem. */
+  const puxados = new Map<HTMLElement, Animation>()
+  /** Se o que flutua já sumiu no buraco negro (veja marcarAbsorvidos). */
+  let absorvidos = false
 
   let voltando = false
   let seguranca = 0
@@ -174,6 +185,63 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
     puxar = relogio.animar(efeitoDoCabecalho, de, ate)
   }
 
+  /** O que flutua no canto da tela (fixo nele: as medidas não pegam o puxão). */
+  const flutuantes = () => [...document.querySelectorAll<HTMLElement>('[data-flutuante]')].filter((elemento) => elemento.offsetWidth > 0)
+
+  /**
+   * O puxão de `elemento` na direção do meio da tela, para onde o buraco negro desce: ele anda parte do
+   * caminho, estica-se nessa direção, afina e some. O giro fica igual em todos os quadros-chave, para o
+   * eixo do esticão não girar no meio.
+   */
+  function puxao(elemento: HTMLElement): Keyframe[] {
+    const dx = window.innerWidth / 2 - (elemento.offsetLeft + elemento.offsetWidth / 2)
+    const dy = window.innerHeight / 2 - (elemento.offsetTop + elemento.offsetHeight / 2)
+    const giro = Math.atan2(dy, dx)
+    const esticar = (andou: number, ao: number, atravessado: number) =>
+      `translate(${dx * andou}px, ${dy * andou}px) rotate(${giro}rad) scale(${ao}, ${atravessado}) rotate(${-giro}rad)`
+    return [
+      { transform: esticar(0, 1, 1), opacity: 1 },
+      { transform: esticar(0.25 * FLUTUANTES.caminho, 1.35, 0.8), opacity: 0.6, offset: 0.55 },
+      { transform: esticar(FLUTUANTES.caminho, 2.4, 0.3), opacity: 0 },
+    ]
+  }
+
+  /** O que flutua só é puxado com a queda no ar e sem o movimento reduzido (aí o véu o cobre, como ao cabeçalho). */
+  function ajustarFlutuantes() {
+    const deve = queda !== null && !movimentoReduzido.matches && trecho !== null
+    const elementos = deve ? flutuantes() : []
+    for (const [elemento, animacao] of puxados) {
+      if (elementos.includes(elemento)) continue
+      relogio.soltar(animacao)
+      puxados.delete(elemento)
+    }
+    if (!deve) return
+    const [de, ate] = trechoDe(trecho!, FLUTUANTES.de, FLUTUANTES.ate)
+    for (const elemento of elementos) {
+      const animacao = puxados.get(elemento)
+      if (animacao?.effect instanceof KeyframeEffect) {
+        animacao.effect.setKeyframes(puxao(elemento))
+        relogio.mover(animacao, de, ate)
+      } else puxados.set(elemento, relogio.animar(new KeyframeEffect(elemento, puxao(elemento), { fill: 'both', easing: 'ease-in' }), de, ate))
+    }
+  }
+
+  function ajustarPuxados() {
+    ajustarCabecalho()
+    ajustarFlutuantes()
+  }
+
+  /**
+   * Depois de sumir no buraco negro (ou debaixo do véu, sem o puxão), o que flutua deixa de responder
+   * ao mouse e ao teclado: invisível, ele ainda estaria ali. Só muda quando a rolagem cruza o ponto.
+   */
+  function marcarAbsorvidos(s: number) {
+    const sumiu = trecho !== null && s >= trechoDe(trecho, 0, puxados.size ? FLUTUANTES.ate : VEU.ate)[1]
+    if (sumiu === absorvidos) return
+    absorvidos = sumiu
+    for (const elemento of flutuantes()) elemento.toggleAttribute('data-absorvido', sumiu)
+  }
+
   function medir() {
     const inicio = espaco.getBoundingClientRect().top + window.scrollY
     const fim = Math.max(inicio + 1, raiz.scrollHeight - window.innerHeight)
@@ -182,7 +250,7 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
     const [de, ate] = trechoDe(trecho, VEU.de, VEU.ate)
     if (escurecer) relogio.mover(escurecer, de, ate)
     else escurecer = relogio.animar(efeito, de, ate)
-    ajustarCabecalho()
+    ajustarPuxados()
     if (mudou) for (const ouvinte of medidos) ouvinte()
   }
 
@@ -200,17 +268,20 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   }
 
   /**
-   * O cabeçalho e o conteúdo vêm lá do fundo, a partir do meio da tela: muito pequenos, crescendo até
-   * o tamanho normal (veja entrada.ts), a partir do instante `inicio`. Só a primeira tela do site
-   * aparece, e não o resto da página, abaixo dela. Devolve a promessa de quando terminam.
+   * O cabeçalho, o conteúdo e o que flutua no canto da tela vêm lá do fundo, a partir do meio da tela:
+   * muito pequenos, crescendo até o tamanho normal (veja entrada.ts), a partir do instante `inicio`.
+   * Só a primeira tela do site aparece, e não o resto da página, abaixo dela. Devolve a promessa de
+   * quando terminam.
    */
   function trazerOSite(inicio: number): Promise<unknown> {
     const quadros = pontosDaEntrada().map(({ u, escala }) => ({ offset: u, transform: `scale(${escala})` }))
     const chegadas: Promise<unknown>[] = []
-    for (const parte of [cabecalho, principal]) {
+    for (const parte of [cabecalho, principal, ...flutuantes()]) {
       if (!parte) continue
-      // com a página no topo, as duas começam no canto de cima da tela: o meio dela, nas medidas delas
-      parte.style.transformOrigin = `${window.innerWidth / 2}px ${window.innerHeight / 2}px`
+      // Com a página no topo, o cabeçalho e o conteúdo começam no canto de cima da tela: o meio dela,
+      // nas medidas deles. O que flutua fica noutro canto: o meio da tela, a partir de onde ele está.
+      const [x, y] = parte === cabecalho || parte === principal ? [0, 0] : [parte.offsetLeft, parte.offsetTop]
+      parte.style.transformOrigin = `${window.innerWidth / 2 - x}px ${window.innerHeight / 2 - y}px`
       if (parte === principal) parte.style.clipPath = `inset(0 0 calc(100% - ${window.innerHeight}px) 0)`
       // (fill: o site já fica lá no fundo até o instante de começar)
       const animacao = parte.animate(quadros, { duration: ENTRADA.duracao, easing: 'linear', fill: 'both' })
@@ -302,6 +373,7 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
     const s = window.scrollY
     // sem ScrollTimeline, o véu anda daqui
     relogio.acertar(s)
+    marcarAbsorvidos(s)
     if (voltando || !trecho || s <= trecho.inicio) return
     if (s >= raiz.scrollHeight - window.innerHeight - MARGEM) voltar()
   }
@@ -312,8 +384,8 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   // a altura da tela muda sem mudar o tamanho da página (a barra do navegador no celular)
   window.addEventListener('resize', medir)
   window.addEventListener('scroll', aoRolar, { passive: true })
-  movimentoReduzido.addEventListener('change', ajustarCabecalho)
-  quedas.add(ajustarCabecalho)
+  movimentoReduzido.addEventListener('change', ajustarPuxados)
+  quedas.add(ajustarPuxados)
   medir()
   // a página pode ter aberto já no fim (o navegador devolve a rolagem de antes)
   aoRolar()
@@ -321,11 +393,14 @@ export function iniciarMergulho(espaco: HTMLElement): () => void {
   return () => {
     window.removeEventListener('resize', medir)
     window.removeEventListener('scroll', aoRolar)
-    movimentoReduzido.removeEventListener('change', ajustarCabecalho)
-    quedas.delete(ajustarCabecalho)
+    movimentoReduzido.removeEventListener('change', ajustarPuxados)
+    quedas.delete(ajustarPuxados)
     aoRedimensionar.disconnect()
     if (escurecer) relogio.soltar(escurecer)
     if (puxar) relogio.soltar(puxar)
+    for (const animacao of puxados.values()) relogio.soltar(animacao)
+    puxados.clear()
+    for (const elemento of flutuantes()) elemento.removeAttribute('data-absorvido')
     veu.remove()
     terminar()
     trecho = null

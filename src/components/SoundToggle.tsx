@@ -62,7 +62,8 @@ const RETA = ondaEm(CAMADAS.frente, 0, 0)
  * sem borda. Ele é uma onda: desligado, uma linha reta; tocando, ela ondula com a música que sai
  * (cresce com o volume, pulsa com o pulso e corre mais depressa quando a música está cheia). Com o som
  * guardado como ligado, mas ainda à espera do primeiro clique na página, ele fica reto: mostra o que
- * se ouve.
+ * se ouve. No mergulho, o buraco negro o engole, como ao cabeçalho, e ele volta com o site
+ * (data-flutuante, veja mergulho.ts).
  *
  * A onda é redesenhada só enquanto se mexe, e nunca com a aba escondida: desligada e parada, nada
  * roda.
@@ -158,6 +159,7 @@ export function SoundToggle() {
       ref={botaoRef}
       type="button"
       data-som=""
+      data-flutuante=""
       onClick={onClick}
       className="som-flutuante print-hidden h-9 w-12 place-items-center rounded-full bg-bg/60 text-subtle transition-[color,background-color,scale] duration-300 hover:bg-surface hover:text-fg active:scale-95"
       aria-pressed={tocando}

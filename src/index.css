@@ -248,8 +248,8 @@
 
   /* O botão do som (ver SoundToggle.tsx): sempre à vista, no canto de baixo à direita (longe do
      buraco negro, que fica no alto), por cima do conteúdo e do cabeçalho (z-index 50), mas não da
-     volta ao topo (55) nem do véu do mergulho (60), que o cobre como ao cabeçalho. Só existe com
-     JavaScript, que faz o som. */
+     volta ao topo (55) nem do véu do mergulho (60): no mergulho ele é puxado para o buraco negro, como
+     o cabeçalho, e volta com o site (ver mergulho.ts). Só existe com JavaScript, que faz o som. */
   .som-flutuante {
     position: fixed;
     right: max(1rem, env(safe-area-inset-right));
@@ -260,6 +260,11 @@
 
   .js .som-flutuante {
     display: grid;
+  }
+
+  /* Engolido pelo buraco negro: invisível, ele não responde nem ao mouse nem ao teclado. */
+  [data-absorvido] {
+    visibility: hidden;
   }
 
   /* Marcas de corte nos cantos do retrato (só a partir do tablet: na foto pequena do celular viram ruído). */

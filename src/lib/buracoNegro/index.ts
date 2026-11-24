@@ -1,3 +1,4 @@
+import { definirBuracoNegroAnimado, tocarOnda } from '../som/index.ts'
 import { criarAbsorcao, temBlocos, type Cena as CenaDaAbsorcao, type Folga } from './absorcao.ts'
 import { forcaEm, type Faixa } from './faixa.ts'
 import { fotografarTopo, type Peca } from './fotos.ts'
@@ -480,6 +481,8 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     }
     reabsorver = true
     ajustarAncoras()
+    // o som do fundo cresce com o buraco negro, e o da queda, só com ele andando
+    definirBuracoNegroAnimado(!preso)
   }
 
   function ajustarTamanho() {
@@ -721,6 +724,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     pausar()
     desligarAbsorcao()
     raiz.style.removeProperty('--topo-livre')
+    definirBuracoNegroAnimado(false)
     aoAtivar(false)
   }
 
@@ -847,9 +851,11 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   // Um clique solta uma onda gravitacional na malha (veja cena.glsl), na hora em que o botão desce.
   // Num toque, só quando o dedo sai sem ter arrastado: o dedo que rola a página não solta onda.
   let toque: { id: number; x: number; y: number; t: number } | null = null
+  // A onda também soa, para quem ligou o som (veja lib/som).
   const soltarOnda = (evento: PointerEvent) => {
-    if (preso || desligado) return
+    if (preso || desligado || !motorPronto) return
     ponte.enviar({ tipo: 'onda', x: evento.clientX, y: evento.clientY, t: performance.timeOrigin + evento.timeStamp })
+    tocarOnda(evento.clientX)
   }
   const aoApertar = (evento: PointerEvent) => {
     if (!evento.isPrimary) {
@@ -879,6 +885,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
 
   return () => {
     desligado = true
+    definirBuracoNegroAnimado(false)
     definirQueda(null)
     aoCobrir?.(false)
     aoCobrir = null

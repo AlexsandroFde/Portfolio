@@ -116,6 +116,7 @@ Todo o conteúdo fica em arquivos de dados, separados dos componentes. Para atua
 | Formação, experiências e atividades                                | `src/data/journey.ts`          |
 | Habilidades e cursos                                               | `src/data/skills.ts`           |
 | Textos fixos da interface (menu, botões etc.)                      | `src/i18n/interface.ts`        |
+| Seções do menu (a que o link do outro idioma leva junto)           | `src/data/secoes.ts`           |
 | Página de erro 404                                                 | `src/components/NotFound.tsx`  |
 | Cores, fontes e animações                                          | `src/index.css`                |
 | Buraco negro do fundo da página                                    | `src/lib/buracoNegro/`         |
@@ -150,7 +151,7 @@ summary: {
 
 Nomes próprios e tecnologias, que são iguais nos dois idiomas, podem ser um texto só (`name: 'Beka'`), e o TypeScript avisa se faltar uma das línguas. O título, a descrição e a prévia de compartilhamento de cada versão ficam em `index.html` e `en/index.html`.
 
-No cabeçalho, o link **EN**/**PT** leva para a mesma seção na outra versão. A troca entre as versões (e a volta da página de erro para o início) usa a transição de página do navegador: a página de antes some enquanto a nova aparece, em 0,25 s, em vez de um corte seco para uma página ainda vazia. Com o movimento reduzido, a troca é direta.
+No canto de baixo da tela, ao lado do botão do som, o link **EN**/**PT** leva para a mesma seção na outra versão. A troca entre as versões (e a volta da página de erro para o início) usa a transição de página do navegador: a página de antes some enquanto a nova aparece, em 0,25 s, em vez de um corte seco para uma página ainda vazia. Com o movimento reduzido, a troca é direta.
 
 > [!NOTE]
 > O pedido da transição fica num `<style>` dentro de cada HTML (`index.html`, `en/index.html` e `404.html`), e não no CSS. Com ele só no arquivo CSS, o Chrome pulava a transição sempre que o CSS ou o JavaScript da página nova demorava um pouco a chegar (com 100 ms de atraso, em todas as trocas medidas). As animações dela ficam no `index.css`, separadas das da troca de tema pelo tipo da transição.
@@ -349,7 +350,7 @@ A vista é a de quem cai (`queda.frag`):
 - a luz se separa em cores nas bordas, como numa lente forte;
 - a visão se fecha num túnel, escurecendo as bordas, e no tema escuro a luz de fora fica mais azul e mais forte;
 - perto do horizonte, a vista treme;
-- o cabeçalho é puxado para dentro e some, e o botão do som, no canto, também: anda na direção do buraco negro, estica-se e some.
+- o cabeçalho é puxado para dentro e some, e o canto de baixo (o link do outro idioma e o botão do som), também: anda na direção do buraco negro, estica-se e some.
 
 A cena é desenhada numa textura um pouco maior que a tela, e a queda só a lê em outros pontos: nenhum raio é traçado, e o mergulho custa no motor o mesmo que o resto da página. Perto do fim, a tela passa a mirar acima do centro da sombra, para a faixa do disco que a cruza sair por baixo e sobrar só o preto, e um véu preto preso à rolagem apaga o que sobra, cabeçalho incluído.
 
@@ -387,7 +388,7 @@ A lógica fica em `mergulho.ts` (o véu, a janela sem o motor, o cabeçalho e a 
 
 ### O som
 
-O site também tem som, desligado até alguém pedir. O botão fica no canto de baixo da tela, discreto, e é uma onda: desligado, uma linha reta; tocando, ela ondula com a música que sai, cresce com o volume, pulsa com o pulso e salta com o chirp de cada clique. No mergulho, o buraco negro o engole junto com o cabeçalho, e ele volta com o site. A escolha fica guardada para a próxima visita. Nada é baixado para tocar: tudo é sintetizado na hora com a Web Audio API, a partir de osciladores, ruído e filtros, como o buraco negro sai dos shaders.
+O site também tem som, desligado até alguém pedir. O botão fica no canto de baixo da tela, ao lado do link do outro idioma, discreto e sem fundo, e é uma onda: desligado, uma linha reta; tocando, ela ondula com a música que sai, cresce com o volume, pulsa com o pulso e salta com o chirp de cada clique. No mergulho, o buraco negro o engole junto com o cabeçalho, e ele volta com o site. A escolha fica guardada para a próxima visita. Nada é baixado para tocar: tudo é sintetizado na hora com a Web Audio API, a partir de osciladores, ruído e filtros, como o buraco negro sai dos shaders.
 
 O fundo é um coro, no clima da versão lenta e com eco de *Choral Chambers*, de Christopher Larkin (da trilha de *Hollow Knight: Silksong*), que serviu de referência: ré menor, na mesma afinação dela, vozes escuras, acordes longos que se fundem uns nos outros e um eco de catedral. E, como ela, a música começa de um jeito e termina de outro: a faixa abre só com as vozes do meio, ganha um grave fundo e cresce até o fim, mais forte, mais clara e com notas que pulsam. Aqui, quem a faz crescer é a leitura. Os acordes, a ordem deles, as vozes e a melodia são próprios.
 
@@ -452,7 +453,7 @@ As camadas novas não esperam o compasso: entram aos poucos com a rolagem, cada 
 | Estalos em 28 s de rolagem, com a thread principal parada 120 ms a cada 0,7 s e o mouse nos links | 7                                   | nenhum                             |
 | A volta ao topo, num salto de 60% do mergulho direto para o fim                                   | um estalo forte                     | nenhum                             |
 
-**O botão.** O som passa por um medidor (um `AnalyserNode`, que o deixa como está) a caminho da saída, e o botão pergunta a ele o volume dos últimos ~20 ms a cada desenho. A onda são duas camadas de senoides presas nas pontas, a da frente e um eco mais fraco, em outro ritmo; o volume abre as duas, sobe depressa e desce devagar, e a onda corre mais rápido com a música cheia. Ela é redesenhada uns 50 vezes por segundo (uns 0,1 ms cada, só enquanto se mexe); desligada e parada, ou com a aba escondida, nada roda. Com o movimento reduzido, ligada, ela fica parada. Ele fica por cima do conteúdo e do cabeçalho, mas abaixo da volta ao topo e do véu do mergulho. No mergulho, é puxado para o meio da tela, para onde o buraco negro desce, numa animação presa à rolagem, como a do cabeçalho: anda um terço do caminho, estica-se nessa direção, afina e some na metade do mergulho; daí em diante, invisível, não responde mais ao mouse nem ao teclado. Na volta, ele está na foto do topo do site e chega com ele (sem a foto, chega com o cabeçalho e o conteúdo, crescendo a partir do meio da tela).
+**O botão.** O som passa por um medidor (um `AnalyserNode`, que o deixa como está) a caminho da saída, e o botão pergunta a ele o volume dos últimos ~20 ms a cada desenho. A onda são duas camadas de senoides presas nas pontas, a da frente e um eco mais fraco, em outro ritmo; o volume abre as duas, sobe depressa e desce devagar, e a onda corre mais rápido com a música cheia. Ela é redesenhada uns 50 vezes por segundo (uns 0,1 ms cada, só enquanto se mexe); desligada e parada, ou com a aba escondida, nada roda. Com o movimento reduzido, ligada, ela fica parada. Ele e o link do outro idioma, ao lado, formam o canto de baixo da tela: os dois sem fundo nenhum, nem ao passar o mouse, que vira a mãozinha e escurece as letras e a onda. Sem JavaScript, o canto tem só o link do idioma. Ele fica por cima do conteúdo e do cabeçalho, mas abaixo da volta ao topo e do véu do mergulho, e vem logo depois do cabeçalho na ordem do teclado. No mergulho, o canto inteiro é puxado para o meio da tela, para onde o buraco negro desce, numa animação presa à rolagem, como a do cabeçalho: anda um terço do caminho, estica-se nessa direção, afina e some na metade do mergulho; daí em diante, invisível, não responde mais ao mouse nem ao teclado. Na volta, ele está na foto do topo do site e chega com ele (sem a foto, chega com o cabeçalho e o conteúdo, crescendo a partir do meio da tela).
 
 **No celular.** Num celular, ou num aparelho com até quatro núcleos, o coro fica mais leve: um oscilador por voz (também no pulso), sem o fôlego das vozes, e um eco de 3,5 s. No computador, o áudio todo ocupa uns 3,5% de um núcleo; no modo leve, uns 2,5%.
 
@@ -510,7 +511,7 @@ Os valores do efeito ficam em constantes com nomes em português, nos arquivos d
 | `faixa.ts`        | `esmaecimento`                          | O esmaecimento ao longo da faixa                                                    |
 |                   | `HORIZONTE`                             | A borda da sombra                                                                   |
 | `mergulho.ts`     | `VEU`                                   | Quando o véu escurece a tela                                                        |
-|                   | `CABECALHO` e `FLUTUANTES`              | Quando o cabeçalho e o botão do som são puxados, e quanto o botão anda até sumir    |
+|                   | `CABECALHO` e `FLUTUANTES`              | Quando o cabeçalho e o canto de baixo (o idioma e o som) são puxados, e quanto o canto anda até sumir |
 | `motor.ts`        | `RASTRO`                                | A força dos rastros da queda                                                        |
 |                   | `vistaNaQueda`                          | A força de cada parte da vista de quem cai, na queda                                |
 |                   | `MASSA`                                 | A inércia da massa do mouse, quanto ela leva para aparecer e sumir, e a agitação    |

@@ -6,7 +6,6 @@ import { ui } from '../i18n/interface.ts'
 import { cx } from '../lib/cx.ts'
 import { botaoIcone } from '../lib/estilos.ts'
 import { Close, Menu, Monogram } from './icons.tsx'
-import { SoundToggle } from './SoundToggle.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
 
 const links = [
@@ -118,10 +117,6 @@ export function Header() {
           </nav>
 
           <OutroIdioma secao={active} />
-          {/* No celular estreito, o nome quebraria em duas linhas: o som fica no menu (abaixo). */}
-          <div className="hidden sm:contents">
-            <SoundToggle />
-          </div>
           <ThemeToggle />
 
           <button
@@ -159,10 +154,6 @@ export function Header() {
             </li>
           ))}
         </ul>
-        <div className="flex items-center justify-between border-t border-line pt-4 sm:hidden">
-          <span className="label text-subtle">{t(ui.som.rotulo)}</span>
-          <SoundToggle />
-        </div>
       </nav>
     </header>
   )

@@ -8,6 +8,7 @@ import { Hero } from './components/Hero.tsx'
 import { Journey } from './components/Journey.tsx'
 import { Projects } from './components/Projects.tsx'
 import { Skills } from './components/Skills.tsx'
+import { SoundToggle } from './components/SoundToggle.tsx'
 import { IdiomaContexto, type Idioma } from './i18n/idioma.ts'
 import { ui } from './i18n/interface.ts'
 
@@ -29,6 +30,7 @@ export default function App({ idioma }: { idioma: Idioma }) {
       </main>
       <Footer />
       <Dive />
+      <SoundToggle />
     </IdiomaContexto>
   )
 }

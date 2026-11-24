@@ -2,8 +2,8 @@
 // tela, até não sobrar nada da página à vista; depois, no trecho do mergulho, cai-se no buraco negro.
 // Ele desce até o meio da tela e cresce até a sombra dele preencher a tela inteira, e a vista é a de
 // quem cai (veja queda.frag): o espaço em volta se torce num redemoinho, as coisas correm para fora em
-// rastros, a luz se separa em cores, a visão se fecha num túnel, e o cabeçalho e o botão do som, no
-// canto, são puxados para dentro.
+// rastros, a luz se separa em cores, a visão se fecha num túnel, e o cabeçalho e o canto de baixo da
+// tela (o outro idioma e o som) são puxados para dentro.
 // Aí estamos dentro dele: a página volta ao topo, e no escuro acende-se um ponto de luz que se abre
 // numa janela redonda, por onde o site vem lá do fundo, arredondado como numa bola, ainda na vista de
 // quem cai, até ocupar a tela (veja entrada.ts). Dentro do buraco negro está o topo do site, e a
@@ -34,9 +34,10 @@ const VEU = { de: 0.8, ate: 0.96 }
  */
 const CABECALHO = { de: 0.06, ate: 0.5 }
 /**
- * Em que parte do mergulho o que flutua no canto da tela (o botão do som, veja SoundToggle.tsx,
- * marcado com data-flutuante) é puxado para o buraco negro, e que fração do caminho até o meio da
- * tela ele anda: estica-se na direção dele, afina e some, logo depois do cabeçalho.
+ * Em que parte do mergulho o que flutua no canto da tela (o link do outro idioma e o botão do som,
+ * juntos, veja App.tsx, marcados com data-flutuante) é puxado para o buraco negro, e que fração do
+ * caminho até o meio da tela ele anda: estica-se na direção dele, afina e some, logo depois do
+ * cabeçalho.
  */
 const FLUTUANTES = { de: 0.1, ate: 0.5, caminho: 0.3 }
 /**

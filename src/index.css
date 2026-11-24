@@ -246,15 +246,22 @@
     height: 250lvh;
   }
 
-  /* O botão do som (ver SoundToggle.tsx): sempre à vista, no canto de baixo à direita (longe do
-     buraco negro, que fica no alto), por cima do conteúdo e do cabeçalho (z-index 50), mas não da
-     volta ao topo (55) nem do véu do mergulho (60): no mergulho ele é puxado para o buraco negro, como
-     o cabeçalho, e volta com o site (ver mergulho.ts). Só existe com JavaScript, que faz o som. */
-  .som-flutuante {
+  /* O canto de baixo da tela (ver App.tsx): o link do outro idioma e, ao lado dele, o botão do som.
+     Sempre à vista, à direita (longe do buraco negro, que fica no alto), por cima do conteúdo e do
+     cabeçalho (z-index 50), mas não da volta ao topo (55) nem do véu do mergulho (60): no mergulho ele
+     é puxado para o buraco negro, como o cabeçalho, e volta com o site (ver mergulho.ts). */
+  .flutuantes {
     position: fixed;
     right: max(1rem, env(safe-area-inset-right));
     bottom: max(1rem, env(safe-area-inset-bottom));
     z-index: 52;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  /* O botão do som (ver SoundToggle.tsx) só existe com JavaScript, que faz o som. */
+  .som-flutuante {
     display: none;
   }
 

@@ -376,7 +376,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   /**
    * As peças do topo do site: o que o conteúdo mostra na primeira tela com a página no topo (as
    * seções que caem nela, na posição delas na página) e, por cima, o cabeçalho e o que flutua no
-   * canto da tela (o botão do som), que o buraco negro também engole e que voltam com o site.
+   * canto da tela (o outro idioma e o som), que o buraco negro também engole e que voltam com o site.
    */
   function pecasDoTopo(): Peca[] {
     const altura = recipiente.clientHeight

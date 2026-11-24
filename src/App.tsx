@@ -6,6 +6,7 @@ import { Footer } from './components/Footer.tsx'
 import { Header } from './components/Header.tsx'
 import { Hero } from './components/Hero.tsx'
 import { Journey } from './components/Journey.tsx'
+import { LanguageToggle } from './components/LanguageToggle.tsx'
 import { Projects } from './components/Projects.tsx'
 import { Skills } from './components/Skills.tsx'
 import { SoundToggle } from './components/SoundToggle.tsx'
@@ -20,6 +21,13 @@ export default function App({ idioma }: { idioma: Idioma }) {
       </a>
       <BlackHole />
       <Header />
+      {/* O canto de baixo da tela: o link do outro idioma e o botão do som, juntos. No mergulho, o
+          buraco negro engole o canto inteiro, e ele volta com o site (veja lib/buracoNegro/mergulho.ts).
+          Logo depois do cabeçalho, para o teclado chegar a eles antes do conteúdo. */}
+      <div data-flutuante="" className="flutuantes print-hidden">
+        <LanguageToggle />
+        <SoundToggle />
+      </div>
       <main id="conteudo">
         <Hero />
         <About />
@@ -30,7 +38,6 @@ export default function App({ idioma }: { idioma: Idioma }) {
       </main>
       <Footer />
       <Dive />
-      <SoundToggle />
     </IdiomaContexto>
   )
 }

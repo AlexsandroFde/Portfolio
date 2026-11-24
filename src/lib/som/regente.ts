@@ -19,6 +19,12 @@ const INTERATIVOS = 'a[href], button:not(:disabled), summary, [role="button"], i
 const ENTRE_TOQUES = 70
 /** De quanto em quanto tempo (ms) as próximas trocas de acorde do coro são agendadas (veja reger, em sintese.ts). */
 const REGER = 500
+/**
+ * O volume que o botão do som mostra (veja nivel): em que nível (dB) a onda dele começa a se abrir e
+ * em que nível fica aberta de todo. O fundo vai de uns -35 dB, no topo, a uns -27, no fim do
+ * conteúdo; o mergulho e o chirp passam disso.
+ */
+const NIVEL = { de: -44, ate: -22 }
 
 export interface Regente {
   /** O som liga. Com `x` (px CSS), ele foi ligado pelo botão ali, e a onda do clique soa já. */
@@ -28,6 +34,8 @@ export interface Regente {
   onda(x: number): void
   /** O buraco negro passou a andar com a rolagem, ou a ficar parado no alto da página. */
   animar(animado: boolean): void
+  /** Quanto soa agora, de 0 (silêncio) a 1, para o botão do som desenhar a onda. */
+  nivel(): number
 }
 
 const limitar = (v: number, de = 0, ate = 1) => Math.min(ate, Math.max(de, v))
@@ -41,7 +49,13 @@ const suave = (de: number, ate: number, v: number) => {
 export function criarRegente(ctx: AudioContext, animado: boolean): Regente {
   // no celular, ou num aparelho com poucos núcleos, o coro fica mais leve (veja criarSons)
   const leve = (navigator.hardwareConcurrency ?? 8) <= 4 || window.matchMedia('(pointer: coarse)').matches
-  const sons = criarSons(ctx, ctx.destination, leve)
+  // Tudo passa por um medidor a caminho da saída (ele deixa o som como está): é de onde o botão tira
+  // o volume. Ele só faz conta quando o botão pergunta.
+  const medidor = ctx.createAnalyser()
+  medidor.fftSize = 1024
+  medidor.connect(ctx.destination)
+  const amostras = new Float32Array(medidor.fftSize)
+  const sons = criarSons(ctx, medidor, leve)
   const raiz = document.documentElement
   let ativo = false
   /** Até quando (ms, no relógio da página) a volta ao topo toca: lá dentro, o clique não faz onda. */
@@ -202,6 +216,15 @@ export function criarRegente(ctx: AudioContext, animado: boolean): Regente {
     animar(sim) {
       animado = sim
       if (ativo) sons.ajustar(estado())
+    },
+
+    nivel() {
+      // o volume dos últimos ~20 ms (a média do quadrado das amostras), de NIVEL.de a NIVEL.ate dB
+      medidor.getFloatTimeDomainData(amostras)
+      let soma = 0
+      for (const amostra of amostras) soma += amostra * amostra
+      const db = 10 * Math.log10(soma / amostras.length + 1e-12)
+      return limitar((db - NIVEL.de) / (NIVEL.ate - NIVEL.de))
     },
   }
 }

@@ -1,5 +1,5 @@
-// O som do site (veja sintese.ts): começa desligado e só toca para quem o liga, no botão do cabeçalho
-// (SoundToggle). A escolha fica guardada, e quem o deixou ligado o ouve de novo na próxima visita, a
+// O som do site (veja sintese.ts): começa desligado e só toca para quem o liga, no botão do canto da
+// tela (SoundToggle). A escolha fica guardada, e quem o deixou ligado o ouve de novo na próxima visita, a
 // partir do primeiro clique ou da primeira tecla: antes disso, o navegador não deixa tocar nada.
 //
 // Este arquivo é pequeno e vai junto com a página. O resto (o regente e a síntese) só é baixado
@@ -126,6 +126,11 @@ export function ouvirSom(ouvinte: () => void): () => void {
 }
 
 export const estadoDoSom = (): EstadoDoSom => estado
+
+/** Quanto soa agora, de 0 a 1, para o botão desenhar a onda: 0 com o som calado ou ainda chegando. */
+export function nivelDoSom(): number {
+  return estado === 'tocando' && regente ? regente.nivel() : 0
+}
 
 /** O botão do som: liga ou desliga. `x`: onde fica o botão (px CSS), de onde vem a onda do clique. */
 export function alternarSom(x?: number) {

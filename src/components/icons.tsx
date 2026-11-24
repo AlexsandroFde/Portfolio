@@ -83,6 +83,28 @@ export function Moon(props: IconProps) {
   )
 }
 
+/** Alto-falante com as ondas do som: som ligado. */
+export function SoundOn(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M18.5 5.5a9.5 9.5 0 0 1 0 13" />
+    </Icon>
+  )
+}
+
+/** Alto-falante calado. */
+export function SoundOff(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+      <path d="m16 9.5 5 5" />
+      <path d="m21 9.5-5 5" />
+    </Icon>
+  )
+}
+
 export function Copy(props: IconProps) {
   return (
     <Icon {...props}>

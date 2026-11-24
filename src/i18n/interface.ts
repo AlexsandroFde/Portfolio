@@ -17,6 +17,11 @@ export const ui = {
     rotulo: t('Alternar entre tema claro e escuro', 'Switch between light and dark theme'),
     titulo: t('Alternar tema', 'Switch theme'),
   },
+  som: {
+    rotulo: t('Efeitos sonoros', 'Sound effects'),
+    ligar: t('Ligar o som', 'Turn sound on'),
+    desligar: t('Desligar o som', 'Turn sound off'),
+  },
   menu: {
     abrir: t('Abrir menu', 'Open menu'),
     fechar: t('Fechar menu', 'Close menu'),

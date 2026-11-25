@@ -7,7 +7,7 @@
 // As telas são guardadas numa reserva e passam de fatia em fatia: um canvas entregue ao worker não
 // volta, e cada um novo custa à placa de vídeo uma superfície nova.
 
-import type { FrenteDoVideo, ParaOPintor, Recorte } from './pintor.ts'
+import type { Anel, FrenteDoVideo, ParaOPintor, Recorte } from './pintor.ts'
 
 /** De quanto em quanto tempo (ms) se olha se os vídeos com telas têm um quadro novo (eles têm uns 30 por segundo). */
 const RELOGIO = 16
@@ -25,12 +25,22 @@ export interface Tela {
   acordada: boolean
 }
 
-/** As medidas de um vídeo, como o pintor precisa: tamanho (px CSS), pixels das telas por px CSS e o que o recorta. */
+/**
+ * As medidas de um vídeo, como o pintor precisa: tamanho (px CSS), pixels das telas por px CSS, o
+ * que o recorta e o anel do progresso dele, se houver.
+ */
 export interface MedidasDoVideo {
   largura: number
   altura: number
   escala: number
   recortes: Recorte[]
+  anel: Anel | null
+}
+
+/** Onde o quadro cai no vídeo, de 0 (o começo) a 1 (o fim), pelo tempo dele (em µs) e a duração do vídeo. */
+function progressoDe(quadro: VideoFrame, elemento: HTMLVideoElement): number {
+  const { duration } = elemento
+  return duration > 0 && Number.isFinite(duration) ? Math.min(1, Math.max(0, quadro.timestamp / 1e6 / duration)) : 0
 }
 
 export interface Pintor {
@@ -84,7 +94,7 @@ export function criarPintor(): Pintor | null {
         continue
       }
       video.ultimo = quadro.timestamp
-      enviar({ tipo: 'quadro', video: id, quadro }, [quadro])
+      enviar({ tipo: 'quadro', video: id, quadro, progresso: progressoDe(quadro, video.elemento) }, [quadro])
     }
   }
 
@@ -106,11 +116,11 @@ export function criarPintor(): Pintor | null {
   }
 
   return {
-    video(id, elemento, { largura, altura, escala, recortes }) {
+    video(id, elemento, { largura, altura, escala, recortes, anel }) {
       const antes = videos.get(id)
       // com outras medidas, a fonte do pintor recomeça vazia: o quadro atual vai de novo
       videos.set(id, { elemento, ultimo: Number.NaN, telas: antes?.telas ?? 0 })
-      enviar({ tipo: 'video', video: id, largura, altura, escala, recortes })
+      enviar({ tipo: 'video', video: id, largura, altura, escala, recortes, anel })
       acertarRelogio()
     },
 

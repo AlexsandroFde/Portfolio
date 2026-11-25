@@ -31,12 +31,32 @@ export interface FrenteDoVideo {
   y1: number
 }
 
+/**
+ * O anel do progresso do vídeo, dentro da frente (o do botão de pausa, veja ProjectVideo.tsx): sobre
+ * um trilho apagado, um arco da mesma cor, cheia, que cresce do alto, no sentido do relógio, e fecha
+ * a volta no fim do vídeo, com as pontas retas. Na página ele anda com o vídeo, e numa foto ficaria
+ * parado: fica fora da foto da frente (veja ANEL, em fotos.ts), e o pintor o desenha por cima dela,
+ * com o tempo de cada quadro, se o botão aparece nela (veja anelAVista). O centro, relativo ao
+ * vídeo, o raio e a espessura da linha (px CSS), a cor e a opacidade do trilho.
+ */
+export interface Anel {
+  x: number
+  y: number
+  raio: number
+  espessura: number
+  cor: string
+  trilho: number
+}
+
 /** Mensagens da página para o pintor. */
 export type ParaOPintor =
-  /** Um vídeo novo, ou com outras medidas: o tamanho (px CSS), quantos pixels por px CSS e o que o recorta. */
-  | { tipo: 'video'; video: number; largura: number; altura: number; escala: number; recortes: Recorte[] }
-  /** Um quadro novo do vídeo. */
-  | { tipo: 'quadro'; video: number; quadro: VideoFrame }
+  /**
+   * Um vídeo novo, ou com outras medidas: o tamanho (px CSS), quantos pixels por px CSS, o que o
+   * recorta e o anel do progresso dele, se houver.
+   */
+  | { tipo: 'video'; video: number; largura: number; altura: number; escala: number; recortes: Recorte[]; anel: Anel | null }
+  /** Um quadro novo do vídeo e onde ele cai no vídeo, de 0 (o começo) a 1 (o fim). */
+  | { tipo: 'quadro'; video: number; quadro: VideoFrame; progresso: number }
   | { tipo: 'frente'; video: number; frente: FrenteDoVideo | null }
   /** Uma tela nova, que fica com o pintor. */
   | { tipo: 'tela'; tela: number; canvas: OffscreenCanvas }
@@ -68,6 +88,11 @@ interface Video {
   /** A fonte tem um quadro (sem ele, as fatias mostram o pôster, que está na foto do bloco). */
   pintada: boolean
   frente: FrenteDoVideo | null
+  anel: Anel | null
+  /** O botão do anel aparece na foto da frente (veja anelAVista). */
+  anelAVista: boolean
+  /** Onde o quadro da fonte cai no vídeo, de 0 a 1 (o anel mostra até aí). */
+  progresso: number
   telas: Set<Tela>
 }
 
@@ -113,9 +138,52 @@ function pintarFonte(video: Video, quadro: VideoFrame) {
   video.pintada = true
 }
 
+/** Um pixel para olhar a foto da frente (veja anelAVista). */
+let sonda: OffscreenCanvasRenderingContext2D | null | undefined
+
+/**
+ * O anel só aparece com o botão em que ele fica, que pode estar escondido (ele aparece com o mouse em
+ * cima do vídeo ou depois de um toque): o pintor olha a foto da frente no ponto do trilho às 3 horas,
+ * sobre o fundo do botão (o anel fica fora da foto), e desenha o anel só se ali há alguma coisa.
+ */
+function anelAVista({ frente, anel }: Video): boolean {
+  if (!frente || !anel) return false
+  sonda ??= new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true })
+  if (!sonda) return false
+  sonda.clearRect(0, 0, 1, 1)
+  sonda.drawImage(frente.imagem, frente.x + (anel.x + anel.raio) * frente.dpr, frente.y + anel.y * frente.dpr, 1, 1, 0, 0, 1, 1)
+  return (sonda.getImageData(0, 0, 1, 1).data[3] ?? 0) > 8
+}
+
+/**
+ * O anel do vídeo (veja Anel), com o arco até onde o quadro atual chegou, na tela que começa na
+ * altura `cima` do vídeo.
+ */
+function desenharAnel(pincel: Pincel, video: Video, cima: number) {
+  const { anel, progresso, escala: k } = video
+  if (!anel || !video.anelAVista) return
+  const x = anel.x * k
+  const y = (anel.y - cima) * k
+  const topo = -Math.PI / 2
+  pincel.save()
+  pincel.lineWidth = anel.espessura * k
+  pincel.strokeStyle = anel.cor
+  pincel.globalAlpha = anel.trilho
+  pincel.beginPath()
+  pincel.arc(x, y, anel.raio * k, 0, 2 * Math.PI)
+  pincel.stroke()
+  if (progresso > 0) {
+    pincel.globalAlpha = 1
+    pincel.beginPath()
+    pincel.arc(x, y, anel.raio * k, topo, topo + 2 * Math.PI * Math.min(1, progresso))
+    pincel.stroke()
+  }
+  pincel.restore()
+}
+
 /**
  * Desenha na tela a parte do quadro atual que cai nela (ou nada, com o pôster da foto à vista) e,
- * por cima, o que fica na frente do vídeo.
+ * por cima, o que fica na frente do vídeo, com o anel do progresso.
  */
 function desenhar(tela: Tela) {
   tela.atrasada = false
@@ -152,6 +220,7 @@ function desenhar(tela: Tela) {
     (frente.x1 - frente.x0) * k,
     (y1 - y0) * k,
   )
+  desenharAnel(pincel, video, cima)
 }
 
 /** A tela sai do vídeo que mostrava. */
@@ -166,13 +235,28 @@ function receber(m: ParaOPintor) {
       let video = videos.get(m.video)
       if (!video) {
         const fonte = new OffscreenCanvas(1, 1)
-        video = { largura: 0, altura: 0, escala: 1, recortes: [], fonte, pincel: fonte.getContext('2d'), pintada: false, frente: null, telas: new Set() }
+        video = {
+          largura: 0,
+          altura: 0,
+          escala: 1,
+          recortes: [],
+          fonte,
+          pincel: fonte.getContext('2d'),
+          pintada: false,
+          frente: null,
+          anel: null,
+          anelAVista: false,
+          progresso: 0,
+          telas: new Set(),
+        }
         videos.set(m.video, video)
       }
       video.largura = m.largura
       video.altura = m.altura
       video.escala = m.escala
       video.recortes = m.recortes
+      video.anel = m.anel
+      video.anelAVista = anelAVista(video)
       const w = Math.max(1, Math.round(m.largura * m.escala))
       const h = Math.max(1, Math.round(m.altura * m.escala))
       if (video.fonte.width !== w || video.fonte.height !== h) {
@@ -186,6 +270,7 @@ function receber(m: ParaOPintor) {
       const video = videos.get(m.video)
       if (video) {
         pintarFonte(video, m.quadro)
+        video.progresso = m.progresso
         for (const tela of video.telas) {
           if (tela.acordada) desenhar(tela)
           else tela.atrasada = true
@@ -203,6 +288,7 @@ function receber(m: ParaOPintor) {
         break
       }
       video.frente = m.frente
+      video.anelAVista = anelAVista(video)
       for (const tela of video.telas) {
         if (tela.acordada) desenhar(tela)
         else tela.atrasada = true

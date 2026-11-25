@@ -37,8 +37,8 @@
 // por um modelo da linha (uma linha só não precisa de foto).
 
 import { ACELERACAO, type Faixa } from './faixa.ts'
-import { elementosDe, enquadrar, fotografar, soltarFoto, type Foto, type Fotos } from './fotos.ts'
-import type { Recorte } from './pintor.ts'
+import { ANEL, elementosDe, enquadrar, fotografar, soltarFoto, type Foto, type Fotos } from './fotos.ts'
+import type { Anel, Recorte } from './pintor.ts'
 import type { Relogio } from './rolagem.ts'
 import { criarPintor, type Pintor, type Tela } from './telas.ts'
 import { alvoEm, type Alvo, type Caminho } from './trajeto.ts'
@@ -103,6 +103,8 @@ interface Video {
   altura: number
   /** O que corta o vídeo no original (os cantos arredondados do cartão): as telas mostram o vídeo recortado assim. */
   recortes: Recorte[]
+  /** O anel do progresso dele, que as telas desenham a cada quadro (veja Anel), ou null. */
+  anel: Anel | null
   /** Pixels das telas por px CSS. */
   escala: number
   /** O pintor já conhece o vídeo. */
@@ -412,6 +414,29 @@ function medirFrente(elemento: HTMLElement, videos: Video[]): Frente | null {
   return indices.size ? { elementos: [...indices], nos, x0, y0, x1, y1 } : null
 }
 
+/**
+ * O anel do progresso do vídeo (veja Anel), relativo a ele: o do lado do vídeo (veja ANEL), medido
+ * pelo trilho, o círculo de SVG dentro dele. Ou null, se não houver.
+ */
+function medirAnel(video: HTMLVideoElement, r: DOMRect): Anel | null {
+  const trilho = video.parentElement?.querySelector(`${ANEL} circle`)
+  const svg = trilho instanceof SVGCircleElement ? trilho.ownerSVGElement : null
+  if (!(trilho instanceof SVGCircleElement) || !svg) return null
+  // do viewBox do SVG para px CSS
+  const caixa = svg.getBoundingClientRect()
+  const vista = svg.viewBox.baseVal
+  const k = vista?.width ? caixa.width / vista.width : 1
+  const estilo = getComputedStyle(trilho)
+  return {
+    x: caixa.left + (trilho.cx.baseVal.value - (vista?.x ?? 0)) * k - r.left,
+    y: caixa.top + (trilho.cy.baseVal.value - (vista?.y ?? 0)) * k - r.top,
+    raio: trilho.r.baseVal.value * k,
+    espessura: (Number.parseFloat(estilo.strokeWidth) || 1) * k,
+    cor: estilo.stroke,
+    trilho: Number.parseFloat(estilo.opacity) || 0,
+  }
+}
+
 /** Numera os vídeos para o pintor (veja telas.ts). */
 let proximoVideo = 0
 
@@ -427,6 +452,7 @@ function medirVideos(elemento: HTMLElement): Video[] {
       largura: r.width,
       altura: r.height,
       recortes: medirRecortes(video, elemento),
+      anel: medirAnel(video, r),
       escala: Math.min(window.devicePixelRatio || 1, 2),
       apresentado: false,
       frentes: 0,

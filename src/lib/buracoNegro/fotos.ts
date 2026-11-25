@@ -13,6 +13,13 @@
 // Uma imagem não tem mouse em cima: os elementos em que o mouse está são marcados no clone, e as
 // regras com :hover passam a valer para a marca. As animações e as transições ficam paradas no fim.
 
+/**
+ * O anel do progresso de um vídeo (o do botão de pausa, veja ProjectVideo.tsx): ele anda com o vídeo,
+ * e numa foto ficaria parado. Fica fora das fotos, e as telas dos vídeos o desenham a cada quadro
+ * (veja Anel, em pintor.ts).
+ */
+export const ANEL = '[data-anel]'
+
 /** O bloco e tudo dentro dele, na ordem do documento: a mesma no original e nos clones. */
 export function elementosDe(raiz: Element): Element[] {
   return [raiz, ...raiz.querySelectorAll('*')]
@@ -383,8 +390,10 @@ async function montarSvg(pedido: Pedido, modo: 'foto' | 'frente', css: string): 
   // a frente dos vídeos fica numa foto à parte, desenhada por cima de cada quadro deles
   if (modo === 'frente') clone.style.visibility = 'hidden'
   for (const i of frente) (copias[i] as (Element & ElementCSSInlineStyle) | undefined)?.style.setProperty('visibility', modo === 'frente' ? 'visible' : 'hidden')
-  // o que se anima sem parar fica fora das duas (as fatias o mostram vivo)
+  // o que se anima sem parar fica fora das duas (as fatias o mostram vivo), e o anel do progresso
+  // dos vídeos também (as telas o desenham)
   for (const i of vivos) (copias[i] as (Element & ElementCSSInlineStyle) | undefined)?.style.setProperty('visibility', 'hidden')
+  for (const anel of clone.querySelectorAll<HTMLElement | SVGElement>(ANEL)) anel.style.setProperty('visibility', 'hidden')
   await embutir(elemento, clone)
   return documento([clone], w, h, css)
 }

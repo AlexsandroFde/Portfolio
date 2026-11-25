@@ -11,9 +11,12 @@
 // página anda menos (veja PASSO_MAXIMO), em vez de saltar.
 //
 // Os links para outro ponto da página (o menu, os botões da apresentação), clicados com o mouse ou o
-// dedo, também vão pela rolagem suave, um pouco mais rápida (veja VELOCIDADE_DO_LINK). O teclado
-// (inclusive o Enter num link) e a busca do navegador continuam com a rolagem do navegador: quando a
-// página vai para outro lugar sem passar por aqui, o destino passa a ser onde ela está.
+// dedo, também vão pela rolagem suave, um pouco mais rápida (veja VELOCIDADE_DO_LINK), e o que leva a
+// página a um ponto pelo código vai do mesmo jeito (veja irPara e lib/rolarAte.ts: o cartão de um
+// projeto, antes de virar a página dele). O teclado (inclusive o Enter num link) e a busca do
+// navegador continuam com a rolagem do navegador: quando a página vai para outro lugar sem passar por
+// aqui, o destino passa a ser onde ela está.
+import { oferecerRolagem, QUASE_LA } from '../rolarAte.ts'
 
 /**
  * A maior aceleração da página (em telas por segundo, a cada segundo): ela arranca, freia e muda de
@@ -77,8 +80,20 @@ export function criarRolagemSuave(): RolagemSuave {
   /** O dedo na tela: qual, onde estava e as últimas posições dele ([instante (ms), y]). */
   let dedo: { id: number; y: number } | null = null
   const amostras: [number, number][] = []
+  /**
+   * Quem espera a página parar depois de mandá-la a um ponto (veja irPara): avisado quando ela para,
+   * no destino ou onde outra coisa a deixar (a roda, o dedo, outro link, o navegador).
+   */
+  let quemEspera: (() => void) | null = null
 
   const parada = () => velocidade === 0 && destino === atual
+
+  function avisar() {
+    const aviso = quemEspera
+    quemEspera = null
+    aviso?.()
+  }
+
   // a volta ao topo trava a rolagem enquanto o site chega (veja mergulho.ts)
   const travada = () => raiz.style.overflow === 'hidden'
 
@@ -122,6 +137,24 @@ export function criarRolagemSuave(): RolagemSuave {
     destino = Math.min(maiorRolagem(), Math.max(0, alvo.getBoundingClientRect().top + window.scrollY - recuo))
     chegada = CHEGADA.link
     velocidadeMaxima = VELOCIDADE_DO_LINK
+  }
+
+  /**
+   * Leva a página até `alvo` (px de rolagem) como um link desta página a leva (veja aoClicar), e
+   * avisa quando ela para. Se outra coisa a levar para outro lugar no caminho, o aviso vem quando ela
+   * parar lá: quem pediu confere onde ela ficou.
+   */
+  function irPara(alvo: number): Promise<void> {
+    avisar()
+    if (!ligada || travada()) return Promise.resolve()
+    if (parada()) pararEm(window.scrollY)
+    destino = Math.min(maiorRolagem(), Math.max(0, alvo))
+    chegada = CHEGADA.link
+    velocidadeMaxima = VELOCIDADE_DO_LINK
+    if (parada()) return Promise.resolve()
+    return new Promise((pronto) => {
+      quemEspera = pronto
+    })
   }
 
   /** Um elemento por dentro do alvo rola na direção `dy` por conta própria (uma lista com rolagem)? */
@@ -209,21 +242,30 @@ export function criarRolagemSuave(): RolagemSuave {
       // Ligada, o dedo não rola a página pelo navegador (rola por aqui); a pinça do zoom continua.
       if (sim) raiz.style.touchAction = 'pinch-zoom'
       else raiz.style.removeProperty('touch-action')
+      // e quem leva a página a um ponto pelo código vem por aqui, como os links
+      oferecerRolagem(sim ? irPara : null)
       pararEm(window.scrollY)
+      avisar()
     },
 
     quadro(agora) {
       const dt = anterior ? Math.min((agora - anterior) / 1000, PASSO_MAXIMO) : 0
       anterior = agora
-      if (!ligada || parada()) return
+      // (parada, quem esperava por ela fica sabendo, no começo do quadro seguinte ao da chegada)
+      if (!ligada || parada()) {
+        avisar()
+        return
+      }
       if (travada()) {
         pararEm(window.scrollY)
+        avisar()
         return
       }
       // a página foi para outro lugar sem passar por aqui (o teclado, um link do menu, a volta ao topo)
       const real = window.scrollY
       if (Math.abs(real - posta) > 1.5) {
         pararEm(real)
+        avisar()
         return
       }
       if (dt <= 0) return
@@ -252,13 +294,18 @@ export function criarRolagemSuave(): RolagemSuave {
       }
       window.scrollTo({ top: atual, behavior: 'instant' })
       posta = window.scrollY
+      // quase lá, quem esperava já pode seguir: o resto anda a menos de um pixel por quadro
+      if (Math.abs(destino - atual) < QUASE_LA) avisar()
     },
 
     sincronizar() {
       pararEm(window.scrollY)
+      avisar()
     },
 
     destruir() {
+      if (ligada) oferecerRolagem(null)
+      avisar()
       vigia.disconnect()
       window.removeEventListener('wheel', aoRolarRoda)
       document.removeEventListener('click', aoClicar, { capture: true })

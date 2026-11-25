@@ -193,7 +193,7 @@ function Painel({
           <div
             ref={corpo}
             tabIndex={-1}
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-8 outline-none sm:px-8 sm:py-10 lg:px-12 lg:py-12"
+            className="sem-barra min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-8 outline-none sm:px-8 sm:py-10 lg:px-12 lg:py-12"
           >
             <ProjectDetails project={project} />
           </div>

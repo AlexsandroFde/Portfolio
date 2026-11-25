@@ -156,6 +156,15 @@
   }
 }
 
+/* Rola sem barra de rolagem, como a página: pela roda, pelo toque e pelo teclado. */
+@utility sem-barra {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Rótulo monoespaçado em caixa alta (datas, índices, legendas). */
 @utility label {
   font-family: var(--font-mono);

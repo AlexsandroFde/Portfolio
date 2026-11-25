@@ -151,11 +151,29 @@ const beka: ProjectDetails = {
     },
     {
       title: { pt: 'Em números', en: 'By the numbers' },
-      items: [
-        { pt: '4.565 verificações automatizadas em 18 suítes, que rodam sem o modelo e sem o sistema operacional.', en: '4,565 automated checks in 18 suites that run without the model and without the operating system.' },
-        { pt: 'A ferramenta certa em 31 a 33 de 34 pedidos, sem nenhum caso de dizer que fez sem ter feito.', en: 'The right tool in 31 to 33 out of 34 requests, with not a single case of claiming to have done something she had not done.' },
-        { pt: 'Com ruído de fundo, o sentido do comando falado ficou certo em 56 de 60 vezes (eram 37).', en: 'With background noise, the meaning of spoken commands came out right 56 times out of 60 (up from 37).' },
-        { pt: 'Num notebook com placa de vídeo de 4 GB, ela reage em 0,7 a 1,1 segundo.', en: 'On a laptop with a 4 GB GPU, she reacts in 0.7 to 1.1 seconds.' },
+      stats: [
+        {
+          value: { pt: '4.565', en: '4,565' },
+          label: {
+            pt: 'verificações automatizadas em 18 suítes, que rodam sem o modelo e sem o sistema operacional',
+            en: 'automated checks in 18 suites that run without the model and without the operating system',
+          },
+        },
+        {
+          value: { pt: '31 a 33 de 34', en: '31 to 33 of 34' },
+          label: {
+            pt: 'pedidos atendidos com a ferramenta certa, sem nenhum caso de dizer que fez sem ter feito',
+            en: 'requests handled with the right tool, with not a single case of claiming to have done something she had not done',
+          },
+        },
+        {
+          value: { pt: '56 de 60', en: '56 of 60' },
+          label: { pt: 'comandos falados entendidos com ruído de fundo (eram 37)', en: 'spoken commands understood with background noise (up from 37)' },
+        },
+        {
+          value: { pt: '0,7 a 1,1 s', en: '0.7 to 1.1 s' },
+          label: { pt: 'para reagir, num notebook com placa de vídeo de 4 GB', en: 'to react, on a laptop with a 4 GB GPU' },
+        },
       ],
     },
   ],

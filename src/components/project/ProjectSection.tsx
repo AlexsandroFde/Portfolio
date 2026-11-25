@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import type { ProjectSection as Section } from '../../data/projects.ts'
+import type { ProjectSection as Section, ProjectStat } from '../../data/projects.ts'
 import { useT } from '../../i18n/idioma.ts'
 import { cx } from '../../lib/cx.ts'
 import type { Arranjo, Fileira } from './diagramacao.ts'
@@ -33,7 +33,23 @@ function Cabecalho({ numero, titulo, id }: { numero: number; titulo: string; id:
   )
 }
 
-/** O texto de uma parte: os parágrafos e os itens, nessa ordem. */
+/** Os números em destaque: o valor grande e, embaixo, o que ele conta. */
+function Numeros({ stats }: { stats: readonly ProjectStat[] }) {
+  const t = useT()
+
+  return (
+    <ul className="grid grid-cols-2 gap-3 sm:gap-4">
+      {stats.map((numero) => (
+        <li key={numero.label.pt} className="rounded-xl border border-line p-4 sm:p-5">
+          <span className="block text-xl font-medium tracking-[-0.03em] tabular-nums text-fg sm:text-3xl">{t(numero.value)}</span>
+          <span className="mt-2 block text-pretty text-sm leading-snug text-muted">{t(numero.label)}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** O texto de uma parte: os parágrafos, os itens e os números, nessa ordem. */
 function Corpo({ secao }: { secao: Section }) {
   const t = useT()
   const texto = 'text-pretty text-[0.9375rem] leading-relaxed text-muted sm:text-base'
@@ -60,6 +76,7 @@ function Corpo({ secao }: { secao: Section }) {
           ))}
         </ul>
       )}
+      {secao.stats && <Numeros stats={secao.stats} />}
     </div>
   )
 }

@@ -130,11 +130,17 @@ const nossoCantinho: ProjectDetails = {
     },
     {
       title: { pt: 'Em números', en: 'By the numbers' },
-      items: [
-        { pt: '235 commits em cinco meses, até a versão 3.0.', en: '235 commits over five months, up to version 3.0.' },
-        { pt: 'Cerca de 46 mil linhas de TypeScript no front, das quais o pet ocupa 153 arquivos.', en: 'About 46,000 lines of TypeScript on the front end, with the pet taking up 153 files.' },
-        { pt: '152 casos de teste automatizados no back-end, com testes de snapshot do pet.', en: '152 automated test cases on the back end, including snapshot tests for the pet.' },
-        { pt: 'Só 6 dependências de produção no front.', en: 'Only 6 production dependencies on the front end.' },
+      stats: [
+        { value: '235', label: { pt: 'commits em cinco meses, até a versão 3.0', en: 'commits over five months, up to version 3.0' } },
+        {
+          value: { pt: '46 mil', en: '46,000' },
+          label: { pt: 'linhas de TypeScript no front, com 153 arquivos só do pet', en: 'lines of TypeScript on the front end, with 153 files for the pet alone' },
+        },
+        {
+          value: '152',
+          label: { pt: 'casos de teste automatizados no back-end, com testes de snapshot do pet', en: 'automated test cases on the back end, including snapshot tests for the pet' },
+        },
+        { value: '6', label: { pt: 'dependências de produção no front', en: 'production dependencies on the front end' } },
       ],
     },
   ],

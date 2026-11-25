@@ -60,8 +60,14 @@ export interface VideoMedia extends MediaBase {
 /** Uma demonstração de um projeto. Um tipo novo entra aqui e ganha quem o mostre (veja ProjectMedia.tsx). */
 export type ProjectMedia = ImageMedia | VideoMedia
 
+/** Um número do projeto, em destaque: o valor grande e o que ele conta. */
+export interface ProjectStat {
+  value: Traduzivel
+  label: Texto
+}
+
 /**
- * Uma parte da página de um projeto: um título, com parágrafos, itens ou os dois, e as
+ * Uma parte da página de um projeto: um título, com parágrafos, itens, números ou uma mistura, e as
  * demonstrações que ilustram aquele texto. Quem decide como elas se arrumam ao lado do texto (ou
  * numa faixa embaixo dele) é a página, pelo número e pelo formato delas (veja diagramacao.ts).
  */
@@ -69,6 +75,7 @@ export interface ProjectSection {
   title: Texto
   paragraphs?: readonly Texto[]
   items?: readonly Texto[]
+  stats?: readonly ProjectStat[]
   /** As demonstrações desta parte, na ordem em que aparecem. */
   media?: readonly ProjectMedia[]
 }

@@ -146,14 +146,20 @@ const deepcore: ProjectDetails = {
     },
     {
       title: { pt: 'Em números', en: 'By the numbers' },
-      items: [
-        { pt: '455 commits em menos de dois meses.', en: '455 commits in under two months.' },
-        { pt: 'Cerca de 84 mil linhas de GDScript em 317 scripts, e 65 shaders.', en: 'About 84,000 lines of GDScript across 317 scripts, plus 65 shaders.' },
+      stats: [
+        { value: '455', label: { pt: 'commits em menos de dois meses', en: 'commits in under two months' } },
         {
-          pt: '338 testes automatizados em 28 suítes, num executor próprio que roda sem tela, também em Docker.',
-          en: '338 automated tests in 28 suites, on a custom headless runner that also runs in Docker.',
+          value: { pt: '84 mil', en: '84,000' },
+          label: { pt: 'linhas de GDScript em 317 scripts, além de 65 shaders', en: 'lines of GDScript across 317 scripts, plus 65 shaders' },
         },
-        { pt: '678 imagens e 116 sons gerados pelos geradores do projeto.', en: "678 images and 116 sounds produced by the project's generators." },
+        {
+          value: '338',
+          label: {
+            pt: 'testes automatizados em 28 suítes, num executor próprio que roda sem tela, também em Docker',
+            en: 'automated tests in 28 suites, on a custom headless runner that also runs in Docker',
+          },
+        },
+        { value: '678', label: { pt: 'imagens e 116 sons gerados pelos geradores do projeto', en: "images and 116 sounds produced by the project's generators" } },
       ],
     },
   ],

@@ -61,6 +61,7 @@ O que dá identidade ao site é o fundo. No lugar de uma imagem parada, há um b
 - **Um clique faz ondas.** Cada clique, ou toque, solta uma onda gravitacional que corre pela malha, esticando e apertando o espaço por onde passa.
 - **Uma música que cresce com a página.** Para quem liga o som, um coro sintetizado na hora, sem arquivos, começa só com as vozes, longe e escuro, e ganha um grave fundo, um descante e um pulso até o fim do conteúdo; no mergulho, tudo desce de tom e fica mais lento, cada clique soa como uma onda gravitacional de verdade, numa nota do acorde, e o horizonte cala tudo.
 - **Fluido mesmo com a página ocupada.** O buraco negro é desenhado num Web Worker, e as fatias da absorção são movidas pelo próprio navegador, junto com a rolagem.
+- **Cada destaque abre a sua página.** Clicado, o cartão do projeto cresce até quase o tamanho da tela e vira uma página com explicações e demonstrações (vídeos e imagens) e, de lá, o código no GitHub. Cada página tem endereço próprio, e o voltar do navegador a fecha.
 - **Bilíngue de ponta a ponta.** Português e inglês com o mesmo conteúdo, o TypeScript cobrando as duas línguas em cada texto e o HTML de cada versão pré-renderizado no build.
 - **Currículo pronto para ATS.** O PDF é gerado a cada build a partir dos mesmos dados do site, numa coluna e com texto selecionável.
 - **Cuidado com quem visita.** Com "reduzir movimento" ligado ou num aparelho lento, o buraco negro fica parado no alto da página; com economia de dados, os vídeos ficam no pôster até um toque.
@@ -112,7 +113,8 @@ Todo o conteúdo fica em arquivos de dados, separados dos componentes. Para atua
 | Nome, contatos (e-mail, WhatsApp, GitHub, LinkedIn) e apresentação | `src/data/profile.ts`          |
 | Currículo em PDF                                                   | `src/data/curriculo.ts`        |
 | Projetos (e quais aparecem como destaque)                          | `src/data/projects.ts`         |
-| Vídeos dos projetos                                                | `src/assets/projects/`         |
+| Página de cada destaque (explicações e demonstrações)              | `src/data/projectDetails/`     |
+| Imagens e vídeos dos projetos, numa pasta por projeto              | `src/assets/projects/`         |
 | Formação, experiências e atividades                                | `src/data/journey.ts`          |
 | Habilidades e cursos                                               | `src/data/skills.ts`           |
 | Textos fixos da interface (menu, botões etc.)                      | `src/i18n/interface.ts`        |
@@ -125,20 +127,55 @@ Todo o conteúdo fica em arquivos de dados, separados dos componentes. Para atua
 
 ### Projetos
 
-- Os projetos com `featured` aparecem como cartões em **Destaques**, na ordem desse número. Os demais vão para a lista **Outros projetos**, que tem filtros por área.
-- Cada projeto tem um `summary`, uma frase usada na lista, e uma `description`, o texto completo dos cartões.
-- Um projeto sem o campo `repo` aparece como repositório privado, com cadeado e sem link.
+- Os projetos com `featured` aparecem como cartões em **Destaques**, na ordem desse número. Os demais vão para a lista **Outros projetos**, que tem filtros por área e leva ao repositório.
+- Cada projeto tem um `id` (a chave dele e o endereço da página, `#projeto/<id>`), um `summary`, uma frase usada na lista, e uma `description`, o texto completo dos cartões.
+- Um projeto sem o campo `repo` aparece como repositório privado: com cadeado na lista e, na página de um destaque, com o aviso no lugar do botão do GitHub.
+- Um destaque precisa também de uma prévia (`preview`, um vídeo ou uma imagem, que o cartão mostra e que abre a galeria da página) e da página dele (`details`).
 
-### Vídeos dos projetos
+Para pôr um projeto em destaque:
 
-Um projeto pode ter um vídeo curto (campo `video`): um MP4 sem som, em 16:9, que toca em loop como um GIF. Para não pesar, ele só é baixado quando aparece na tela, pausa ao sair dela e tem botão de pausar.
+1. Coloque as mídias numa pasta com o `id` dele em `src/assets/projects/`: cada imagem em WebP com até 1600 px de largura, junto da mesma com 640 px e o sufixo `-640`, e cada vídeo em MP4 com o pôster (o primeiro quadro) nas duas larguras.
+2. Escreva a página dele em `src/data/projectDetails/<projeto>.ts`: a abertura (`intro`), as partes do texto (`sections`, cada uma com título e parágrafos, itens ou os dois), as demonstrações (`media`) e, se precisar, uma observação no fim (`note`). Os textos vão nos dois idiomas, e o TypeScript cobra os dois.
+3. Em `src/data/projects.ts`, dê ao projeto `featured`, `preview` e `details: () => import('./projectDetails/<projeto>.ts').then((modulo) => modulo.default)`.
+
+Nada mais muda: o cartão, a animação, a galeria e o texto saem dos dados.
+
+### A página de um projeto
+
+Clicado em qualquer ponto (no nome, pelo teclado, ou na prévia), o cartão de um destaque vira a página do projeto. O painel da página, já no tamanho final, começa recortado (`clip-path`) no retângulo do cartão e se abre até ocupar quase a tela inteira; a página atrás escurece e fica desfocada, e o conteúdo aparece com o painel já quase aberto. Ao fechar (pelo X, pelo Esc, por um clique fora ou pelo voltar do navegador), ele encolhe de volta até o cartão, e o foco volta para o botão dele. Para quem prefere menos movimento, a página só aparece e some.
+
+- **A galeria.** A prévia do cartão abre a galeria, seguida das demonstrações do projeto. Passa de uma para outra pelas setas, pelas miniaturas, pelas setas do teclado e arrastando o dedo de lado. Os vídeos se comportam como no cartão.
+- **O endereço.** A página aberta fica no endereço (`#projeto/<id>`): um link abre direto nela, e o voltar do navegador (o do celular, principalmente) a fecha, em vez de sair do site.
+- **A rolagem.** Enquanto a página está aberta, a do site fica travada com a mesma trava da volta ao topo, que a rolagem suave respeita: a roda e o dedo rolam só o texto do projeto.
+- **Por cima de tudo.** A página é um `<dialog>` nativo, que deixa o resto do site inerte para o teclado e os leitores de tela. Ela vai para o fim do `<body>`, fora do `<main>`: a absorção do buraco negro não a toma por conteúdo.
+- **Só quando precisa.** O texto e as mídias de cada página ficam num módulo à parte (de 3 a 5 kB comprimidos), baixado quando o mouse ou o foco chegam ao cartão, antes do clique.
+
+Cada peça tem uma responsabilidade só, e as que variam entram sem mudar as outras:
+
+| Peça | Papel |
+|---|---|
+| `src/data/projects.ts` | Os tipos (`Project`, `FeaturedProject`, `ProjectMedia`, `ProjectDetails`) e a lista |
+| `src/data/projectDetails/` | A página de cada destaque, um módulo por projeto |
+| `src/components/project/ProjectMedia.tsx` | Quem mostra cada tipo de mídia: um tipo novo (um modelo 3D, por exemplo) entra aqui, e o cartão e a galeria continuam iguais |
+| `src/components/project/ProjectGallery.tsx` | A galeria: o palco, a legenda e as miniaturas |
+| `src/components/project/ProjectDetails.tsx` | O conteúdo da página: a galeria, o texto, as tecnologias e o caminho para o código |
+| `src/components/project/ProjectDialog.tsx` | O diálogo: abrir, fechar, o foco, a trava da rolagem e a animação |
+| `src/hooks/useProjectRoute.ts` | Qual projeto está aberto, guardado no endereço |
+| `src/lib/foco.ts` | As contas e os tempos da animação, sem nada de React nem de página |
+| `src/lib/travaDeRolagem.ts` | A trava da rolagem do site |
+
+O cartão não sabe da página: recebe só o que fazer ao ser clicado. E a página não sabe de onde vêm os detalhes: só chama o carregador do projeto.
+
+### Mídias dos projetos
+
+Um destaque tem uma prévia no cartão, que pode ser uma imagem ou um vídeo curto: um MP4 sem som, em 16:9, que toca em loop como um GIF. Para não pesar, o vídeo só é baixado quando aparece na tela, pausa ao sair dela e tem botão de pausar. Os vídeos da galeria da página fazem o mesmo.
 
 O botão tem em volta um anel com o progresso do vídeo, que cresce do alto, no sentido do relógio, e recomeça a cada volta do loop. Para não cobrir o vídeo, o botão fica escondido: aparece com o mouse em cima do vídeo, com o foco do teclado ou, no celular, por uns 3 segundos depois de um toque no vídeo. Escondido, ele deixa o toque passar: o primeiro toque só o mostra, e o seguinte pausa.
 
-O vídeo também não toca sozinho para quem ativou "reduzir movimento" no sistema, nem para quem pede economia de dados ao navegador (o modo econômico dele ou do sistema). Nesses casos ele fica no pôster até um toque no botão, e percorrer os projetos deixa de baixar os uns 4 MB dos vídeos.
+O vídeo também não toca sozinho para quem ativou "reduzir movimento" no sistema, nem para quem pede economia de dados ao navegador (o modo econômico dele ou do sistema). Nesses casos ele fica no pôster até um toque no botão, e percorrer os projetos deixa de baixar os uns 6 MB dos vídeos.
 
 > [!TIP]
-> Para manter o site leve, exporte os vídeos em 1280x720, 30 fps e uns 15 segundos (H.264, CRF entre 26 e 28), junto com um quadro em WebP para o pôster.
+> Para manter o site leve, exporte os vídeos da prévia em 1280x720, 30 fps e uns 15 segundos (H.264, CRF entre 26 e 28), junto com um quadro em WebP para o pôster. Os da galeria podem ter outra proporção (as animações da Beka são em pé): o palco mostra cada demonstração inteira.
 
 ### Português e inglês
 
@@ -629,9 +666,12 @@ O endereço do site usado nas meta tags (`VITE_SITE_URL`) fica no `.env`. No dep
 │   └── prerender.mjs              # insere o HTML de cada página em dist/ e gera o PDF
 ├── src/
 │   ├── assets/                    # imagens e vídeos otimizados usados pelo site
+│   │   └── projects/              # as mídias dos projetos, uma pasta por projeto
 │   ├── components/                # seções e componentes da página
+│   │   └── project/               # a página dos destaques: o diálogo, a galeria e as mídias
 │   ├── curriculo/                 # modelo e estilo do currículo em PDF
 │   ├── data/                      # conteúdo do portfólio e do currículo
+│   │   └── projectDetails/        # a página de cada destaque, um módulo por projeto
 │   ├── hooks/                     # hooks do React
 │   ├── i18n/                      # idiomas e textos fixos da interface
 │   ├── lib/                       # utilitários

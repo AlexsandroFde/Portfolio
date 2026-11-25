@@ -36,6 +36,7 @@
 // página (a borda de cima das seções e das listas) entram como blocos de uma fatia só, desenhadas
 // por um modelo da linha (uma linha só não precisa de foto).
 
+import { ATRIBUTO_POR_CIMA, focoDoTeclado } from './beira.ts'
 import { ACELERACAO, type Faixa } from './faixa.ts'
 import { ANEL, elementosDe, enquadrar, fotografar, soltarFoto, type Foto, type Fotos } from './fotos.ts'
 import type { Anel, Recorte } from './pintor.ts'
@@ -281,6 +282,7 @@ const ACIMA = 8
  * index.ts), e ainda abaixo do cabeçalho.
  */
 const POR_CIMA = '42'
+
 /**
  * A quantos px de rolagem de aparecer a fatia já recebe cada quadro dos vídeos (veja acordarTelas).
  * As outras recebem o quadro quando chegarem perto: o pintor desenha a tela na hora em que ela
@@ -1191,6 +1193,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
   function elevar(bloco: Bloco, sim: boolean) {
     if (bloco.linha || bloco.elevado === sim) return
     bloco.elevado = sim
+    // (quem precisa saber se o bloco está inteiro, como a página de um projeto que sai dele, lê aqui)
+    bloco.elemento.toggleAttribute(ATRIBUTO_POR_CIMA, sim)
     const estilo = bloco.elemento.style
     if (sim) {
       bloco.estiloAntes = [estilo.position, estilo.zIndex]
@@ -1647,10 +1651,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       folgaAtual = folga
       aquecerAtual = [acima, abaixo]
       obterCamada()
-      // O foco de um clique (num botão, num link) não conta, só o do teclado: senão o bloco clicado
-      // nunca seria absorvido.
-      const focado = document.activeElement
-      const doTeclado = focado instanceof Element && focado !== document.body && focado.matches(':focus-visible') ? focado : null
+      // um bloco com o foco do teclado não é absorvido (veja beira.ts)
+      const doTeclado = focoDoTeclado()
       let novas = 0
       let semFoto = false
       /** Algum bloco espera uma foto (nova ou refeita). */

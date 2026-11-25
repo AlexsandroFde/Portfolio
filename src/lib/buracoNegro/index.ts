@@ -1,5 +1,6 @@
 import { definirBuracoNegroAnimado, tocarOnda } from '../som/index.ts'
 import { criarAbsorcao, temBlocos, type Cena as CenaDaAbsorcao, type Folga } from './absorcao.ts'
+import { VARIAVEL_DA_BEIRA } from './beira.ts'
 import { forcaEm, type Faixa } from './faixa.ts'
 import { fotografarTopo, type Peca } from './fotos.ts'
 import { definirQueda, quandoMedirMergulho, quandoVoltar, trechoDoMergulho, type Queda } from './mergulho.ts'
@@ -566,13 +567,21 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
    */
   function ajustarAncoras() {
     if (preso) {
-      raiz.style.removeProperty('--topo-livre')
+      soltarVariaveis()
       return
     }
     // Toda seção tem pelo menos 5rem de respiro antes do título: ela pode parar 4rem dentro da
     // faixa sem que nada dela seja puxado.
     const respiro = 4 * (Number.parseFloat(getComputedStyle(raiz).fontSize) || 16)
     raiz.style.setProperty('--topo-livre', `${Math.ceil(Math.max(faixa().inicio - respiro, topo + 24))}px`)
+    // a beira da cortina, para quem precisa saber o que da página está à vista (veja beira.ts)
+    raiz.style.setProperty(VARIAVEL_DA_BEIRA, `${faixa().inicio}px`)
+  }
+
+  /** Sem a absorção, a página fica como sem o efeito: sem o recuo das âncoras e sem beira. */
+  function soltarVariaveis() {
+    raiz.style.removeProperty('--topo-livre')
+    raiz.style.removeProperty(VARIAVEL_DA_BEIRA)
   }
 
   const remedir = () => {
@@ -732,7 +741,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     chegar()
     pausar()
     desligarAbsorcao()
-    raiz.style.removeProperty('--topo-livre')
+    soltarVariaveis()
     definirBuracoNegroAnimado(false)
     aoAtivar(false)
   }
@@ -817,12 +826,14 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   document.addEventListener('visibilitychange', aoMudarVisibilidade)
 
   // O foco do teclado pode entrar num bloco que está na faixa sem a página rolar: ele sobe por cima
-  // da cortina já no próximo quadro (veja preparar, em absorcao.ts).
+  // da cortina já no próximo quadro (veja preparar, em absorcao.ts). Uma tecla também conta: com o
+  // foco de um clique num botão, ela faz o foco aparecer sem que ele saia do lugar (sem focusin).
   const aoMudarFoco = () => {
     reabsorver = true
   }
   document.addEventListener('focusin', aoMudarFoco)
   document.addEventListener('focusout', aoMudarFoco)
+  document.addEventListener('keydown', aoMudarFoco)
 
   const aoMudarMovimento = () => {
     // (remedir prepara a absorção do zero: a página pode ter aberto já com o movimento reduzido)
@@ -909,6 +920,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     document.removeEventListener('visibilitychange', aoMudarVisibilidade)
     document.removeEventListener('focusin', aoMudarFoco)
     document.removeEventListener('focusout', aoMudarFoco)
+    document.removeEventListener('keydown', aoMudarFoco)
     movimentoReduzido.removeEventListener('change', aoMudarMovimento)
     pararDeOuvirVolta()
     pararDeOuvirMergulho()
@@ -925,7 +937,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     cortina.remove()
     tampa.remove()
     telaDeCima.remove()
-    raiz.style.removeProperty('--topo-livre')
+    soltarVariaveis()
     recipiente.removeAttribute('data-preso')
     recipiente.style.height = ''
   }

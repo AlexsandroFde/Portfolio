@@ -5,6 +5,7 @@ import { useT, type Texto } from '../../i18n/idioma.ts'
 import { ui } from '../../i18n/interface.ts'
 import { botaoPrimario } from '../../lib/estilos.ts'
 import { ArrowUpRight, Lock } from '../icons.tsx'
+import { baixarDetalhes, detalhesBaixados } from './carga.ts'
 import { diagramar } from './diagramacao.ts'
 import { Figura } from './ProjectFigure.tsx'
 import { ProjectSection } from './ProjectSection.tsx'
@@ -15,22 +16,26 @@ const CARREGANDO: Carga = { estado: 'carregando' }
 
 /**
  * A página do projeto, do módulo dele (veja `details`, em projects.ts). A carga fica junto do projeto
- * de que veio: com outro projeto, ela volta a ser "carregando" até o módulo dele chegar.
+ * de que veio: com outro projeto, ela volta a ser "carregando" até o módulo dele chegar. Já baixado
+ * (o cartão começa a baixá-lo quando o mouse chega, veja carga.ts), ele está pronto desde o começo.
  */
 function useDetalhes(project: FeaturedProject): Carga {
   const [carga, setCarga] = useState<{ de: FeaturedProject; carga: Carga } | null>(null)
+  const baixados = detalhesBaixados(project)
 
   useEffect(() => {
+    if (baixados) return
     let atual = true
-    project.details().then(
+    baixarDetalhes(project).then(
       (details) => atual && setCarga({ de: project, carga: { estado: 'pronto', details } }),
       () => atual && setCarga({ de: project, carga: { estado: 'falhou' } }),
     )
     return () => {
       atual = false
     }
-  }, [project])
+  }, [project, baixados])
 
+  if (baixados) return { estado: 'pronto', details: baixados }
   return carga?.de === project ? carga.carga : CARREGANDO
 }
 
@@ -56,15 +61,16 @@ function Codigo({ repo }: { repo?: string }) {
 }
 
 /**
- * A abertura: a prévia do cartão (a página continua de onde ele parou) e, ao lado, a apresentação,
- * as tecnologias e o caminho para o código. Ela vem do próprio projeto, então aparece na hora.
+ * A abertura: a prévia do cartão (que voa dele para cá, e a página continua o vídeo de onde ele
+ * parou) e, ao lado, a apresentação, as tecnologias e o caminho para o código. Ela vem do próprio
+ * projeto, então aparece na hora.
  */
 function Abertura({ project, intro }: { project: FeaturedProject; intro: Texto }) {
   const t = useT()
 
   return (
     <div className="grid gap-y-8 lg:grid-cols-12 lg:items-center lg:gap-x-10">
-      <Figura media={project.preview} sizes="(min-width: 64rem) 600px, 92vw" loading="eager" className="lg:col-span-7" />
+      <Figura media={project.preview} voo="midia" sizes="(min-width: 64rem) 600px, 92vw" loading="eager" className="lg:col-span-7" />
       <div className="min-w-0 lg:col-span-5">
         <p className="text-pretty leading-relaxed text-fg sm:text-lg">{t(intro)}</p>
         <div className="mt-8 space-y-6 border-t border-line pt-6">

@@ -5,11 +5,13 @@ import { useProjectRoute } from '../hooks/useProjectRoute.ts'
 import { useT, type Texto, type Traduzivel } from '../i18n/idioma.ts'
 import { ui } from '../i18n/interface.ts'
 import { cx } from '../lib/cx.ts'
-import { ABRE_PROJETO, idDoCartao } from '../lib/foco.ts'
+import { ABRE_PROJETO, idDoCartao, TEMPOS } from '../lib/foco.ts'
 import { revelar } from '../lib/revelar.ts'
 import { ArrowUpRight, Expand, Lock } from './icons.tsx'
+import { baixarDetalhes } from './project/carga.ts'
 import { ProjectDialog } from './project/ProjectDialog.tsx'
 import { MediaView } from './project/ProjectMedia.tsx'
+import { marcaDoVoo } from './project/transicao.ts'
 import { Reveal } from './Reveal.tsx'
 import { Section } from './Section.tsx'
 
@@ -98,11 +100,12 @@ function Stack({ items, className }: { items: readonly Traduzivel[]; className?:
 /**
  * Um projeto em destaque: a prévia (imagem ou vídeo), o resumo e as tecnologias. Clicado em qualquer
  * ponto (ou pelo botão do nome, no teclado), abre a página do projeto (`onOpen`), que começa a ser
- * baixada quando o mouse ou o foco chegam ao cartão.
+ * baixada quando o mouse ou o foco chegam ao cartão. A prévia, o nome, a área e o ano voam do cartão
+ * para o lugar deles na página (veja transicao.ts).
  */
 function FeaturedCard({ project, index, onOpen }: { project: FeaturedProject; index: number; onOpen: () => void }) {
   const t = useT()
-  const preparar = () => void project.details().catch(() => {})
+  const preparar = () => void baixarDetalhes(project).catch(() => {})
 
   return (
     <Reveal
@@ -113,15 +116,23 @@ function FeaturedCard({ project, index, onOpen }: { project: FeaturedProject; in
       className="group relative isolate flex flex-col overflow-hidden rounded-2xl border border-line bg-surface/40 transition-colors duration-300 hover:border-line-strong md:col-span-2 lg:col-span-1 lg:row-span-2"
     >
       {/* acima do botão que cobre o cartão: a prévia trata o próprio clique (um vídeo tem o botão de pausar) */}
-      <div className="relative z-10 aspect-video overflow-hidden border-b border-line bg-surface">
+      <div
+        {...marcaDoVoo('midia')}
+        onPointerEnter={preparar}
+        className="relative z-10 aspect-video overflow-hidden border-b border-line bg-surface"
+      >
         <MediaView media={project.preview} fit="cover" sizes={TAMANHOS_DA_PREVIA} className="size-full" onActivate={onOpen} />
       </div>
 
       <div className="flex flex-1 flex-col p-5 sm:p-6">
         <div className="flex items-center justify-between gap-4">
-          <span className="label text-subtle">{t(areaLabel[project.area])}</span>
+          <span {...marcaDoVoo('area')} className="label text-subtle">
+            {t(areaLabel[project.area])}
+          </span>
           <span className="flex items-center gap-2.5">
-            <span className="font-mono text-xs tabular-nums text-muted">{project.year}</span>
+            <span {...marcaDoVoo('ano')} className="font-mono text-xs tabular-nums text-muted">
+              {project.year}
+            </span>
             <Expand className="size-4 text-subtle transition-[transform,color] duration-300 ease-out group-hover:scale-110 group-hover:text-accent" />
           </span>
         </div>
@@ -135,7 +146,9 @@ function FeaturedCard({ project, index, onOpen }: { project: FeaturedProject; in
             aria-haspopup="dialog"
             className="cursor-pointer rounded-sm text-left transition-colors after:absolute after:inset-0 group-hover:text-accent"
           >
-            {t(project.name)}
+            <span {...marcaDoVoo('titulo')} className="inline-block">
+              {t(project.name)}
+            </span>
             <span className="sr-only"> {t(ui.projetos.abrePagina)}</span>
           </button>
         </h4>
@@ -196,14 +209,17 @@ export function Projects() {
 
   /**
    * A página sai do cartão inteiro: antes, a tela rola até ele aparecer todo, fora do alcance do
-   * buraco negro (que o devolve inteiro, veja revelar).
+   * buraco negro (que o devolve inteiro, veja revelar). Enquanto isso, o texto da página termina de
+   * chegar (por um tempo, no máximo), e ela já abre como fica.
    */
   const abrirProjeto = async (project: FeaturedProject) => {
     if (abrindo.current) return
     abrindo.current = true
     try {
       const cartao = document.getElementById(idDoCartao(project.id))
-      if (cartao) await revelar(cartao)
+      const texto = baixarDetalhes(project).catch(() => {})
+      const limite = new Promise<void>((pronto) => window.setTimeout(pronto, TEMPOS.texto))
+      await Promise.all([cartao && revelar(cartao), Promise.race([texto, limite])])
     } finally {
       abrindo.current = false
     }

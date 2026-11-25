@@ -4,6 +4,7 @@ import { useT } from '../../i18n/idioma.ts'
 import { cx } from '../../lib/cx.ts'
 import { emPe, proporcao, type Fileira } from './diagramacao.ts'
 import { MediaView } from './ProjectMedia.tsx'
+import { marcaDoVoo, type NomeDoVoo } from './transicao.ts'
 
 /**
  * Uma demonstração com a legenda embaixo. A caixa tem a proporção dela: a demonstração aparece
@@ -11,12 +12,15 @@ import { MediaView } from './ProjectMedia.tsx'
  */
 export function Figura({
   media,
+  voo,
   sizes,
   loading,
   className,
   style,
 }: {
   media: ProjectMedia
+  /** A peça do cartão que ela é, e que voa dele para cá ao abrir a página (veja transicao.ts). */
+  voo?: NomeDoVoo
   /** As larguras que ela ocupa na tela, para o navegador escolher o tamanho do arquivo. */
   sizes: string
   loading?: 'eager' | 'lazy'
@@ -27,7 +31,11 @@ export function Figura({
 
   return (
     <figure className={cx('min-w-0', className)} style={style}>
-      <div className="overflow-hidden rounded-xl border border-line bg-black" style={{ aspectRatio: `${media.width} / ${media.height}` }}>
+      <div
+        {...(voo ? marcaDoVoo(voo) : {})}
+        className="overflow-hidden rounded-xl border border-line bg-black"
+        style={{ aspectRatio: `${media.width} / ${media.height}` }}
+      >
         <MediaView media={media} fit="contain" sizes={sizes} loading={loading} className="size-full" />
       </div>
       <figcaption className="mt-3 text-pretty text-sm leading-relaxed text-subtle">{t(media.caption)}</figcaption>

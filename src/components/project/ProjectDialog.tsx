@@ -3,12 +3,13 @@ import { createPortal } from 'react-dom'
 import { areas, type FeaturedProject } from '../../data/projects.ts'
 import { useT } from '../../i18n/idioma.ts'
 import { ui } from '../../i18n/interface.ts'
+import { beiraDaAbsorcao, estaPorCima } from '../../lib/buracoNegro/beira.ts'
 import { cx } from '../../lib/cx.ts'
 import { botaoIcone } from '../../lib/estilos.ts'
 import {
   ABRE_PROJETO,
-  estaNaTela,
   idDoCartao,
+  parteVisivel,
   recorteDaOrigem,
   recorteInteiro,
   recorteSemOrigem,
@@ -18,72 +19,142 @@ import {
 import { travarRolagem } from '../../lib/travaDeRolagem.ts'
 import { Close } from '../icons.tsx'
 import { ProjectDetails } from './ProjectDetails.tsx'
+import { ATRIBUTO_DO_VOO, continuarVideo, copiaDoCartao, marcaDoVoo, quadroPorCima, semVoo, voar, voosEntre, type Voo } from './transicao.ts'
 
 const menosMovimento = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-/** As peças que se movem: o fundo (que escurece e desfoca a página), o painel e o que vai nele. */
+/** O vídeo da prévia (o que o cartão e a página têm), dentro de um ou de outro. */
+const videoDe = (onde: Element | null) => onde?.querySelector<HTMLVideoElement>(`[${ATRIBUTO_DO_VOO}="midia"] video`) ?? null
+
+/**
+ * As peças que se movem: o fundo (que escurece e desfoca o site), o painel, o que vai nele e a caixa
+ * da cópia do cartão, por baixo do que vai nele.
+ */
 interface Pecas {
   fundo: HTMLElement
   painel: HTMLElement
   conteudo: HTMLElement
+  fantasma: HTMLElement
 }
 
-const pecasDe = (fundo: HTMLElement | null, painel: HTMLElement | null, conteudo: HTMLElement | null): Pecas | null =>
-  fundo && painel && conteudo ? { fundo, painel, conteudo } : null
-
-/** De onde a página do projeto sai e para onde volta: o retângulo do cartão e o raio dos cantos dele. */
+/**
+ * De onde a página do projeto sai e para onde volta: a parte do cartão que está à vista, o raio dos
+ * cantos dele e se a absorção o cortou em cima.
+ */
 interface Origem {
   retangulo: Retangulo
   raio: number
+  cortado: boolean
 }
 
 const raioDe = (elemento: Element) => Number.parseFloat(getComputedStyle(elemento).borderTopLeftRadius) || 0
 
-/** O cartão, se ele está à vista: sem ele, a página aparece e some no lugar dela. */
-function origemDe(cartao: HTMLElement | null): Origem | null {
+/**
+ * A linha do alto da tela a partir da qual o cartão aparece: 0 sem a absorção, ou com ele inteiro por
+ * cima da cortina (com o foco do teclado); senão, a beira da faixa, de onde para cima ele está sendo
+ * puxado. Aberta por um clique, a página sai dele já fora da faixa (veja revelar, em Projects.tsx).
+ */
+const alturaLivre = (cartao: HTMLElement | null) => (cartao === null || estaPorCima(cartao) ? 0 : beiraDaAbsorcao())
+
+/** O cartão, se ele está à vista: sem ele, a página aparece e some no lugar dela (veja parteVisivel, em foco.ts). */
+function origemDe(cartao: HTMLElement | null, beira: number): Origem | null {
   if (!cartao) return null
-  const retangulo = cartao.getBoundingClientRect()
-  return estaNaTela(retangulo, window.innerWidth, window.innerHeight) ? { retangulo, raio: raioDe(cartao) } : null
+  const parte = parteVisivel(cartao.getBoundingClientRect(), beira, window.innerWidth, window.innerHeight)
+  return parte && { ...parte, raio: raioDe(cartao) }
 }
 
 /** O recorte do painel em cima do cartão (ou, sem ele, um pouco menor que o painel, no lugar). */
 function recorteDe(painel: HTMLElement, origem: Origem | null): string {
   const destino = painel.getBoundingClientRect()
-  return origem ? recorteDaOrigem(origem.retangulo, destino, origem.raio) : recorteSemOrigem(destino, raioDe(painel))
+  if (!origem) return recorteSemOrigem(destino, raioDe(painel))
+  return recorteDaOrigem(origem.retangulo, destino, origem.raio, origem.cortado ? 0 : origem.raio)
+}
+
+/** Como o cartão vira a página e ela volta a ser ele: as peças que voam e a cópia dele. */
+interface Passagem {
+  origem: Origem | null
+  voos: Voo[]
+  copia: HTMLElement | null
 }
 
 /**
- * O foco: o painel cresce do cartão até o tamanho dele, a página atrás escurece e fica desfocada, e
- * o conteúdo aparece com o painel já quase aberto (veja foco.ts).
+ * Mede a passagem entre o cartão e a página, como eles estão agora, e põe a cópia do cartão no
+ * painel. Para quem prefere menos movimento, nada voa: a página só aparece e some.
  */
-function abrir({ fundo, painel, conteudo }: Pecas, origem: Origem | null) {
-  if (menosMovimento()) {
-    for (const peca of [fundo, painel]) peca.animate({ opacity: [0, 1] }, { duration: TEMPOS.semMovimento, easing: 'ease-out' })
-    return
-  }
-  painel.animate({ clipPath: [recorteDe(painel, origem), recorteInteiro(raioDe(painel))] }, { duration: TEMPOS.abrir, easing: TEMPOS.curva })
-  if (!origem) painel.animate({ opacity: [0, 1] }, { duration: TEMPOS.abrir * 0.5, easing: 'ease-out' })
-  fundo.animate({ opacity: [0, 1] }, { duration: TEMPOS.abrir * 0.7, easing: 'ease-out' })
-  conteudo.animate(
-    { opacity: [0, 1], transform: ['translateY(0.75rem)', 'none'] },
-    { duration: TEMPOS.conteudo.duracao, delay: TEMPOS.conteudo.espera, easing: 'ease-out', fill: 'backwards' },
-  )
+function passagem(cartao: HTMLElement | null, { conteudo, fantasma }: Pecas): Passagem {
+  const beira = alturaLivre(cartao)
+  const origem = origemDe(cartao, beira)
+  if (!cartao || !origem || menosMovimento()) return { origem, voos: [], copia: null }
+  const voos = voosEntre(cartao, conteudo, beira)
+  return { origem, voos, copia: copiaDoCartao(cartao, fantasma, voos, videoDe(conteudo)) }
 }
 
-/** A volta: o conteúdo some, o painel encolhe até o cartão e a página clareia. Termina quando ele chega. */
-function fechar({ fundo, painel, conteudo }: Pecas, origem: Origem | null): Promise<unknown> {
+/**
+ * O foco: o painel cresce do cartão até o tamanho dele e o site atrás escurece e fica desfocado. Por
+ * dentro, o cartão vira a página: as peças que os dois têm voam do cartão para o lugar delas, a cópia
+ * do cartão se apaga enquanto o fundo do painel aparece, e o resto da página aparece com ele já quase
+ * aberto (veja foco.ts e transicao.ts). Sem o cartão à vista, o painel cresce no lugar.
+ *
+ * Todo movimento dura o mesmo (o que acaba antes fica parado até o fim): fechada no meio, a página
+ * volta por eles, de trás para a frente, de onde estava.
+ */
+function abrir({ fundo, painel, conteudo }: Pecas, { origem, voos, copia }: Passagem): Animation[] {
+  if (menosMovimento()) {
+    return [fundo, painel].map((peca) => peca.animate({ opacity: [0, 1] }, { duration: TEMPOS.semMovimento, easing: 'ease-out' }))
+  }
+  const ate = (duracao: number, espera = 0): KeyframeAnimationOptions => ({
+    duration: duracao,
+    delay: espera,
+    endDelay: TEMPOS.abrir - espera - duracao,
+  })
+  const caminho = { duration: TEMPOS.abrir, easing: TEMPOS.curva }
+  const animacoes = [
+    painel.animate({ clipPath: [recorteDe(painel, origem), recorteInteiro(raioDe(painel))] }, caminho),
+    fundo.animate({ opacity: [0, 1] }, { ...ate(TEMPOS.abrir * 0.7), easing: 'ease-out' }),
+  ]
+  const aparecer = (peca: HTMLElement) =>
+    peca.animate(
+      { opacity: [0, 1], transform: ['translateY(0.75rem)', 'none'] },
+      { ...ate(TEMPOS.conteudo.duracao, TEMPOS.conteudo.espera), easing: 'ease-out', fill: 'backwards' },
+    )
+  if (!origem) {
+    animacoes.push(painel.animate({ opacity: [0, 1] }, { ...ate(TEMPOS.abrir * 0.5), easing: 'ease-out' }), aparecer(conteudo))
+    return animacoes
+  }
+  // no começo, o painel é o cartão: a cópia dele se apaga enquanto o fundo do painel aparece
+  const troca = { ...ate(TEMPOS.cartao), easing: 'ease-out' }
+  animacoes.push(painel.animate({ backgroundColor: ['transparent', getComputedStyle(painel).backgroundColor] }, troca))
+  if (copia) animacoes.push(copia.animate({ opacity: [1, 0] }, { ...troca, fill: 'forwards' }))
+  for (const voo of voos) animacoes.push(...voar(voo, true, caminho))
+  for (const parte of semVoo(conteudo, voos)) animacoes.push(aparecer(parte))
+  return animacoes
+}
+
+/**
+ * A volta: o resto da página some, as peças voam de volta para o cartão, o painel encolhe até ele e o
+ * site clareia. No fim, a cópia do cartão reaparece enquanto o fundo do painel some: o painel chega
+ * ao cartão sendo ele. Termina quando chega.
+ */
+function fechar({ fundo, painel, conteudo }: Pecas, { origem, voos, copia }: Passagem): Promise<unknown> {
   const ate = { fill: 'forwards' } as const
   if (menosMovimento()) {
     return Promise.all([fundo, painel].map((peca) => peca.animate({ opacity: [1, 0] }, { ...ate, duration: TEMPOS.semMovimento }).finished))
   }
-  conteudo.animate({ opacity: [1, 0] }, { ...ate, duration: TEMPOS.fechar * 0.4, easing: 'ease-in' })
+  const caminho = { ...ate, duration: TEMPOS.fechar, easing: TEMPOS.curva }
   fundo.animate({ opacity: [1, 0] }, { ...ate, duration: TEMPOS.fechar, easing: 'ease-in' })
-  // sem o cartão à vista para onde voltar, o painel some no caminho
-  if (!origem) painel.animate({ opacity: [1, 0] }, { ...ate, duration: TEMPOS.fechar, easing: 'ease-in' })
-  return painel.animate(
-    { clipPath: [recorteInteiro(raioDe(painel)), recorteDe(painel, origem)] },
-    { ...ate, duration: TEMPOS.fechar, easing: TEMPOS.curva },
-  ).finished
+  const encolher = painel.animate({ clipPath: [recorteInteiro(raioDe(painel)), recorteDe(painel, origem)] }, caminho)
+  if (!origem) {
+    // sem o cartão à vista para onde voltar, o painel some no caminho
+    conteudo.animate({ opacity: [1, 0] }, { ...ate, duration: TEMPOS.fechar * 0.4, easing: 'ease-in' })
+    painel.animate({ opacity: [1, 0] }, { ...ate, duration: TEMPOS.fechar, easing: 'ease-in' })
+    return encolher.finished
+  }
+  for (const parte of semVoo(conteudo, voos)) parte.animate({ opacity: [1, 0] }, { ...ate, duration: TEMPOS.saida, easing: 'ease-in' })
+  for (const voo of voos) voar(voo, false, caminho)
+  const troca = { fill: 'both', duration: TEMPOS.cartao, delay: TEMPOS.fechar - TEMPOS.cartao, easing: 'ease-out' } as const
+  painel.animate({ backgroundColor: [getComputedStyle(painel).backgroundColor, 'transparent'] }, troca)
+  copia?.animate({ opacity: [0, 1] }, troca)
+  return encolher.finished
 }
 
 /**
@@ -106,48 +177,88 @@ function Painel({
   const dialogo = useRef<HTMLDialogElement>(null)
   const fundo = useRef<HTMLDivElement>(null)
   const painel = useRef<HTMLElement>(null)
+  const fantasma = useRef<HTMLDivElement>(null)
   const conteudo = useRef<HTMLDivElement>(null)
   const corpo = useRef<HTMLDivElement>(null)
   // o painel está saindo (desmontando): o fechamento do diálogo não é um pedido de fechar
   const saindo = useRef(false)
+  // os movimentos da abertura: fechada antes de eles acabarem, ela volta por eles
+  const abertura = useRef<Animation[]>([])
+  // O vídeo do cartão para enquanto a página está aberta (ela continua o dele) e, ao fechar, continua
+  // o dela: devolvido uma vez, na volta para o cartão ou, sem ela, ao desmontar.
+  const videoDoCartao = useRef<{ video: HTMLVideoElement; tocava: boolean } | null>(null)
   const area = areas.find((opcao) => opcao.id === project.area)
   const fechou = useEffectEvent(onFechado)
 
-  // Abrir: por cima de tudo (o resto da página fica inerte e a rolagem, travada); o cartão some, já
-  // que é ele que vira o painel. Ao sair, tudo volta, e o foco vai para o botão do cartão.
+  const pecas = (): Pecas | null => {
+    const [f, p, c, g] = [fundo.current, painel.current, conteudo.current, fantasma.current]
+    return f && p && c && g ? { fundo: f, painel: p, conteudo: c, fantasma: g } : null
+  }
+
+  const devolverVideo = () => {
+    const doCartao = videoDoCartao.current
+    videoDoCartao.current = null
+    if (doCartao && !continuarVideo(videoDe(conteudo.current), doCartao.video) && doCartao.tocava) void doCartao.video.play().catch(() => {})
+  }
+
+  // Abrir: por cima de tudo (o resto do site fica inerte e a rolagem, travada); o cartão some, já que
+  // é ele que vira o painel. Ao sair, tudo volta, e o foco vai para o botão do cartão.
   useLayoutEffect(() => {
     const d = dialogo.current
-    const p = pecasDe(fundo.current, painel.current, conteudo.current)
+    const p = pecas()
     if (!d || !p) return
     saindo.current = false
-    const elemento = document.getElementById(idDoCartao(project.id))
-    const origem = origemDe(elemento)
+    const cartao = document.getElementById(idDoCartao(project.id))
     d.showModal()
-    // O foco vai para o texto, e não para o primeiro botão (o X), que o navegador escolheria: o leitor
-    // de tela anuncia o projeto (o título nomeia o diálogo), as setas e o Page Down já rolam o texto, e
-    // o X não aparece marcado à toa. O Tab chega a ele.
-    corpo.current?.focus({ preventScroll: true })
     const destravar = travarRolagem()
-    if (elemento) elemento.style.visibility = 'hidden'
-    abrir(p, origem)
+    // A página continua o vídeo do cartão, do quadro em que ele está, que fica por cima dela até ela
+    // chegar lá; o do cartão para.
+    const doCartao = videoDe(cartao)
+    const daPagina = videoDe(p.conteudo)
+    const tirarQuadro = quadroPorCima(doCartao, daPagina)
+    continuarVideo(doCartao, daPagina)
+    const ida = passagem(cartao, p)
+    if (doCartao) {
+      videoDoCartao.current = { video: doCartao, tocava: !doCartao.paused }
+      doCartao.pause()
+    }
+    if (cartao) cartao.style.visibility = 'hidden'
+    // O foco vai para o texto, e não para o primeiro botão (o X), que o navegador escolheria: o leitor
+    // de tela anuncia o projeto (o título nomeia o diálogo), as setas e o Page Down já rolam o texto,
+    // e o X não aparece marcado à toa. O Tab chega a ele.
+    corpo.current?.focus({ preventScroll: true })
+    abertura.current = abrir(p, ida)
     return () => {
       saindo.current = true
+      for (const animacao of abertura.current) animacao.cancel()
+      p.fantasma.replaceChildren()
+      tirarQuadro()
+      devolverVideo()
       destravar()
-      if (elemento) elemento.style.visibility = ''
+      if (cartao) cartao.style.visibility = ''
       if (d.open) d.close()
-      elemento?.querySelector<HTMLElement>(`[${ABRE_PROJETO}]`)?.focus({ preventScroll: true })
+      cartao?.querySelector<HTMLElement>(`[${ABRE_PROJETO}]`)?.focus({ preventScroll: true })
     }
   }, [project.id])
 
   useEffect(() => {
     if (!fechando) return
-    const p = pecasDe(fundo.current, painel.current, conteudo.current)
+    const p = pecas()
     let ativo = true
     const terminou = () => {
       if (ativo) fechou()
     }
-    if (p) fechar(p, origemDe(document.getElementById(idDoCartao(project.id)))).then(terminou, terminou)
-    else terminou()
+    devolverVideo()
+    const animacoes = abertura.current
+    if (!p) terminou()
+    else if (animacoes.some((animacao) => animacao.playState === 'running')) {
+      // fechada no meio da abertura: a página volta pelo mesmo caminho, de onde estava
+      for (const animacao of animacoes) {
+        animacao.effect?.updateTiming({ fill: 'both' })
+        animacao.reverse()
+      }
+      Promise.all(animacoes.map((animacao) => animacao.finished)).then(terminou, terminou)
+    } else fechar(p, passagem(document.getElementById(idDoCartao(project.id)), p)).then(terminou, terminou)
     return () => {
       ativo = false
     }
@@ -176,20 +287,33 @@ function Painel({
         ref={painel}
         className="absolute inset-2 mx-auto flex max-w-6xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl sm:inset-4 lg:inset-y-6"
       >
-        <div ref={conteudo} className="flex min-h-0 flex-1 flex-col">
-          <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-8 sm:py-5 lg:px-12">
+        {/* a cópia do cartão, enquanto ele vira a página e quando ela volta a ser ele (veja copiaDoCartao) */}
+        <div ref={fantasma} aria-hidden="true" className="pointer-events-none absolute inset-0" />
+        <div ref={conteudo} className="relative flex min-h-0 flex-1 flex-col">
+          {/* o nome, a área e o ano vêm do cartão, voando (veja transicao.ts) */}
+          <header className="flex items-start justify-between gap-4 px-5 py-4 sm:px-8 sm:py-5 lg:px-12">
             <div className="min-w-0">
               <p className="label text-subtle">
-                {area && t(area.label)} · <span className="tabular-nums">{project.year}</span>
+                <span {...marcaDoVoo('area')} className="relative inline-block">
+                  {area && t(area.label)}
+                </span>
+                <span> · </span>
+                <span {...marcaDoVoo('ano')} className="relative inline-block tabular-nums">
+                  {project.year}
+                </span>
               </p>
               <h2 id={tituloId} className="mt-1.5 text-2xl font-medium tracking-[-0.03em] sm:text-3xl">
-                {t(project.name)}
+                <span {...marcaDoVoo('titulo')} className="relative inline-block">
+                  {t(project.name)}
+                </span>
               </h2>
             </div>
             <button type="button" onClick={onClose} aria-label={t(ui.projeto.fechar)} className={cx(botaoIcone, '-mr-1.5 shrink-0')}>
               <Close className="size-5" />
             </button>
           </header>
+          {/* a linha embaixo do cabeçalho, à parte dele: ela aparece com o resto, e ele, não (tem peças que voam) */}
+          <div aria-hidden="true" className="h-px shrink-0 bg-line" />
           <div
             ref={corpo}
             tabIndex={-1}

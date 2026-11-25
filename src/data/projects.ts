@@ -28,18 +28,59 @@ export const areas: ReadonlyArray<{ id: Area; label: Texto }> = [
   { id: 'sistemas', label: { pt: 'Fundamentos', en: 'Fundamentals' } },
 ]
 
-/** Vídeo curto do projeto (MP4 sem som, 16:9), exibido em loop como um GIF. */
-export interface ProjectVideo {
-  src: string
-  /** Quadro mostrado antes de o vídeo carregar (e para quem prefere menos movimento), em 1280 px. */
-  poster: string
-  /** O mesmo quadro em 640 px, para telas estreitas. */
-  posterPequeno: string
-  /** O que o vídeo mostra, para leitores de tela. */
-  description: Texto
+/** O que toda demonstração tem, seja imagem ou vídeo. */
+interface MediaBase {
+  /** O que ela mostra, para quem não a vê (leitores de tela). */
+  alt: Texto
+  /** A legenda, embaixo dela na galeria do projeto. */
+  caption: Texto
+  /** Tamanho do original (px): o espaço dela fica reservado antes de ela carregar. */
+  width: number
+  height: number
 }
 
-export interface Project {
+/** Uma imagem: a versão inteira (até 1600 px de largura) e uma de 640 px, para telas estreitas e miniaturas. */
+export interface ImageMedia extends MediaBase {
+  kind: 'image'
+  src: string
+  srcSmall: string
+}
+
+/**
+ * Um vídeo curto (MP4 sem som), que toca em loop como um GIF, com o quadro mostrado antes de ele
+ * carregar (e para quem prefere menos movimento), também em 640 px.
+ */
+export interface VideoMedia extends MediaBase {
+  kind: 'video'
+  src: string
+  poster: string
+  posterSmall: string
+}
+
+/** Uma demonstração de um projeto. Um tipo novo entra aqui e ganha quem o mostre (veja ProjectMedia.tsx). */
+export type ProjectMedia = ImageMedia | VideoMedia
+
+/** Uma parte do texto da página de um projeto: um título, com parágrafos, itens ou os dois. */
+export interface ProjectSection {
+  title: Texto
+  paragraphs?: readonly Texto[]
+  items?: readonly Texto[]
+}
+
+/** As explicações e as demonstrações de um projeto em destaque: o que a página dele mostra. */
+export interface ProjectDetails {
+  /** A abertura, mais longa que a descrição do cartão. */
+  intro: Texto
+  sections: readonly ProjectSection[]
+  /** As demonstrações além da prévia do cartão, que abre a galeria: na ordem em que aparecem. */
+  media: readonly ProjectMedia[]
+  /** Uma observação no fim: de onde vêm as imagens, o que ficou de fora. */
+  note?: Texto
+}
+
+interface ProjectBase {
+  /** Identificador estável: a chave da lista e o endereço da página do projeto (#projeto/<id>). */
+  id: string
   /** Nome do projeto. Um texto só quando é igual nos dois idiomas. */
   name: Traduzivel
   /** Uma frase curta, usada na lista "Outros projetos". */
@@ -52,17 +93,38 @@ export interface Project {
   year: number
   /** Nome do repositório no GitHub. Sem ele, o projeto aparece como privado. */
   repo?: string
-  /** Posição entre os destaques (1 = primeiro). */
-  featured?: number
-  video?: ProjectVideo
+}
+
+/** Um projeto da lista "Outros projetos": uma linha, com o link do repositório. */
+export interface ListedProject extends ProjectBase {
+  featured?: undefined
 }
 
 /**
+ * Um projeto em destaque: um cartão com uma prévia, que abre a página dele, com as explicações e as
+ * demonstrações (e, de lá, o repositório).
+ */
+export interface FeaturedProject extends ProjectBase {
+  /** Posição entre os destaques (1 = primeiro). */
+  featured: number
+  /** O que o cartão mostra no alto. */
+  preview: ProjectMedia
+  /** A página do projeto, num módulo à parte (src/data/projectDetails), baixado só quando ele é aberto. */
+  details: () => Promise<ProjectDetails>
+}
+
+export type Project = ListedProject | FeaturedProject
+
+export const isFeatured = (project: Project): project is FeaturedProject => project.featured !== undefined
+
+/**
  * Para adicionar um projeto, inclua um item nesta lista (com os textos em português e em inglês).
+ * Um destaque precisa também de uma prévia e da página dele, em src/data/projectDetails.
  * A ordem aqui é a ordem de exibição (mais recentes primeiro).
  */
 export const projects: readonly Project[] = [
   {
+    id: 'beka',
     name: 'Beka',
     summary: {
       pt: 'Assistente de desktop com IA local e uma personagem animada',
@@ -76,17 +138,26 @@ export const projects: readonly Project[] = [
     stack: ['Electron', 'TypeScript', 'Ollama'],
     year: 2026,
     featured: 1,
-    video: {
+    preview: {
+      kind: 'video',
       src: bekaVideo,
       poster: bekaPoster,
-      posterPequeno: bekaPosterPequeno,
-      description: {
+      posterSmall: bekaPosterPequeno,
+      width: 1280,
+      height: 720,
+      alt: {
         pt: 'A Beka ao lado da janela de conversa, respondendo pela IA local a um oi e a um pedido de bom dia, lembrando que já é noite.',
         en: 'Beka next to the chat window, answering a hello and a good morning through the local AI and pointing out that it is already night.',
       },
+      caption: {
+        pt: 'A conversa: a resposta vem da IA local, e o corpo reage antes da fala.',
+        en: 'Chatting: the answer comes from the local AI, and her body reacts before she speaks.',
+      },
     },
+    details: () => import('./projectDetails/beka.ts').then((modulo) => modulo.default),
   },
   {
+    id: 'transcriber',
     name: 'Transcriber',
     summary: {
       pt: 'Transcrição de reuniões em português, com identificação de quem fala',
@@ -101,17 +172,26 @@ export const projects: readonly Project[] = [
     year: 2026,
     repo: 'Transcriber',
     featured: 5,
-    video: {
+    preview: {
+      kind: 'video',
       src: transcriberVideo,
       poster: transcriberPoster,
-      posterPequeno: transcriberPosterPequeno,
-      description: {
+      posterSmall: transcriberPosterPequeno,
+      width: 1280,
+      height: 720,
+      alt: {
         pt: 'O aplicativo tocando a transcrição de uma reunião de teste, acelerada: a fala atual em destaque, o texto rolando sozinho até ela, cada fala com o horário e o participante e uma palavra incerta marcada em amarelo.',
         en: 'The app playing back the transcript of a test meeting, sped up: the current line highlighted, the text scrolling to it on its own, each line with its time and speaker and an uncertain word marked in yellow.',
       },
+      caption: {
+        pt: 'A transcrição tocando (acelerada), com a rolagem automática: a fala atual em destaque e, em amarelo, o que ficou incerto.',
+        en: 'The transcript playing back (sped up) with auto-scroll: the current line highlighted and, in yellow, what remained uncertain.',
+      },
     },
+    details: () => import('./projectDetails/transcriber.ts').then((modulo) => modulo.default),
   },
   {
+    id: 'deepcore',
     name: 'DeepCore',
     summary: {
       pt: 'Roguelite 2D de mineração, sobrevivência e defesa de base',
@@ -125,17 +205,26 @@ export const projects: readonly Project[] = [
     stack: ['Godot', 'GDScript'],
     year: 2026,
     featured: 3,
-    video: {
+    preview: {
+      kind: 'video',
       src: deepcoreVideo,
       poster: deepcorePoster,
-      posterPequeno: deepcorePosterPequeno,
-      description: {
+      posterSmall: deepcorePosterPequeno,
+      width: 1280,
+      height: 720,
+      alt: {
         pt: 'Trechos do trailer do DeepCore: a base na superfície, escavação com laser, cavernas de lava e um chefe gigante atacando a estação.',
         en: 'Clips from the DeepCore trailer: the base on the surface, laser digging, lava caves and a giant boss attacking the station.',
       },
+      caption: {
+        pt: 'Trechos do trailer: a estação, a escavação, as cavernas de lava e um chefe.',
+        en: 'Trailer clips: the station, digging, the lava caves and a boss.',
+      },
     },
+    details: () => import('./projectDetails/deepcore.ts').then((modulo) => modulo.default),
   },
   {
+    id: 'nosso-cantinho',
     name: 'Nosso Cantinho',
     summary: {
       pt: 'Plataforma em tempo real para o casal, com um pet virtual',
@@ -149,17 +238,26 @@ export const projects: readonly Project[] = [
     stack: ['React', 'NestJS', 'TypeScript'],
     year: 2026,
     featured: 2,
-    video: {
+    preview: {
+      kind: 'video',
       src: nossoCantinhoVideo,
       poster: nossoCantinhoPoster,
-      posterPequeno: nossoCantinhoPosterPequeno,
-      description: {
+      posterSmall: nossoCantinhoPosterPequeno,
+      width: 1280,
+      height: 720,
+      alt: {
         pt: 'O pet do casal: o dragãozinho no quarto, comendo uma maçã na cozinha e tomando banho de chuveiro com bolhas de sabão.',
         en: "The couple's pet: the little dragon in the bedroom, eating an apple in the kitchen and taking a shower with soap bubbles.",
       },
+      caption: {
+        pt: 'O pet do casal: o quarto, a cozinha e o banho, tudo desenhado em código.',
+        en: "The couple's pet: the bedroom, the kitchen and bath time, all drawn in code.",
+      },
     },
+    details: () => import('./projectDetails/nossoCantinho.ts').then((modulo) => modulo.default),
   },
   {
+    id: 'mug-customizer',
     name: 'Mug Customizer',
     summary: {
       pt: 'Personalização de canecas com prévia em tempo real',
@@ -175,6 +273,7 @@ export const projects: readonly Project[] = [
     repo: 'Mug_Customizer',
   },
   {
+    id: 'video-cutter',
     name: 'Video Cutter',
     summary: {
       pt: 'Corte de vídeos em vários trechos, com exportação em lote',
@@ -189,17 +288,26 @@ export const projects: readonly Project[] = [
     year: 2026,
     repo: 'Video_Cutter',
     featured: 6,
-    video: {
+    preview: {
+      kind: 'video',
       src: videoCutterVideo,
       poster: videoCutterPoster,
-      posterPequeno: videoCutterPosterPequeno,
-      description: {
+      posterSmall: videoCutterPosterPequeno,
+      width: 1280,
+      height: 720,
+      alt: {
         pt: 'Telas do app no celular, ampliadas: o trailer do DeepCore é dividido em quatro pedacinhos, um deles é desligado e os outros três são exportados.',
         en: "The app's screens on a phone, zoomed in: the DeepCore trailer is split into four short clips, one of them is switched off and the other three are exported.",
       },
+      caption: {
+        pt: 'Um vídeo dividido em quatro pedacinhos: um fica de fora e os outros três são exportados.',
+        en: 'A video split into four short clips: one is left out and the other three are exported.',
+      },
     },
+    details: () => import('./projectDetails/videoCutter.ts').then((modulo) => modulo.default),
   },
   {
+    id: 'sms',
     name: 'SMS',
     summary: {
       pt: 'Mensageiro instantâneo em Java RMI com interface Swing',
@@ -215,6 +323,7 @@ export const projects: readonly Project[] = [
     repo: 'SMS',
   },
   {
+    id: 'manamind',
     name: 'ManaMind',
     summary: {
       pt: 'App de foco com Pomodoro, missões e um gacha de personagens (TCC)',
@@ -228,17 +337,26 @@ export const projects: readonly Project[] = [
     stack: ['Flutter', 'Dart', 'Firebase', 'BLoC'],
     year: 2025,
     featured: 4,
-    video: {
+    preview: {
+      kind: 'video',
       src: manaMindVideo,
       poster: manaMindPoster,
-      posterPequeno: manaMindPosterPequeno,
-      description: {
+      posterSmall: manaMindPosterPequeno,
+      width: 1280,
+      height: 720,
+      alt: {
         pt: 'Gravação do ManaMind num celular. Na tela inicial, a pessoa aceita a missão e cria uma sessão de foco: escolhe a missão de estudar para Cálculo Numérico, a personagem Mao Mao e dois ciclos. Abre a sessão, liga chuva e lo-fi no ambiente sonoro, e o cronômetro corre acelerado pelos dois ciclos de 25 minutos e pela pausa de 5, com o alarme pedindo confirmação entre um e outro. No fim, ganha 50 manacoins, a missão fica concluída e o saldo da tela inicial sobe de 2670 para 2720.',
         en: 'Screen recording of ManaMind on a phone. On the home screen, the user accepts the mission and creates a focus session: they pick a study mission, the character Mao Mao and two cycles. They open the session, turn on rain and lo-fi in the soundscape, and the timer runs sped up through the two 25-minute cycles and the 5-minute break, with the alarm asking for confirmation between them. At the end they earn 50 manacoins, the mission is completed and the balance on the home screen goes from 2670 to 2720.',
       },
+      caption: {
+        pt: 'O pomodoro: a sessão criada a partir de uma missão, o ambiente sonoro, os ciclos (com o cronômetro acelerado) e as manacoins no fim.',
+        en: 'The pomodoro: a session created from a mission, the soundscape, the cycles (with the timer sped up) and the manacoins at the end.',
+      },
     },
+    details: () => import('./projectDetails/manaMind.ts').then((modulo) => modulo.default),
   },
   {
+    id: '3d-rendering',
     name: '3D Rendering',
     summary: {
       pt: 'Renderização 3D com projeção em perspectiva e rasterização',
@@ -254,6 +372,7 @@ export const projects: readonly Project[] = [
     repo: '3D_Rendering',
   },
   {
+    id: 'v-car',
     name: 'V-Car',
     summary: {
       pt: 'Gestão de clientes, pedidos e equipe de um lava a jato',
@@ -268,6 +387,7 @@ export const projects: readonly Project[] = [
     year: 2024,
   },
   {
+    id: 'g-lit',
     name: 'G-LIT',
     summary: {
       pt: 'Gestão de projetos, bolsistas e coordenadores do laboratório',
@@ -282,6 +402,7 @@ export const projects: readonly Project[] = [
     year: 2024,
   },
   {
+    id: 'portfolio-lit',
     name: { pt: 'Portfólio do LIT', en: 'LIT Portfolio' },
     summary: {
       pt: 'Site institucional do laboratório, integrado ao G-LIT',
@@ -296,6 +417,7 @@ export const projects: readonly Project[] = [
     year: 2023,
   },
   {
+    id: 'meu-busao',
     name: 'Meu Busão',
     summary: {
       pt: 'Compra e troca de assentos em viagens de ônibus',
@@ -311,6 +433,7 @@ export const projects: readonly Project[] = [
     repo: 'Meu_Busao',
   },
   {
+    id: 'math-tool-kit',
     name: 'Math Tool Kit',
     summary: {
       pt: 'Bases numéricas, sistemas lineares e raízes de equações',
@@ -326,6 +449,7 @@ export const projects: readonly Project[] = [
     repo: 'Math_Tool_Kit',
   },
   {
+    id: 'bot-discord',
     name: { pt: 'Bot Discord', en: 'Discord Bot' },
     summary: {
       pt: 'Bot de moderação e automação para servidores do Discord',
@@ -341,6 +465,7 @@ export const projects: readonly Project[] = [
     repo: 'Bot_Discord',
   },
   {
+    id: 'automacao-tvs',
     name: { pt: 'Automação de TVs', en: 'TV Automation' },
     summary: {
       pt: 'Controle e agendamento de TVs com Raspberry Pi',
@@ -355,6 +480,7 @@ export const projects: readonly Project[] = [
     year: 2023,
   },
   {
+    id: 'sort-analytics',
     name: 'Sort Analytics',
     summary: {
       pt: 'Comparação de desempenho entre seis algoritmos de ordenação',
@@ -370,6 +496,7 @@ export const projects: readonly Project[] = [
     repo: 'Sort_Analytics',
   },
   {
+    id: 'tradeit',
     name: 'TradeIt',
     summary: {
       pt: 'Troca de jogos entre usuários, com login via Firebase',

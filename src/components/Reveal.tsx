@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from 'react'
 interface RevealProps {
   /** Elemento HTML a renderizar. */
   as?: 'div' | 'p' | 'li' | 'header' | 'ul' | 'dl'
+  id?: string
   /** Atraso da animação, em milissegundos (para escalonar itens de uma lista). */
   delay?: number
   className?: string
@@ -46,11 +47,11 @@ function observe(element: HTMLElement | null) {
  * O estado "escondido" vive só no CSS (ver index.css), então o HTML
  * pré-renderizado continua legível sem JavaScript.
  */
-export function Reveal({ as: Tag = 'div', delay = 0, className, children }: RevealProps) {
+export function Reveal({ as: Tag = 'div', id, delay = 0, className, children }: RevealProps) {
   const style = delay > 0 ? ({ '--reveal-delay': `${delay}ms` } as CSSProperties) : undefined
 
   return (
-    <Tag ref={observe} data-reveal="" className={className} style={style}>
+    <Tag ref={observe} id={id} data-reveal="" className={className} style={style}>
       {children}
     </Tag>
   )

@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
 import { profile } from '../data/profile.ts'
-import { areas, projects, type Area, type Project } from '../data/projects.ts'
+import { areas, isFeatured, projects, type Area, type FeaturedProject, type ListedProject, type Project } from '../data/projects.ts'
+import { useProjectRoute } from '../hooks/useProjectRoute.ts'
 import { useT, type Texto, type Traduzivel } from '../i18n/idioma.ts'
 import { ui } from '../i18n/interface.ts'
 import { cx } from '../lib/cx.ts'
-import { ArrowUpRight, Lock } from './icons.tsx'
-import { ProjectVideo } from './ProjectVideo.tsx'
+import { ABRE_PROJETO, idDoCartao } from '../lib/foco.ts'
+import { ArrowUpRight, Expand, Lock } from './icons.tsx'
+import { ProjectDialog } from './project/ProjectDialog.tsx'
+import { MediaView } from './project/ProjectMedia.tsx'
 import { Reveal } from './Reveal.tsx'
 import { Section } from './Section.tsx'
 
@@ -14,10 +17,13 @@ type Filter = 'todos' | Area
 const areaLabel = Object.fromEntries(areas.map((area) => [area.id, area.label])) as Record<Area, Texto>
 
 /** Destaques na ordem definida em `featured`; o resto vai para a lista compacta. */
-const featured = projects
-  .filter((project) => project.featured !== undefined)
-  .sort((a, b) => (a.featured ?? 0) - (b.featured ?? 0))
-const others = projects.filter((project) => project.featured === undefined)
+const featured: readonly FeaturedProject[] = projects.filter(isFeatured).sort((a, b) => a.featured - b.featured)
+const others: readonly ListedProject[] = projects.filter((project): project is ListedProject => !isFeatured(project))
+/** Os projetos que têm página (o endereço é conferido contra esta lista, que não muda). */
+const comPagina = featured.map((project) => project.id)
+
+/** As larguras da prévia de um cartão: meia página no computador, quase a tela toda no celular. */
+const TAMANHOS_DA_PREVIA = '(min-width: 72rem) 534px, (min-width: 64rem) 46vw, 92vw'
 
 function select(filter: Filter): readonly Project[] {
   return filter === 'todos' ? others : others.filter((project) => project.area === filter)
@@ -88,33 +94,50 @@ function Stack({ items, className }: { items: readonly Traduzivel[]; className?:
   )
 }
 
-function FeaturedCard({ project, index }: { project: Project; index: number }) {
+/**
+ * Um projeto em destaque: a prévia (imagem ou vídeo), o resumo e as tecnologias. Clicado em qualquer
+ * ponto (ou pelo botão do nome, no teclado), abre a página do projeto (`onOpen`), que começa a ser
+ * baixada quando o mouse ou o foco chegam ao cartão.
+ */
+function FeaturedCard({ project, index, onOpen }: { project: FeaturedProject; index: number; onOpen: () => void }) {
   const t = useT()
-  const href = repoUrl(project)
+  const preparar = () => void project.details().catch(() => {})
 
   return (
     <Reveal
       as="li"
+      id={idDoCartao(project.id)}
       delay={Math.min(index, 6) * 60}
-      className={cx(
-        'group relative isolate flex flex-col overflow-hidden rounded-2xl border border-line bg-surface/40 transition-colors duration-300',
-        href && 'hover:border-line-strong',
-        // com vídeo: largura toda no tablet; no desktop, metade da largura e a altura de dois cartões
-        project.video && 'md:col-span-2 lg:col-span-1 lg:row-span-2',
-      )}
+      // largura toda no tablet; no desktop, metade da largura e a altura de dois cartões
+      className="group relative isolate flex flex-col overflow-hidden rounded-2xl border border-line bg-surface/40 transition-colors duration-300 hover:border-line-strong md:col-span-2 lg:col-span-1 lg:row-span-2"
     >
-      {project.video && <ProjectVideo video={project.video} className="border-b border-line" />}
+      {/* acima do botão que cobre o cartão: a prévia trata o próprio clique (um vídeo tem o botão de pausar) */}
+      <div className="relative z-10 aspect-video overflow-hidden border-b border-line bg-surface">
+        <MediaView media={project.preview} fit="cover" sizes={TAMANHOS_DA_PREVIA} className="size-full" onActivate={onOpen} />
+      </div>
 
       <div className="flex flex-1 flex-col p-5 sm:p-6">
         <div className="flex items-center justify-between gap-4">
           <span className="label text-subtle">{t(areaLabel[project.area])}</span>
-          <Meta year={project.year} href={href} />
+          <span className="flex items-center gap-2.5">
+            <span className="font-mono text-xs tabular-nums text-muted">{project.year}</span>
+            <Expand className="size-4 text-subtle transition-[transform,color] duration-300 ease-out group-hover:scale-110 group-hover:text-accent" />
+          </span>
         </div>
-        <Title
-          project={project}
-          href={href}
-          className="mt-3 text-xl font-medium leading-snug tracking-[-0.02em]"
-        />
+        <h4 className="mt-3 text-xl font-medium leading-snug tracking-[-0.02em]">
+          <button
+            type="button"
+            {...{ [ABRE_PROJETO]: '' }}
+            onClick={onOpen}
+            onPointerEnter={preparar}
+            onFocus={preparar}
+            aria-haspopup="dialog"
+            className="cursor-pointer rounded-sm text-left transition-colors after:absolute after:inset-0 group-hover:text-accent"
+          >
+            {t(project.name)}
+            <span className="sr-only"> {t(ui.projetos.abrePagina)}</span>
+          </button>
+        </h4>
         <p className="mt-2 text-pretty text-[0.9375rem] leading-relaxed text-muted">
           {t(project.description)}
         </p>
@@ -165,18 +188,21 @@ export function Projects() {
   const t = useT()
   const [filter, setFilter] = useState<Filter>('todos')
   const visible = useMemo(() => select(filter), [filter])
+  const rota = useProjectRoute(comPagina)
+  const aberto = featured.find((project) => project.id === rota.aberto) ?? null
 
   const showcase = (
     <>
       <Reveal as="div">
         <h3 className="label mb-6 text-subtle">{t(ui.projetos.destaques)}</h3>
       </Reveal>
-      {/* desktop: duas colunas; os cartões com vídeo ocupam duas linhas e os outros se encaixam ao lado */}
+      {/* desktop: duas colunas de cartões, cada um com a altura de dois */}
       <ul className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-flow-dense">
         {featured.map((project, index) => (
-          <FeaturedCard key={t(project.name)} project={project} index={index} />
+          <FeaturedCard key={project.id} project={project} index={index} onOpen={() => rota.abrir(project.id)} />
         ))}
       </ul>
+      <ProjectDialog project={aberto} onClose={rota.fechar} />
 
       {/* grid-cols-1 e min-w-0: a linha de filtros que rola para o lado não pode alargar a coluna */}
       <div className="mt-20 grid grid-cols-1 gap-x-8 gap-y-6 md:mt-24 md:grid-cols-12">
@@ -224,7 +250,7 @@ export function Projects() {
           {/* A chave recria a lista a cada filtro, reiniciando a animação de entrada. */}
           <ol key={filter} className="border-t border-line">
             {visible.map((project, index) => (
-              <ProjectRow key={t(project.name)} project={project} index={index} />
+              <ProjectRow key={project.id} project={project} index={index} />
             ))}
           </ol>
 

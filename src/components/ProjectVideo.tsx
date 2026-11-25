@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FocusEvent, type PointerEvent } from 'react'
-import type { ProjectVideo as Video } from '../data/projects.ts'
+import { useEffect, useRef, useState, type FocusEvent, type MouseEvent, type PointerEvent } from 'react'
+import type { VideoMedia } from '../data/projects.ts'
 import { useT } from '../i18n/idioma.ts'
 import { ui } from '../i18n/interface.ts'
 import { cx } from '../lib/cx.ts'
@@ -32,8 +32,30 @@ const DEPOIS_DO_TOQUE = 3000
  * com o mouse em cima do vídeo, com o foco do teclado nele ou por uns segundos
  * depois de um toque no vídeo. Escondido, ele deixa o toque passar para o
  * vídeo: o primeiro toque só o mostra.
+ *
+ * Serve ao cartão do projeto (cobrindo a caixa, `cover`, e um clique no vídeo
+ * abre a página do projeto, veja `onActivate`) e à galeria dela (inteiro na
+ * caixa, `contain`).
  */
-export function ProjectVideo({ video, className }: { video: Video; className?: string }) {
+export function ProjectVideo({
+  video,
+  className,
+  fit = 'cover',
+  sizes = '(min-width: 72rem) 534px, (min-width: 64rem) 46vw, 92vw',
+  onActivate,
+}: {
+  video: VideoMedia
+  className?: string
+  /** Cobrir a caixa, cortando as bordas (o cartão), ou caber inteiro nela (a galeria). */
+  fit?: 'cover' | 'contain'
+  /** As larguras que o vídeo ocupa, para o navegador escolher o tamanho do pôster. */
+  sizes?: string
+  /**
+   * Um clique no vídeo, fora do botão. Com o dedo, o primeiro toque só mostra o botão, e é um
+   * segundo toque, com ele à vista, que chama isto.
+   */
+  onActivate?: () => void
+}) {
   const t = useT()
   const ref = useRef<HTMLVideoElement>(null)
   const arcoRef = useRef<SVGCircleElement>(null)
@@ -119,58 +141,62 @@ export function ProjectVideo({ video, className }: { video: Video; className?: s
 
   // Um toque (ou a caneta) mostra o botão por um tempo, contado de novo a cada toque. No clique, e não
   // quando o dedo sobe: o clique de um toque vem depois, e acertaria o botão já à vista (o toque que
-  // só devia mostrá-lo o pausaria).
-  const tocou = () => {
-    const tipo = ponteiro.current
-    ponteiro.current = ''
-    if (tipo !== 'touch' && tipo !== 'pen') return
+  // só devia mostrá-lo o pausaria). Com o botão à vista, um toque fora dele é o clique do mouse.
+  const mostrarPorUmTempo = () => {
     setTocadoHaPouco(true)
     window.clearTimeout(esconder.current)
     esconder.current = window.setTimeout(() => setTocadoHaPouco(false), DEPOIS_DO_TOQUE)
   }
+  const clicou = (evento: MouseEvent<HTMLElement>) => {
+    const tipo = ponteiro.current
+    ponteiro.current = ''
+    const noBotao = evento.target instanceof Element && evento.target.closest('button') !== null
+    if (tipo === 'touch' || tipo === 'pen') {
+      if (!noBotao && tocadoHaPouco && onActivate) onActivate()
+      else mostrarPorUmTempo()
+    } else if (!noBotao) {
+      onActivate?.()
+    }
+  }
 
   // só o foco do teclado (o de um clique ou de um toque não mostra o botão)
   const focou = (evento: FocusEvent<HTMLButtonElement>) => setFocado(evento.currentTarget.matches(':focus-visible'))
+  const encaixe = fit === 'cover' ? 'object-cover' : 'object-contain'
 
   return (
-    <figure
-      className={cx(
-        // acima do link que cobre o cartão do projeto (quando há repositório)
-        'relative z-10 overflow-hidden bg-surface',
-        className,
-      )}
+    <figure className={cx('relative overflow-hidden', onActivate && 'cursor-pointer', className)}
       onPointerEnter={mouse(true)}
       onPointerLeave={mouse(false)}
       onPointerDown={(evento) => {
         ponteiro.current = evento.pointerType
       }}
-      onClick={tocou}
+      onClick={clicou}
     >
       {/* O pôster é uma imagem atrás do vídeo, e não o atributo poster: assim ele só é baixado perto de
           aparecer (loading="lazy") e vem no tamanho da tela. Sem quadros carregados, o vídeo fica
           transparente e deixa a imagem à vista; quando toca, cobre a imagem. */}
       <img
         src={video.poster}
-        srcSet={`${video.posterPequeno} 640w, ${video.poster} 1280w`}
-        sizes="(min-width: 72rem) 534px, (min-width: 64rem) 46vw, 92vw"
-        width={1280}
-        height={720}
+        srcSet={`${video.posterSmall} 640w, ${video.poster} ${video.width}w`}
+        sizes={sizes}
+        width={video.width}
+        height={video.height}
         loading="lazy"
         decoding="async"
         alt=""
         aria-hidden="true"
-        className="absolute inset-0 size-full object-cover"
+        className={cx('absolute inset-0 size-full', encaixe)}
       />
       <video
         ref={ref}
-        className="relative block aspect-video w-full object-cover"
-        width={1280}
-        height={720}
+        className={cx('relative block size-full', encaixe)}
+        width={video.width}
+        height={video.height}
         muted
         loop
         playsInline
         preload="none"
-        aria-label={t(video.description)}
+        aria-label={t(video.alt)}
         onPlay={() => setTocando(true)}
         onPause={() => setTocando(false)}
       >

@@ -50,6 +50,27 @@ export function ArrowLeft(props: IconProps) {
   )
 }
 
+export function ArrowRight(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </Icon>
+  )
+}
+
+/** Dois cantos abrindo: o cartão vira a página do projeto. */
+export function Expand(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M15 3h6v6" />
+      <path d="M9 21H3v-6" />
+      <path d="m21 3-7 7" />
+      <path d="m3 21 7-7" />
+    </Icon>
+  )
+}
+
 export function ArrowUp(props: IconProps) {
   return (
     <Icon {...props}>

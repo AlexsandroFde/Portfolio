@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { profile } from '../data/profile.ts'
 import { areas, isFeatured, projects, type Area, type FeaturedProject, type ListedProject, type Project } from '../data/projects.ts'
 import { useProjectRoute } from '../hooks/useProjectRoute.ts'
@@ -6,6 +6,7 @@ import { useT, type Texto, type Traduzivel } from '../i18n/idioma.ts'
 import { ui } from '../i18n/interface.ts'
 import { cx } from '../lib/cx.ts'
 import { ABRE_PROJETO, idDoCartao } from '../lib/foco.ts'
+import { revelar } from '../lib/revelar.ts'
 import { ArrowUpRight, Expand, Lock } from './icons.tsx'
 import { ProjectDialog } from './project/ProjectDialog.tsx'
 import { MediaView } from './project/ProjectMedia.tsx'
@@ -190,6 +191,24 @@ export function Projects() {
   const visible = useMemo(() => select(filter), [filter])
   const rota = useProjectRoute(comPagina)
   const aberto = featured.find((project) => project.id === rota.aberto) ?? null
+  // um projeto a caminho de abrir (a tela ainda rolando até o cartão): outro clique não abre outro
+  const abrindo = useRef(false)
+
+  /**
+   * A página sai do cartão inteiro: antes, a tela rola até ele aparecer todo, fora do alcance do
+   * buraco negro (que o devolve inteiro, veja revelar).
+   */
+  const abrirProjeto = async (project: FeaturedProject) => {
+    if (abrindo.current) return
+    abrindo.current = true
+    try {
+      const cartao = document.getElementById(idDoCartao(project.id))
+      if (cartao) await revelar(cartao)
+    } finally {
+      abrindo.current = false
+    }
+    rota.abrir(project.id)
+  }
 
   const showcase = (
     <>
@@ -199,7 +218,7 @@ export function Projects() {
       {/* desktop: duas colunas de cartões, cada um com a altura de dois */}
       <ul className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-flow-dense">
         {featured.map((project, index) => (
-          <FeaturedCard key={project.id} project={project} index={index} onOpen={() => rota.abrir(project.id)} />
+          <FeaturedCard key={project.id} project={project} index={index} onOpen={() => void abrirProjeto(project)} />
         ))}
       </ul>
       <ProjectDialog project={aberto} onClose={rota.fechar} />

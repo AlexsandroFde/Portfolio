@@ -158,30 +158,40 @@ export function Close(props: IconProps) {
 }
 
 /**
- * Monograma "A" do cabeçalho: um Λ com um ponto na cor de destaque no lugar da travessa. É o mesmo
- * desenho do favicon, mas sem o fundo; a letra usa a cor do texto, então fica visível nos dois temas.
- * (O viewBox abraça a letra para ela alinhar com o nome ao lado.)
+ * Monograma "A" do cabeçalho: a letra com o disco do buraco negro em volta, um anel inclinado e
+ * mais grosso na frente, como visto em perspectiva. A metade de trás vem recortada onde passa
+ * atrás da letra; a da frente passa por cima. É o mesmo desenho do favicon, mas sem o fundo: a
+ * letra usa a cor do texto e o anel a de destaque, então fica visível nos dois temas.
+ * (O viewBox abraça o desenho para ele alinhar com o nome ao lado. Ele é mais largo que alto:
+ * com `h-6 w-auto`, a largura segue a proporção.)
  */
 export function Monogram(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="1em"
+      width="1.28em"
       height="1em"
-      viewBox="13 12 38 39.5"
+      viewBox="3.9 10 56.2 44"
       aria-hidden="true"
       focusable="false"
       {...props}
     >
       <path
-        d="M17.5 47 32 16.5 46.5 47"
+        d="M4.78 42.2A28 7.4 -10 0 1 16.95 32.67L16.04 34.67A24.2 3.6 -10 0 0 8.1 39.32ZM44.79 27.76A28 7.4 -10 0 1 59.53 32.55L55.42 30.98A24.2 3.6 -10 0 0 45.53 29.37Z"
+        fill="var(--accent)"
+      />
+      <path
+        d="M15.5 50 32 14 48.5 50"
         fill="none"
         stroke="var(--fg)"
         strokeWidth={7}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="32" cy="38.5" r="4.8" fill="var(--accent)" />
+      <path
+        d="M59.57 31.64A28 7.4 -10 0 1 33.28 43.79A28 7.4 -10 0 1 4.43 41.36L7.86 38.93A24.2 3.6 -10 0 0 32.31 38.27A24.2 3.6 -10 0 0 55.52 30.53Z"
+        fill="var(--accent)"
+      />
     </svg>
   )
 }

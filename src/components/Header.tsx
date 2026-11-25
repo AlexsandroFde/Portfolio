@@ -62,7 +62,7 @@ export function Header() {
           className="flex items-center gap-3 text-[0.9375rem] font-medium tracking-tight"
           onClick={() => setMenuOpen(false)}
         >
-          <Monogram className="size-6" />
+          <Monogram className="h-6 w-auto" />
           <span>{profile.shortName}</span>
         </a>
 

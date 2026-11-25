@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { profile } from '../../data/profile.ts'
-import type { FeaturedProject, ProjectDetails as Details, ProjectSection } from '../../data/projects.ts'
-import { useT } from '../../i18n/idioma.ts'
+import type { FeaturedProject, ProjectDetails as Details } from '../../data/projects.ts'
+import { useT, type Texto } from '../../i18n/idioma.ts'
 import { ui } from '../../i18n/interface.ts'
 import { botaoPrimario } from '../../lib/estilos.ts'
 import { ArrowUpRight, Lock } from '../icons.tsx'
-import { ProjectGallery } from './ProjectGallery.tsx'
+import { diagramar } from './diagramacao.ts'
+import { Figura } from './ProjectFigure.tsx'
+import { ProjectSection } from './ProjectSection.tsx'
 
 type Carga = { estado: 'carregando' } | { estado: 'pronto'; details: Details } | { estado: 'falhou' }
 
@@ -32,33 +34,6 @@ function useDetalhes(project: FeaturedProject): Carga {
   return carga?.de === project ? carga.carga : CARREGANDO
 }
 
-function Secao({ secao }: { secao: ProjectSection }) {
-  const t = useT()
-
-  return (
-    <section>
-      <h3 className="label text-accent">{t(secao.title)}</h3>
-      {secao.paragraphs?.map((paragrafo) => (
-        <p key={paragrafo.pt} className="mt-3 text-pretty text-[0.9375rem] leading-relaxed text-muted">
-          {t(paragrafo)}
-        </p>
-      ))}
-      {secao.items && (
-        <ul className="mt-3 space-y-2">
-          {secao.items.map((item) => (
-            <li
-              key={item.pt}
-              className="relative pl-4 text-pretty text-[0.9375rem] leading-relaxed text-muted before:absolute before:left-0 before:top-[0.6em] before:size-1.5 before:rounded-full before:bg-accent"
-            >
-              {t(item)}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  )
-}
-
 /** Onde está o código: o botão para o repositório no GitHub ou o aviso de que ele é privado. */
 function Codigo({ repo }: { repo?: string }) {
   const t = useT()
@@ -80,22 +55,70 @@ function Codigo({ repo }: { repo?: string }) {
   )
 }
 
-/** Enquanto o módulo do projeto chega: o lugar da galeria e do texto, já no tamanho. */
+/**
+ * A abertura: a prévia do cartão (a página continua de onde ele parou) e, ao lado, a apresentação,
+ * as tecnologias e o caminho para o código. Ela vem do próprio projeto, então aparece na hora.
+ */
+function Abertura({ project, intro }: { project: FeaturedProject; intro: Texto }) {
+  const t = useT()
+
+  return (
+    <div className="grid gap-y-8 lg:grid-cols-12 lg:items-center lg:gap-x-10">
+      <Figura media={project.preview} sizes="(min-width: 64rem) 600px, 92vw" loading="eager" className="lg:col-span-7" />
+      <div className="min-w-0 lg:col-span-5">
+        <p className="text-pretty leading-relaxed text-fg sm:text-lg">{t(intro)}</p>
+        <div className="mt-8 space-y-6 border-t border-line pt-6">
+          <div>
+            <h3 className="label text-subtle">{t(ui.projetos.tecnologias)}</h3>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {project.stack.map((tecnologia) => (
+                <li key={t(tecnologia)} className="rounded-full border border-line px-3 py-1 font-mono text-xs text-muted">
+                  {t(tecnologia)}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <Codigo repo={project.repo} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Enquanto o módulo do projeto chega: o lugar da primeira parte, com o texto e a demonstração ao lado. */
 function Esqueleto() {
   const t = useT()
 
   return (
-    <div role="status" className="animate-pulse">
+    <div role="status" className="grid animate-pulse gap-y-6 lg:grid-cols-12 lg:gap-x-10">
       <span className="sr-only">{t(ui.projeto.carregando)}</span>
-      <div className="aspect-video rounded-xl bg-surface" />
-      <div className="mt-4 h-4 w-2/3 rounded bg-surface" />
+      <div className="space-y-3 lg:col-span-5">
+        <div className="h-3 w-8 rounded bg-line" />
+        <div className="h-6 w-1/2 rounded bg-line" />
+        <div className="h-4 w-full rounded bg-line" />
+        <div className="h-4 w-5/6 rounded bg-line" />
+      </div>
+      <div className="aspect-video rounded-xl bg-line lg:col-span-7" />
     </div>
   )
 }
 
 /**
- * A página de um projeto em destaque: as demonstrações (fixas no alto da coluna, no computador) e,
- * ao lado, a apresentação, as partes do texto, as tecnologias e o caminho para o código.
+ * Cada parte com o arranjo dela (veja diagramacao.ts). As que têm demonstrações ao lado do texto
+ * alternam o lado, começando pela direita, já que a abertura tem a prévia à esquerda.
+ */
+function partes(details: Details) {
+  let aoLado = 0
+  return details.sections.map((secao, i) => {
+    const arranjo = diagramar(secao.media ?? [])
+    const inverter = arranjo.tipo === 'lado' && aoLado++ % 2 === 1
+    return { secao, arranjo, inverter, numero: i + 1 }
+  })
+}
+
+/**
+ * A página de um projeto em destaque, numa grade de 12 colunas: a abertura, as partes (cada texto
+ * com as demonstrações dele, arrumadas pela diagramação) e uma observação no fim.
  */
 export function ProjectDetails({ project }: { project: FeaturedProject }) {
   const t = useT()
@@ -103,41 +126,24 @@ export function ProjectDetails({ project }: { project: FeaturedProject }) {
   const details = carga.estado === 'pronto' ? carga.details : null
 
   return (
-    <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-      <div className="min-w-0 lg:sticky lg:top-0 lg:self-start">
-        {details ? (
-          // a prévia do cartão abre a galeria: a página continua de onde o cartão parou
-          <ProjectGallery media={[project.preview, ...details.media]} />
-        ) : carga.estado === 'falhou' ? (
-          <p role="alert" className="rounded-xl border border-line p-5 text-sm text-muted">
-            {t(ui.projeto.falhou)}
-          </p>
-        ) : (
-          <Esqueleto />
-        )}
-      </div>
+    <div className="space-y-20 lg:space-y-28">
+      <Abertura project={project} intro={details?.intro ?? project.description} />
 
-      <div className="min-w-0 space-y-8">
-        <p className="text-pretty leading-relaxed sm:text-lg">{t(details?.intro ?? project.description)}</p>
-        {details?.sections.map((secao) => <Secao key={secao.title.pt} secao={secao} />)}
+      {details ? (
+        partes(details).map(({ secao, arranjo, inverter, numero }) => (
+          <ProjectSection key={secao.title.pt} secao={secao} numero={numero} arranjo={arranjo} inverter={inverter} />
+        ))
+      ) : carga.estado === 'falhou' ? (
+        <p role="alert" className="rounded-xl border border-line p-5 text-sm text-muted">
+          {t(ui.projeto.falhou)}
+        </p>
+      ) : (
+        <Esqueleto />
+      )}
 
-        <section>
-          <h3 className="label text-accent">{t(ui.projetos.tecnologias)}</h3>
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {project.stack.map((tecnologia) => (
-              <li key={t(tecnologia)} className="rounded-full border border-line px-3 py-1 font-mono text-xs text-muted">
-                {t(tecnologia)}
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {details?.note && (
-          <p className="text-pretty border-l-2 border-line-strong pl-4 text-sm leading-relaxed text-subtle">{t(details.note)}</p>
-        )}
-
-        <Codigo repo={project.repo} />
-      </div>
+      {details?.note && (
+        <p className="max-w-2xl text-pretty border-t border-line pt-8 text-sm leading-relaxed text-subtle">{t(details.note)}</p>
+      )}
     </div>
   )
 }

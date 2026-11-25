@@ -9,7 +9,88 @@ import missoesPequena from '../../assets/projects/manamind/missoes-640.webp'
 import telas from '../../assets/projects/manamind/telas.mp4'
 import telasPoster from '../../assets/projects/manamind/telas.webp'
 import telasPosterPequeno from '../../assets/projects/manamind/telas-640.webp'
-import type { ProjectDetails } from '../projects.ts'
+import type { ImageMedia, ProjectDetails, VideoMedia } from '../projects.ts'
+
+const telasVideo: VideoMedia = {
+  kind: 'video',
+  src: telas,
+  poster: telasPoster,
+  posterSmall: telasPosterPequeno,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'As telas do ManaMind passando uma a uma: as missões, as sessões, o modo foco com o cronômetro, o ambiente sonoro, o baú de personagens, os personagens obtidos, as probabilidades do banner, o perfil e as estatísticas.',
+    en: 'The ManaMind screens sliding by one after another: missions, sessions, focus mode with the timer, the soundscape, the character chest, the characters obtained, the banner odds, the profile and the stats.',
+  },
+  caption: {
+    pt: 'As telas do app, na ordem da jornada: das missões ao foco, ao gacha e às estatísticas.',
+    en: "The app's screens in the order of the journey: from missions to focus, the gacha and the stats.",
+  },
+}
+
+const missoesImagem: ImageMedia = {
+  kind: 'image',
+  src: missoes,
+  srcSmall: missoesPequena,
+  width: 1600,
+  height: 1071,
+  alt: {
+    pt: 'Três telas do ManaMind: a inicial, com o calendário, o convite para focar, as missões e o saldo de manacoins; o perfil com as estatísticas; e o relatório com o gráfico dos últimos 7 dias e dicas personalizadas.',
+    en: 'Three ManaMind screens: the home screen with the calendar, the call to focus, the missions and the manacoin balance; the profile with stats; and the report with the last 7 days chart and personalized tips.',
+  },
+  caption: {
+    pt: 'A tela inicial com as missões, o perfil e as estatísticas com as dicas personalizadas.',
+    en: 'The home screen with missions, the profile and the stats with personalized tips.',
+  },
+}
+
+const focoImagem: ImageMedia = {
+  kind: 'image',
+  src: foco,
+  srcSmall: focoPequena,
+  width: 1600,
+  height: 1075,
+  alt: {
+    pt: 'Três telas: as sessões de uma missão, pendentes e concluídas; a Mana Zone, com o cronômetro em 19:57, o ciclo 1 de 4 e a mensagem do personagem; e o ambiente sonoro, com chuva e música lo-fi.',
+    en: "Three screens: a mission's sessions, pending and completed; the Mana Zone, with the timer at 19:57, cycle 1 of 4 and the character's message; and the soundscape, with rain and lo-fi music.",
+  },
+  caption: {
+    pt: 'As sessões de uma missão, a Mana Zone e a escolha do ambiente sonoro.',
+    en: "A mission's sessions, the Mana Zone and the soundscape picker.",
+  },
+}
+
+const gachaImagem: ImageMedia = {
+  kind: 'image',
+  src: gacha,
+  srcSmall: gachaPequena,
+  width: 1600,
+  height: 1041,
+  alt: {
+    pt: 'O gacha em três telas: o baú de personagens com os contadores de garantia e as puxadas de 200 e 2.000 manacoins; os 10 personagens obtidos, com bordas pela raridade; e as probabilidades e a garantia do banner.',
+    en: 'The gacha in three screens: the character chest with the pity counters and the 200 and 2,000 manacoin pulls; the 10 characters obtained, with borders by rarity; and the banner odds and pity.',
+  },
+  caption: {
+    pt: 'O gacha: o baú, os personagens obtidos numa puxada de dez e as probabilidades do banner.',
+    en: 'The gacha: the chest, the characters from a ten-pull and the banner odds.',
+  },
+}
+
+const classesImagem: ImageMedia = {
+  kind: 'image',
+  src: classes,
+  srcSmall: classesPequena,
+  width: 1500,
+  height: 1725,
+  alt: {
+    pt: 'Diagrama de classes dividido em três domínios: o de usuários, com User; o de foco e missões, com Mission e FocusSession; e o de personagens, com Character, CharacterBanner, CharacterUserLink e UserBannerPity.',
+    en: 'Class diagram split into three domains: users, with User; focus and missions, with Mission and FocusSession; and characters, with Character, CharacterBanner, CharacterUserLink and UserBannerPity.',
+  },
+  caption: {
+    pt: 'O diagrama de classes, organizado pelos três domínios do sistema.',
+    en: 'The class diagram, organized by the three domains of the system.',
+  },
+}
 
 const manaMind: ProjectDetails = {
   intro: {
@@ -25,6 +106,7 @@ const manaMind: ProjectDetails = {
           en: 'The Pomodoro technique provides the structure (short focus and break cycles), gamification and the gacha provide the motivation, and Japanese pop culture provides the emotional hook: anime-style characters become companions, each with their own encouraging messages.',
         },
       ],
+      media: [telasVideo],
     },
     {
       title: { pt: 'Como funciona', en: 'How it works' },
@@ -46,6 +128,7 @@ const manaMind: ProjectDetails = {
           en: 'Stats and tips: completed missions, sessions and cycles, focus time over the last 7 days and suggestions drawn from the history, such as the time of day when the user does their best work.',
         },
       ],
+      media: [missoesImagem, focoImagem],
     },
     {
       title: { pt: 'O gacha', en: 'The gacha' },
@@ -69,6 +152,7 @@ const manaMind: ProjectDetails = {
           en: 'Pity system: a 5-star at most every 90 pulls and a 4-star at most every 30.',
         },
       ],
+      media: [gachaImagem],
     },
     {
       title: { pt: 'Arquitetura', en: 'Architecture' },
@@ -78,84 +162,7 @@ const manaMind: ProjectDetails = {
           en: "A single Flutter codebase for Android and iOS, with state managed by BLoC. Firebase Authentication handles sign-in (email or Google) and Cloud Firestore stores missions, sessions and collections, synced in real time. The system is split into three domains: users, characters (with banners, collections and each user's pity counter) and focus and missions.",
         },
       ],
-    },
-  ],
-  media: [
-    {
-      kind: 'video',
-      src: telas,
-      poster: telasPoster,
-      posterSmall: telasPosterPequeno,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'As telas do ManaMind passando uma a uma: as missões, as sessões, o modo foco com o cronômetro, o ambiente sonoro, o baú de personagens, os personagens obtidos, as probabilidades do banner, o perfil e as estatísticas.',
-        en: 'The ManaMind screens sliding by one after another: missions, sessions, focus mode with the timer, the soundscape, the character chest, the characters obtained, the banner odds, the profile and the stats.',
-      },
-      caption: {
-        pt: 'As telas do app, na ordem da jornada: das missões ao foco, ao gacha e às estatísticas.',
-        en: "The app's screens in the order of the journey: from missions to focus, the gacha and the stats.",
-      },
-    },
-    {
-      kind: 'image',
-      src: missoes,
-      srcSmall: missoesPequena,
-      width: 1600,
-      height: 1071,
-      alt: {
-        pt: 'Três telas do ManaMind: a inicial, com o calendário, o convite para focar, as missões e o saldo de manacoins; o perfil com as estatísticas; e o relatório com o gráfico dos últimos 7 dias e dicas personalizadas.',
-        en: 'Three ManaMind screens: the home screen with the calendar, the call to focus, the missions and the manacoin balance; the profile with stats; and the report with the last 7 days chart and personalized tips.',
-      },
-      caption: {
-        pt: 'A tela inicial com as missões, o perfil e as estatísticas com as dicas personalizadas.',
-        en: 'The home screen with missions, the profile and the stats with personalized tips.',
-      },
-    },
-    {
-      kind: 'image',
-      src: foco,
-      srcSmall: focoPequena,
-      width: 1600,
-      height: 1075,
-      alt: {
-        pt: 'Três telas: as sessões de uma missão, pendentes e concluídas; a Mana Zone, com o cronômetro em 19:57, o ciclo 1 de 4 e a mensagem do personagem; e o ambiente sonoro, com chuva e música lo-fi.',
-        en: "Three screens: a mission's sessions, pending and completed; the Mana Zone, with the timer at 19:57, cycle 1 of 4 and the character's message; and the soundscape, with rain and lo-fi music.",
-      },
-      caption: {
-        pt: 'As sessões de uma missão, a Mana Zone e a escolha do ambiente sonoro.',
-        en: "A mission's sessions, the Mana Zone and the soundscape picker.",
-      },
-    },
-    {
-      kind: 'image',
-      src: gacha,
-      srcSmall: gachaPequena,
-      width: 1600,
-      height: 1041,
-      alt: {
-        pt: 'O gacha em três telas: o baú de personagens com os contadores de garantia e as puxadas de 200 e 2.000 manacoins; os 10 personagens obtidos, com bordas pela raridade; e as probabilidades e a garantia do banner.',
-        en: 'The gacha in three screens: the character chest with the pity counters and the 200 and 2,000 manacoin pulls; the 10 characters obtained, with borders by rarity; and the banner odds and pity.',
-      },
-      caption: {
-        pt: 'O gacha: o baú, os personagens obtidos numa puxada de dez e as probabilidades do banner.',
-        en: 'The gacha: the chest, the characters from a ten-pull and the banner odds.',
-      },
-    },
-    {
-      kind: 'image',
-      src: classes,
-      srcSmall: classesPequena,
-      width: 1500,
-      height: 1725,
-      alt: {
-        pt: 'Diagrama de classes dividido em três domínios: o de usuários, com User; o de foco e missões, com Mission e FocusSession; e o de personagens, com Character, CharacterBanner, CharacterUserLink e UserBannerPity.',
-        en: 'Class diagram split into three domains: users, with User; focus and missions, with Mission and FocusSession; and characters, with Character, CharacterBanner, CharacterUserLink and UserBannerPity.',
-      },
-      caption: {
-        pt: 'O diagrama de classes, organizado pelos três domínios do sistema.',
-        en: 'The class diagram, organized by the three domains of the system.',
-      },
+      media: [classesImagem],
     },
   ],
   note: {

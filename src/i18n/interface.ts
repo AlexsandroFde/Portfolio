@@ -63,12 +63,6 @@ export const ui = {
   // A página de um projeto em destaque, aberta do cartão.
   projeto: {
     fechar: t('Fechar', 'Close'),
-    demonstracoes: t('Demonstrações', 'Demos'),
-    demonstracao: t('Demonstração', 'Demo'),
-    anterior: t('Demonstração anterior', 'Previous demo'),
-    proxima: t('Próxima demonstração', 'Next demo'),
-    de: t('de', 'of'),
-    video: t('vídeo', 'video'),
     verCodigo: t('Ver o código no GitHub', 'View the code on GitHub'),
     codigoPrivado: t('Código em repositório privado', 'Code in a private repository'),
     carregando: t('Carregando as demonstrações', 'Loading the demos'),

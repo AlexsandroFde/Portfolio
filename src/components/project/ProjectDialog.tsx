@@ -177,7 +177,7 @@ function Painel({
         className="absolute inset-2 mx-auto flex max-w-6xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl sm:inset-4 lg:inset-y-6"
       >
         <div ref={conteudo} className="flex min-h-0 flex-1 flex-col">
-          <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-8 sm:py-5">
+          <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-8 sm:py-5 lg:px-12">
             <div className="min-w-0">
               <p className="label text-subtle">
                 {area && t(area.label)} · <span className="tabular-nums">{project.year}</span>
@@ -193,7 +193,7 @@ function Painel({
           <div
             ref={corpo}
             tabIndex={-1}
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 outline-none sm:px-8 sm:py-8"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-8 outline-none sm:px-8 sm:py-10 lg:px-12 lg:py-12"
           >
             <ProjectDetails project={project} />
           </div>

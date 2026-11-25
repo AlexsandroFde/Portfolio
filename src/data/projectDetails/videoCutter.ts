@@ -6,7 +6,59 @@ import linhaDoTempo from '../../assets/projects/video-cutter/linha-do-tempo.webp
 import linhaDoTempoPequena from '../../assets/projects/video-cutter/linha-do-tempo-640.webp'
 import pronto from '../../assets/projects/video-cutter/pronto.webp'
 import prontoPequena from '../../assets/projects/video-cutter/pronto-640.webp'
-import type { ProjectDetails } from '../projects.ts'
+import type { ImageMedia, ProjectDetails } from '../projects.ts'
+
+const inicioImagem: ImageMedia = {
+  kind: 'image',
+  src: inicio,
+  srcSmall: inicioPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'A tela inicial ampliada: "Corte um vídeo em pedacinhos e baixe tudo de uma vez", com a opção de escolher um vídeo do aparelho.',
+    en: 'The home screen, zoomed in: "Cut a video into little pieces and download them all at once", with the option to pick a video from the device.',
+  },
+  caption: { pt: 'A tela inicial: o vídeo vem do aparelho ou de um link do YouTube.', en: 'The home screen: the video comes from the device or a YouTube link.' },
+}
+
+const linhaDoTempoImagem: ImageMedia = {
+  kind: 'image',
+  src: linhaDoTempo,
+  srcSmall: linhaDoTempoPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'A linha do tempo com o vídeo dividido em três pedacinhos numerados, o cursor de reprodução e o botão Dividir.',
+    en: 'The timeline with the video split into three numbered clips, the playhead and the Split button.',
+  },
+  caption: { pt: 'A linha do tempo: três pedacinhos, cortados no cursor.', en: 'The timeline: three clips, split at the playhead.' },
+}
+
+const exportarImagem: ImageMedia = {
+  kind: 'image',
+  src: exportar,
+  srcSmall: exportarPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'As opções de exportação: vídeo ou só o áudio em MP3, modo rápido ou preciso, a explicação do modo rápido e o botão Exportar 3 pedacinhos.',
+    en: 'The export options: video or audio-only MP3, fast or precise mode, an explanation of the fast mode and the Export 3 clips button.',
+  },
+  caption: { pt: 'As opções de exportação, cada uma com a explicação do que faz.', en: 'The export options, each with an explanation of what it does.' },
+}
+
+const prontoImagem: ImageMedia = {
+  kind: 'image',
+  src: pronto,
+  srcSmall: prontoPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'A exportação em andamento: "guardando com carinho", com a barra de progresso salvando o pedacinho 1 de 3 na pasta Video Cutter.',
+    en: 'The export in progress: "saving with love", with the progress bar saving clip 1 of 3 to the Video Cutter folder.',
+  },
+  caption: { pt: 'A exportação, com o progresso real do FFmpeg.', en: 'The export, with real progress from FFmpeg.' },
+}
 
 const videoCutter: ProjectDetails = {
   intro: {
@@ -38,6 +90,7 @@ const videoCutter: ProjectDetails = {
           en: 'An edit history: each video becomes an edit that saves itself as you cut, which you can resume, rename (no duplicate names allowed) or delete.',
         },
       ],
+      media: [inicioImagem, linhaDoTempoImagem, exportarImagem],
     },
     {
       title: { pt: 'Arquitetura', en: 'Architecture' },
@@ -65,56 +118,7 @@ const videoCutter: ProjectDetails = {
           en: 'A custom design system: themes generated from a seed color, an embedded font and spacing, radius and motion scales, with no magic numbers in the screens.',
         },
       ],
-    },
-  ],
-  media: [
-    {
-      kind: 'image',
-      src: inicio,
-      srcSmall: inicioPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'A tela inicial ampliada: "Corte um vídeo em pedacinhos e baixe tudo de uma vez", com a opção de escolher um vídeo do aparelho.',
-        en: 'The home screen, zoomed in: "Cut a video into little pieces and download them all at once", with the option to pick a video from the device.',
-      },
-      caption: { pt: 'A tela inicial: o vídeo vem do aparelho ou de um link do YouTube.', en: 'The home screen: the video comes from the device or a YouTube link.' },
-    },
-    {
-      kind: 'image',
-      src: linhaDoTempo,
-      srcSmall: linhaDoTempoPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'A linha do tempo com o vídeo dividido em três pedacinhos numerados, o cursor de reprodução e o botão Dividir.',
-        en: 'The timeline with the video split into three numbered clips, the playhead and the Split button.',
-      },
-      caption: { pt: 'A linha do tempo: três pedacinhos, cortados no cursor.', en: 'The timeline: three clips, split at the playhead.' },
-    },
-    {
-      kind: 'image',
-      src: exportar,
-      srcSmall: exportarPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'As opções de exportação: vídeo ou só o áudio em MP3, modo rápido ou preciso, a explicação do modo rápido e o botão Exportar 3 pedacinhos.',
-        en: 'The export options: video or audio-only MP3, fast or precise mode, an explanation of the fast mode and the Export 3 clips button.',
-      },
-      caption: { pt: 'As opções de exportação, cada uma com a explicação do que faz.', en: 'The export options, each with an explanation of what it does.' },
-    },
-    {
-      kind: 'image',
-      src: pronto,
-      srcSmall: prontoPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'A exportação em andamento: "guardando com carinho", com a barra de progresso salvando o pedacinho 1 de 3 na pasta Video Cutter.',
-        en: 'The export in progress: "saving with love", with the progress bar saving clip 1 of 3 to the Video Cutter folder.',
-      },
-      caption: { pt: 'A exportação, com o progresso real do FFmpeg.', en: 'The export, with real progress from FFmpeg.' },
+      media: [prontoImagem],
     },
   ],
 }

@@ -14,10 +14,72 @@ import pulinhoPosterPequeno from '../../assets/projects/beka/pulinho-640.webp'
 import soneca from '../../assets/projects/beka/soneca.mp4'
 import sonecaPoster from '../../assets/projects/beka/soneca.webp'
 import sonecaPosterPequeno from '../../assets/projects/beka/soneca-640.webp'
-import type { ProjectDetails } from '../projects.ts'
+import type { ImageMedia, ProjectDetails, VideoMedia } from '../projects.ts'
 
 /** As mini animações têm todas o mesmo tamanho (720 x 990). */
 const animacao = { kind: 'video', width: 720, height: 990 } as const
+
+const pulinhoVideo: VideoMedia = {
+  ...animacao,
+  src: pulinho,
+  poster: pulinhoPoster,
+  posterSmall: pulinhoPosterPequeno,
+  alt: { pt: 'A Beka se abaixa e dá um pulinho de alegria, de olhos fechados e braços abertos, com estrelinhas em volta.', en: 'Beka crouches and does a little jump for joy, eyes closed and arms wide open, with little stars around her.' },
+  caption: { pt: 'Pulinho de alegria, uma das 14 mini animações, em loop sem emenda.', en: 'A jump for joy, one of the 14 mini animations, looping without a seam.' },
+}
+
+const dancinhaVideo: VideoMedia = {
+  ...animacao,
+  src: dancinha,
+  poster: dancinhaPoster,
+  posterSmall: dancinhaPosterPequeno,
+  alt: { pt: 'A Beka dança balançando os braços, com notas musicais em volta.', en: 'Beka dances swinging her arms, with music notes around her.' },
+  caption: { pt: 'Dancinha: cada osso segue uma curva periódica, que fecha o loop sem emenda.', en: 'A little dance: each bone follows a periodic curve that closes the loop without a seam.' },
+}
+
+const curvasImagem: ImageMedia = {
+  kind: 'image',
+  src: curvas,
+  srcSmall: curvasPequena,
+  width: 1600,
+  height: 600,
+  alt: {
+    pt: 'Gráfico com as curvas de animação da dancinha ao longo de 2 segundos: a rotação do ombro, do cotovelo e do pulso esquerdos e a altura e a escala do corpo.',
+    en: 'Chart of the dance animation curves over 2 seconds: the rotation of the left shoulder, elbow and wrist and the height and scale of the body.',
+  },
+  caption: { pt: 'Os bastidores da dancinha: as curvas de cada osso num loop de 2 segundos.', en: 'Behind the dance: the curve of each bone over a 2-second loop.' },
+}
+
+const musicaVideo: VideoMedia = {
+  ...animacao,
+  src: musica,
+  poster: musicaPoster,
+  posterSmall: musicaPosterPequeno,
+  alt: { pt: 'A Beka de fones de ouvido, de olhos fechados, curtindo uma música.', en: 'Beka with headphones on, eyes closed, enjoying some music.' },
+  caption: { pt: 'Curtindo um som, de fones de ouvido.', en: 'Enjoying some music, headphones on.' },
+}
+
+const sonecaVideo: VideoMedia = {
+  ...animacao,
+  src: soneca,
+  poster: sonecaPoster,
+  posterSmall: sonecaPosterPequeno,
+  alt: { pt: 'A Beka cochila em pé, de olhos fechados, com uma bolhinha e um "Z", e acorda de novo.', en: 'Beka dozes off standing up, eyes closed, with a little bubble and a "Z", then wakes up again.' },
+  caption: { pt: 'Soneca: as cenas cobrem humores do dia a dia, da alegria ao sono.', en: 'A nap: the scenes cover everyday moods, from joy to sleepiness.' },
+}
+
+const ilustracaoImagem: ImageMedia = {
+  kind: 'image',
+  src: ilustracao,
+  srcSmall: ilustracaoPequena,
+  width: 768,
+  height: 1376,
+  alt: { pt: 'A ilustração original da Beka, de corpo inteiro, em pé e parada.', en: 'The original full-body illustration of Beka, standing still.' },
+  caption: {
+    pt: 'A ilustração de onde tudo sai: o código a separa em camadas, reconstrói o que estava escondido e monta o esqueleto.',
+    en: 'The illustration everything starts from: the code splits it into layers, rebuilds what was hidden and rigs the skeleton.',
+  },
+}
 
 const beka: ProjectDetails = {
   intro: {
@@ -45,6 +107,7 @@ const beka: ProjectDetails = {
           en: 'A voice of her own: she understands speech (the wake word is "Beka") and answers in a language of her own, with syllables synthesized on the fly, following the rhythm of the text and the melody of her mood.',
         },
       ],
+      media: [pulinhoVideo, musicaVideo, sonecaVideo],
     },
     {
       title: { pt: 'Como ela é animada', en: 'How she is animated' },
@@ -58,6 +121,7 @@ const beka: ProjectDetails = {
           en: "On screen, the CPU deforms the vertices and the GPU draws (WebGL2). Scene changes crossfade between two framebuffers, and the stickers' white outline comes from a distance transform computed on the GPU.",
         },
       ],
+      media: [ilustracaoImagem, dancinhaVideo, curvasImagem],
     },
     {
       title: { pt: 'Como a IA decide', en: 'How the AI decides' },
@@ -93,64 +157,6 @@ const beka: ProjectDetails = {
         { pt: 'Com ruído de fundo, o sentido do comando falado ficou certo em 56 de 60 vezes (eram 37).', en: 'With background noise, the meaning of spoken commands came out right 56 times out of 60 (up from 37).' },
         { pt: 'Num notebook com placa de vídeo de 4 GB, ela reage em 0,7 a 1,1 segundo.', en: 'On a laptop with a 4 GB GPU, she reacts in 0.7 to 1.1 seconds.' },
       ],
-    },
-  ],
-  media: [
-    {
-      ...animacao,
-      src: pulinho,
-      poster: pulinhoPoster,
-      posterSmall: pulinhoPosterPequeno,
-      alt: { pt: 'A Beka se abaixa e dá um pulinho de alegria, de olhos fechados e braços abertos, com estrelinhas em volta.', en: 'Beka crouches and does a little jump for joy, eyes closed and arms wide open, with little stars around her.' },
-      caption: { pt: 'Pulinho de alegria, uma das 14 mini animações, em loop sem emenda.', en: 'A jump for joy, one of the 14 mini animations, looping without a seam.' },
-    },
-    {
-      ...animacao,
-      src: dancinha,
-      poster: dancinhaPoster,
-      posterSmall: dancinhaPosterPequeno,
-      alt: { pt: 'A Beka dança balançando os braços, com notas musicais em volta.', en: 'Beka dances swinging her arms, with music notes around her.' },
-      caption: { pt: 'Dancinha: cada osso segue uma curva periódica, que fecha o loop sem emenda.', en: 'A little dance: each bone follows a periodic curve that closes the loop without a seam.' },
-    },
-    {
-      kind: 'image',
-      src: curvas,
-      srcSmall: curvasPequena,
-      width: 1600,
-      height: 600,
-      alt: {
-        pt: 'Gráfico com as curvas de animação da dancinha ao longo de 2 segundos: a rotação do ombro, do cotovelo e do pulso esquerdos e a altura e a escala do corpo.',
-        en: 'Chart of the dance animation curves over 2 seconds: the rotation of the left shoulder, elbow and wrist and the height and scale of the body.',
-      },
-      caption: { pt: 'Os bastidores da dancinha: as curvas de cada osso num loop de 2 segundos.', en: 'Behind the dance: the curve of each bone over a 2-second loop.' },
-    },
-    {
-      ...animacao,
-      src: musica,
-      poster: musicaPoster,
-      posterSmall: musicaPosterPequeno,
-      alt: { pt: 'A Beka de fones de ouvido, de olhos fechados, curtindo uma música.', en: 'Beka with headphones on, eyes closed, enjoying some music.' },
-      caption: { pt: 'Curtindo um som, de fones de ouvido.', en: 'Enjoying some music, headphones on.' },
-    },
-    {
-      ...animacao,
-      src: soneca,
-      poster: sonecaPoster,
-      posterSmall: sonecaPosterPequeno,
-      alt: { pt: 'A Beka cochila em pé, de olhos fechados, com uma bolhinha e um "Z", e acorda de novo.', en: 'Beka dozes off standing up, eyes closed, with a little bubble and a "Z", then wakes up again.' },
-      caption: { pt: 'Soneca: as cenas cobrem humores do dia a dia, da alegria ao sono.', en: 'A nap: the scenes cover everyday moods, from joy to sleepiness.' },
-    },
-    {
-      kind: 'image',
-      src: ilustracao,
-      srcSmall: ilustracaoPequena,
-      width: 768,
-      height: 1376,
-      alt: { pt: 'A ilustração original da Beka, de corpo inteiro, em pé e parada.', en: 'The original full-body illustration of Beka, standing still.' },
-      caption: {
-        pt: 'A ilustração de onde tudo sai: o código a separa em camadas, reconstrói o que estava escondido e monta o esqueleto.',
-        en: 'The illustration everything starts from: the code splits it into layers, rebuilds what was hidden and rigs the skeleton.',
-      },
     },
   ],
   note: {

@@ -8,7 +8,87 @@ import hangar from '../../assets/projects/deepcore/hangar.webp'
 import hangarPequena from '../../assets/projects/deepcore/hangar-640.webp'
 import menu from '../../assets/projects/deepcore/menu.webp'
 import menuPequena from '../../assets/projects/deepcore/menu-640.webp'
-import type { ProjectDetails } from '../projects.ts'
+import type { ImageMedia, ProjectDetails } from '../projects.ts'
+
+const capaImagem: ImageMedia = {
+  kind: 'image',
+  src: capa,
+  srcSmall: capaPequena,
+  width: 1232,
+  height: 706,
+  alt: {
+    pt: 'Arte do DeepCore: a estação iluminada, a escavadora amarela com o farol aceso, o piloto na beira de um poço que brilha em rosa e criaturas voando perto da lua.',
+    en: 'DeepCore key art: the lit station, the yellow digger with its headlight on, the pilot at the edge of a pit glowing pink and creatures flying near the moon.',
+  },
+  caption: {
+    pt: 'A arte da página da Steam, montada por script e renderizada no próprio Godot.',
+    en: 'The Steam page art, assembled by a script and rendered in Godot itself.',
+  },
+}
+
+const escavacaoImagem: ImageMedia = {
+  kind: 'image',
+  src: escavacao,
+  srcSmall: escavacaoPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'O primeiro dia: a escavadora num túnel escuro iluminado pelo farol, com as barras de oxigênio, combustível e casco no alto, o tempo até a noite e quanto combustível falta para voltar.',
+    en: 'Day one: the digger in a dark tunnel lit by its headlight, with the oxygen, fuel and hull bars at the top, the time until nightfall and how much fuel it takes to get back.',
+  },
+  caption: {
+    pt: 'Dia 1: os três relógios no alto e quanto combustível falta para voltar.',
+    en: 'Day 1: the three clocks at the top and how much fuel it takes to get back.',
+  },
+}
+
+const colossoImagem: ImageMedia = {
+  kind: 'image',
+  src: colosso,
+  srcSmall: colossoPequena,
+  width: 1205,
+  height: 800,
+  alt: {
+    pt: 'O Colosso do Céu: um polvo gigante de um olho só, com a pele em tons de laranja e vermelho e as veias acesas.',
+    en: 'The Sky Colossus: a giant one-eyed octopus, its skin in shades of orange and red with glowing veins.',
+  },
+  caption: {
+    pt: 'O Colosso do Céu, o chefe da noite 20, na fase de fúria.',
+    en: 'The Sky Colossus, the night 20 boss, in its fury phase.',
+  },
+}
+
+const hangarImagem: ImageMedia = {
+  kind: 'image',
+  src: hangar,
+  srcSmall: hangarPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'O hangar com as três escavadoras (a perfuradora, a blindada e a sonda) e, embaixo, a ficha da escolhida: casco, oxigênio, combustível, mineração, carga, motor, radar, ferramenta e habilidade passiva.',
+    en: "The hangar with the three diggers (the driller, the armored one and the probe) and, below, the chosen one's stats: hull, oxygen, fuel, mining, cargo, engine, radar, tool and passive ability.",
+  },
+  caption: {
+    pt: 'O hangar: as três escavadoras e a ficha de cada uma.',
+    en: 'The hangar: the three diggers and their stats.',
+  },
+}
+
+const menuImagem: ImageMedia = {
+  kind: 'image',
+  src: menu,
+  srcSmall: menuPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'O menu do jogo, com o logo, o lema "cave fundo, volte vivo", as opções e a estação na superfície, ao lado do poço.',
+    en: 'The game menu, with the logo, the motto "dig deep, come back alive", the options and the station on the surface, next to the pit.',
+  },
+  caption: {
+    pt: 'O menu, com o lema do jogo.',
+    en: "The menu, with the game's motto.",
+  },
+}
 
 const deepcore: ProjectDetails = {
   intro: {
@@ -40,6 +120,7 @@ const deepcore: ProjectDetails = {
           en: 'Roguelite progression: 40 perks in 10 tracks with 9 synergies, a permanent 45-node tree and two cinematic endings.',
         },
       ],
+      media: [escavacaoImagem, colossoImagem, hangarImagem],
     },
     {
       title: { pt: 'Como foi feito', en: 'How it was built' },
@@ -61,6 +142,7 @@ const deepcore: ProjectDetails = {
           en: 'Crisp pixel art on any screen (integer scaling plus a custom shader for fractional scales), versioned JSON saves with atomic writes, and text in Portuguese and English, with tests that check every translation fits on screen.',
         },
       ],
+      media: [capaImagem, menuImagem],
     },
     {
       title: { pt: 'Em números', en: 'By the numbers' },
@@ -73,83 +155,6 @@ const deepcore: ProjectDetails = {
         },
         { pt: '678 imagens e 116 sons gerados pelos geradores do projeto.', en: "678 images and 116 sounds produced by the project's generators." },
       ],
-    },
-  ],
-  media: [
-    {
-      kind: 'image',
-      src: capa,
-      srcSmall: capaPequena,
-      width: 1232,
-      height: 706,
-      alt: {
-        pt: 'Arte do DeepCore: a estação iluminada, a escavadora amarela com o farol aceso, o piloto na beira de um poço que brilha em rosa e criaturas voando perto da lua.',
-        en: 'DeepCore key art: the lit station, the yellow digger with its headlight on, the pilot at the edge of a pit glowing pink and creatures flying near the moon.',
-      },
-      caption: {
-        pt: 'A arte da página da Steam, montada por script e renderizada no próprio Godot.',
-        en: 'The Steam page art, assembled by a script and rendered in Godot itself.',
-      },
-    },
-    {
-      kind: 'image',
-      src: escavacao,
-      srcSmall: escavacaoPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'O primeiro dia: a escavadora num túnel escuro iluminado pelo farol, com as barras de oxigênio, combustível e casco no alto, o tempo até a noite e quanto combustível falta para voltar.',
-        en: 'Day one: the digger in a dark tunnel lit by its headlight, with the oxygen, fuel and hull bars at the top, the time until nightfall and how much fuel it takes to get back.',
-      },
-      caption: {
-        pt: 'Dia 1: os três relógios no alto e quanto combustível falta para voltar.',
-        en: 'Day 1: the three clocks at the top and how much fuel it takes to get back.',
-      },
-    },
-    {
-      kind: 'image',
-      src: colosso,
-      srcSmall: colossoPequena,
-      width: 1205,
-      height: 800,
-      alt: {
-        pt: 'O Colosso do Céu: um polvo gigante de um olho só, com a pele em tons de laranja e vermelho e as veias acesas.',
-        en: 'The Sky Colossus: a giant one-eyed octopus, its skin in shades of orange and red with glowing veins.',
-      },
-      caption: {
-        pt: 'O Colosso do Céu, o chefe da noite 20, na fase de fúria.',
-        en: 'The Sky Colossus, the night 20 boss, in its fury phase.',
-      },
-    },
-    {
-      kind: 'image',
-      src: hangar,
-      srcSmall: hangarPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'O hangar com as três escavadoras (a perfuradora, a blindada e a sonda) e, embaixo, a ficha da escolhida: casco, oxigênio, combustível, mineração, carga, motor, radar, ferramenta e habilidade passiva.',
-        en: "The hangar with the three diggers (the driller, the armored one and the probe) and, below, the chosen one's stats: hull, oxygen, fuel, mining, cargo, engine, radar, tool and passive ability.",
-      },
-      caption: {
-        pt: 'O hangar: as três escavadoras e a ficha de cada uma.',
-        en: 'The hangar: the three diggers and their stats.',
-      },
-    },
-    {
-      kind: 'image',
-      src: menu,
-      srcSmall: menuPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'O menu do jogo, com o logo, o lema "cave fundo, volte vivo", as opções e a estação na superfície, ao lado do poço.',
-        en: 'The game menu, with the logo, the motto "dig deep, come back alive", the options and the station on the surface, next to the pit.',
-      },
-      caption: {
-        pt: 'O menu, com o lema do jogo.',
-        en: "The menu, with the game's motto.",
-      },
     },
   ],
 }

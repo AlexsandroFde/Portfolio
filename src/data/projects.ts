@@ -32,7 +32,7 @@ export const areas: ReadonlyArray<{ id: Area; label: Texto }> = [
 interface MediaBase {
   /** O que ela mostra, para quem não a vê (leitores de tela). */
   alt: Texto
-  /** A legenda, embaixo dela na galeria do projeto. */
+  /** A legenda, embaixo dela na página do projeto. */
   caption: Texto
   /** Tamanho do original (px): o espaço dela fica reservado antes de ela carregar. */
   width: number
@@ -60,21 +60,25 @@ export interface VideoMedia extends MediaBase {
 /** Uma demonstração de um projeto. Um tipo novo entra aqui e ganha quem o mostre (veja ProjectMedia.tsx). */
 export type ProjectMedia = ImageMedia | VideoMedia
 
-/** Uma parte do texto da página de um projeto: um título, com parágrafos, itens ou os dois. */
+/**
+ * Uma parte da página de um projeto: um título, com parágrafos, itens ou os dois, e as
+ * demonstrações que ilustram aquele texto. Quem decide como elas se arrumam ao lado do texto (ou
+ * numa faixa embaixo dele) é a página, pelo número e pelo formato delas (veja diagramacao.ts).
+ */
 export interface ProjectSection {
   title: Texto
   paragraphs?: readonly Texto[]
   items?: readonly Texto[]
+  /** As demonstrações desta parte, na ordem em que aparecem. */
+  media?: readonly ProjectMedia[]
 }
 
 /** As explicações e as demonstrações de um projeto em destaque: o que a página dele mostra. */
 export interface ProjectDetails {
-  /** A abertura, mais longa que a descrição do cartão. */
+  /** A abertura, mais longa que a descrição do cartão, ao lado da prévia. */
   intro: Texto
   sections: readonly ProjectSection[]
-  /** As demonstrações além da prévia do cartão, que abre a galeria: na ordem em que aparecem. */
-  media: readonly ProjectMedia[]
-  /** Uma observação no fim: de onde vêm as imagens, o que ficou de fora. */
+  /** Uma observação no fim, como de onde vêm as imagens. */
   note?: Texto
 }
 

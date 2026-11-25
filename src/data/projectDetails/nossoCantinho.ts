@@ -4,7 +4,46 @@ import cozinha from '../../assets/projects/nosso-cantinho/cozinha.webp'
 import cozinhaPequena from '../../assets/projects/nosso-cantinho/cozinha-640.webp'
 import quarto from '../../assets/projects/nosso-cantinho/quarto.webp'
 import quartoPequena from '../../assets/projects/nosso-cantinho/quarto-640.webp'
-import type { ProjectDetails } from '../projects.ts'
+import type { ImageMedia, ProjectDetails } from '../projects.ts'
+
+const quartoImagem: ImageMedia = {
+  kind: 'image',
+  src: quarto,
+  srcSmall: quartoPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'O pet, um dragãozinho verde de gravata, no quarto, ao lado da caminha, com a janela e o relógio na parede.',
+    en: 'The pet, a little green dragon in a tie, in the bedroom next to its bed, with the window and a clock on the wall.',
+  },
+  caption: { pt: 'O quarto, onde ele recebe carinho, dorme e sonha.', en: 'The bedroom, where it gets petted, sleeps and dreams.' },
+}
+
+const cozinhaImagem: ImageMedia = {
+  kind: 'image',
+  src: cozinha,
+  srcSmall: cozinhaPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'O dragãozinho na cozinha, comendo, com a geladeira e o fogão ao fundo.',
+    en: 'The little dragon in the kitchen, eating, with the fridge and the stove behind it.',
+  },
+  caption: { pt: 'A cozinha: a comida voa até a boca dele.', en: 'The kitchen: the food flies right into its mouth.' },
+}
+
+const banhoImagem: ImageMedia = {
+  kind: 'image',
+  src: banho,
+  srcSmall: banhoPequena,
+  width: 1280,
+  height: 720,
+  alt: {
+    pt: 'O dragãozinho no banheiro, coberto de espuma, com a barra de higiene subindo no alto.',
+    en: 'The little dragon in the bathroom, covered in soap foam, with the hygiene bar going up at the top.',
+  },
+  caption: { pt: 'O banho de espuma, com a barra de higiene subindo.', en: 'Bath time with soap foam, as the hygiene bar goes up.' },
+}
 
 const nossoCantinho: ProjectDetails = {
   intro: {
@@ -36,6 +75,7 @@ const nossoCantinho: ProjectDetails = {
           en: 'Long-term progression: levels, coins, a shop, decorations, daily missions for the couple and, after each rebirth, 52 permanent upgrades across 9 trees.',
         },
       ],
+      media: [quartoImagem, cozinhaImagem, banhoImagem],
     },
     {
       title: { pt: 'Para o casal', en: 'For the two of us' },
@@ -96,44 +136,6 @@ const nossoCantinho: ProjectDetails = {
         { pt: '152 casos de teste automatizados no back-end, com testes de snapshot do pet.', en: '152 automated test cases on the back end, including snapshot tests for the pet.' },
         { pt: 'Só 6 dependências de produção no front.', en: 'Only 6 production dependencies on the front end.' },
       ],
-    },
-  ],
-  media: [
-    {
-      kind: 'image',
-      src: quarto,
-      srcSmall: quartoPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'O pet, um dragãozinho verde de gravata, no quarto, ao lado da caminha, com a janela e o relógio na parede.',
-        en: 'The pet, a little green dragon in a tie, in the bedroom next to its bed, with the window and a clock on the wall.',
-      },
-      caption: { pt: 'O quarto, onde ele recebe carinho, dorme e sonha.', en: 'The bedroom, where it gets petted, sleeps and dreams.' },
-    },
-    {
-      kind: 'image',
-      src: cozinha,
-      srcSmall: cozinhaPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'O dragãozinho na cozinha, comendo, com a geladeira e o fogão ao fundo.',
-        en: 'The little dragon in the kitchen, eating, with the fridge and the stove behind it.',
-      },
-      caption: { pt: 'A cozinha: a comida voa até a boca dele.', en: 'The kitchen: the food flies right into its mouth.' },
-    },
-    {
-      kind: 'image',
-      src: banho,
-      srcSmall: banhoPequena,
-      width: 1280,
-      height: 720,
-      alt: {
-        pt: 'O dragãozinho no banheiro, coberto de espuma, com a barra de higiene subindo no alto.',
-        en: 'The little dragon in the bathroom, covered in soap foam, with the hygiene bar going up at the top.',
-      },
-      caption: { pt: 'O banho de espuma, com a barra de higiene subindo.', en: 'Bath time with soap foam, as the hygiene bar goes up.' },
     },
   ],
 }

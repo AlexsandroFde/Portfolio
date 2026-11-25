@@ -6,7 +6,71 @@ import inicio from '../../assets/projects/transcriber/inicio.webp'
 import inicioPequena from '../../assets/projects/transcriber/inicio-640.webp'
 import participantes from '../../assets/projects/transcriber/participantes.webp'
 import participantesPequena from '../../assets/projects/transcriber/participantes-640.webp'
-import type { ProjectDetails } from '../projects.ts'
+import type { ImageMedia, ProjectDetails } from '../projects.ts'
+
+const participantesImagem: ImageMedia = {
+  kind: 'image',
+  src: participantes,
+  srcSmall: participantesPequena,
+  width: 1600,
+  height: 900,
+  alt: {
+    pt: 'A aba Participantes: exemplos do que cada pessoa disse, um campo para o nome e a sugestão "Carlos", tirada de quando alguém o chamou na conversa.',
+    en: 'The Participants tab: samples of what each person said, a name field and the suggestion "Carlos", taken from when someone addressed him in the conversation.',
+  },
+  caption: {
+    pt: 'Nomear os participantes: os nomes ditos na conversa viram sugestões, que a pessoa confirma.',
+    en: 'Naming the participants: names spoken in the conversation become suggestions for the user to confirm.',
+  },
+}
+
+const conferenciaImagem: ImageMedia = {
+  kind: 'image',
+  src: conferencia,
+  srcSmall: conferenciaPequena,
+  width: 1600,
+  height: 900,
+  alt: {
+    pt: 'A aba Conferência: o índice de menções, com os valores monetários citados na reunião, cada um com o horário, e as categorias de datas, prazos, horários, percentuais e encaminhamentos.',
+    en: 'The Review tab: the index of mentions, with the amounts of money quoted in the meeting, each with its timestamp, and the categories for dates, deadlines, times, percentages and action items.',
+  },
+  caption: {
+    pt: 'A conferência: valores, datas e prazos citados, com o horário de cada um.',
+    en: 'The review: amounts, dates and deadlines that were mentioned, each with its timestamp.',
+  },
+}
+
+const inicioImagem: ImageMedia = {
+  kind: 'image',
+  src: inicio,
+  srcSmall: inicioPequena,
+  width: 1600,
+  height: 900,
+  alt: {
+    pt: 'A tela inicial: uma área para arrastar o vídeo ou o áudio, a lista de transcrições recentes e, no canto, a placa de vídeo pronta para transcrever.',
+    en: 'The home screen: an area to drop the video or audio file, the list of recent transcripts and, in the corner, the GPU ready to transcribe.',
+  },
+  caption: {
+    pt: 'Para começar, basta arrastar a gravação para a janela.',
+    en: 'To get started, just drag the recording into the window.',
+  },
+}
+
+const apiImagem: ImageMedia = {
+  kind: 'image',
+  src: api,
+  srcSmall: apiPequena,
+  width: 1600,
+  height: 900,
+  alt: {
+    pt: 'A documentação da API REST, explicando como uma transcrição acontece: o pedido assíncrono, o acompanhamento da tarefa e os estados dela.',
+    en: 'The REST API documentation, explaining how a transcription happens: the asynchronous request, tracking the task and its states.',
+  },
+  caption: {
+    pt: 'A documentação da API, servida pelo próprio aplicativo.',
+    en: 'The API documentation, served by the app itself.',
+  },
+}
 
 const transcriber: ProjectDetails = {
   intro: {
@@ -22,6 +86,7 @@ const transcriber: ProjectDetails = {
           en: 'The output is always the full transcript: the app never summarizes, rewrites or turns the meeting into minutes. Anything in doubt is marked (inaudible, uncertain passage with the other hypotheses heard, overlapping speech), and no participant gets a name until a person confirms it.',
         },
       ],
+      media: [participantesImagem],
     },
     {
       title: { pt: 'O que sai de cada reunião', en: 'What each meeting produces' },
@@ -34,6 +99,7 @@ const transcriber: ProjectDetails = {
         },
         { pt: 'Um JSON com cada palavra, o tempo e a confiança dela: é dele que os outros arquivos são gerados de novo.', en: 'A JSON file with every word, its timing and confidence, from which all the other files can be regenerated.' },
       ],
+      media: [conferenciaImagem],
     },
     {
       title: { pt: 'Como funciona', en: 'How it works' },
@@ -61,6 +127,7 @@ const transcriber: ProjectDetails = {
         },
         { pt: 'Linha de comando, para automação e para quem prefere o terminal.', en: 'Command line, for automation and terminal lovers.' },
       ],
+      media: [inicioImagem, apiImagem],
     },
     {
       title: { pt: 'Instalação e segurança', en: 'Installation and security' },
@@ -74,68 +141,6 @@ const transcriber: ProjectDetails = {
           en: 'The API only answers the local machine and rejects requests coming from other websites open in the browser.',
         },
       ],
-    },
-  ],
-  media: [
-    {
-      kind: 'image',
-      src: participantes,
-      srcSmall: participantesPequena,
-      width: 1600,
-      height: 900,
-      alt: {
-        pt: 'A aba Participantes: exemplos do que cada pessoa disse, um campo para o nome e a sugestão "Carlos", tirada de quando alguém o chamou na conversa.',
-        en: 'The Participants tab: samples of what each person said, a name field and the suggestion "Carlos", taken from when someone addressed him in the conversation.',
-      },
-      caption: {
-        pt: 'Nomear os participantes: os nomes ditos na conversa viram sugestões, que a pessoa confirma.',
-        en: 'Naming the participants: names spoken in the conversation become suggestions for the user to confirm.',
-      },
-    },
-    {
-      kind: 'image',
-      src: conferencia,
-      srcSmall: conferenciaPequena,
-      width: 1600,
-      height: 900,
-      alt: {
-        pt: 'A aba Conferência: o índice de menções, com os valores monetários citados na reunião, cada um com o horário, e as categorias de datas, prazos, horários, percentuais e encaminhamentos.',
-        en: 'The Review tab: the index of mentions, with the amounts of money quoted in the meeting, each with its timestamp, and the categories for dates, deadlines, times, percentages and action items.',
-      },
-      caption: {
-        pt: 'A conferência: valores, datas e prazos citados, com o horário de cada um.',
-        en: 'The review: amounts, dates and deadlines that were mentioned, each with its timestamp.',
-      },
-    },
-    {
-      kind: 'image',
-      src: inicio,
-      srcSmall: inicioPequena,
-      width: 1600,
-      height: 900,
-      alt: {
-        pt: 'A tela inicial: uma área para arrastar o vídeo ou o áudio, a lista de transcrições recentes e, no canto, a placa de vídeo pronta para transcrever.',
-        en: 'The home screen: an area to drop the video or audio file, the list of recent transcripts and, in the corner, the GPU ready to transcribe.',
-      },
-      caption: {
-        pt: 'Para começar, basta arrastar a gravação para a janela.',
-        en: 'To get started, just drag the recording into the window.',
-      },
-    },
-    {
-      kind: 'image',
-      src: api,
-      srcSmall: apiPequena,
-      width: 1600,
-      height: 900,
-      alt: {
-        pt: 'A documentação da API REST, explicando como uma transcrição acontece: o pedido assíncrono, o acompanhamento da tarefa e os estados dela.',
-        en: 'The REST API documentation, explaining how a transcription happens: the asynchronous request, tracking the task and its states.',
-      },
-      caption: {
-        pt: 'A documentação da API, servida pelo próprio aplicativo.',
-        en: 'The API documentation, served by the app itself.',
-      },
     },
   ],
   note: {

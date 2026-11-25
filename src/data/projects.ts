@@ -5,12 +5,15 @@ import bekaVideo from '../assets/projects/beka/conversa.mp4'
 import deepcorePoster from '../assets/projects/deepcore/trailer.webp'
 import deepcorePosterPequeno from '../assets/projects/deepcore/trailer-640.webp'
 import deepcoreVideo from '../assets/projects/deepcore/trailer.mp4'
-import mugCustomizerPoster from '../assets/projects/mug-customizer.webp'
-import mugCustomizerPosterPequeno from '../assets/projects/mug-customizer-640.webp'
-import mugCustomizerVideo from '../assets/projects/mug-customizer.mp4'
+import manaMindPoster from '../assets/projects/manamind/pomodoro.webp'
+import manaMindPosterPequeno from '../assets/projects/manamind/pomodoro-640.webp'
+import manaMindVideo from '../assets/projects/manamind/pomodoro.mp4'
 import nossoCantinhoPoster from '../assets/projects/nosso-cantinho/pet.webp'
 import nossoCantinhoPosterPequeno from '../assets/projects/nosso-cantinho/pet-640.webp'
 import nossoCantinhoVideo from '../assets/projects/nosso-cantinho/pet.mp4'
+import transcriberPoster from '../assets/projects/transcriber/transcricao.webp'
+import transcriberPosterPequeno from '../assets/projects/transcriber/transcricao-640.webp'
+import transcriberVideo from '../assets/projects/transcriber/transcricao.mp4'
 import videoCutterPoster from '../assets/projects/video-cutter/cortes.webp'
 import videoCutterPosterPequeno from '../assets/projects/video-cutter/cortes-640.webp'
 import videoCutterVideo from '../assets/projects/video-cutter/cortes.mp4'
@@ -94,10 +97,19 @@ export const projects: readonly Project[] = [
       en: "Meeting transcriber for Brazilian Portuguese audio and video. It identifies participants, labels each speaker's lines and keeps hesitations and repetitions.",
     },
     area: 'dados',
-    stack: ['Python'],
+    stack: ['Python', 'Whisper', 'pyannote', 'FastAPI'],
     year: 2026,
     repo: 'Transcriber',
     featured: 5,
+    video: {
+      src: transcriberVideo,
+      poster: transcriberPoster,
+      posterPequeno: transcriberPosterPequeno,
+      description: {
+        pt: 'O aplicativo tocando a transcrição de uma reunião de teste, acelerada: a fala atual em destaque, o texto rolando sozinho até ela, cada fala com o horário e o participante e uma palavra incerta marcada em amarelo.',
+        en: 'The app playing back the transcript of a test meeting, sped up: the current line highlighted, the text scrolling to it on its own, each line with its time and speaker and an uncertain word marked in yellow.',
+      },
+    },
   },
   {
     name: 'DeepCore',
@@ -161,16 +173,6 @@ export const projects: readonly Project[] = [
     stack: ['React', 'TypeScript'],
     year: 2026,
     repo: 'Mug_Customizer',
-    featured: 4,
-    video: {
-      src: mugCustomizerVideo,
-      poster: mugCustomizerPoster,
-      posterPequeno: mugCustomizerPosterPequeno,
-      description: {
-        pt: 'No tema escuro, a caneca em 3D recebe uma figurinha da Beka como estampa, gira, fica rosa com a alça vinho e tem a estampa ampliada.',
-        en: 'In dark mode, the 3D mug gets a Beka sticker as its print, spins, turns pink with a burgundy handle and has the print enlarged.',
-      },
-    },
   },
   {
     name: 'Video Cutter',
@@ -211,6 +213,30 @@ export const projects: readonly Project[] = [
     stack: ['Java', 'RMI', 'Swing'],
     year: 2026,
     repo: 'SMS',
+  },
+  {
+    name: 'ManaMind',
+    summary: {
+      pt: 'App de foco com Pomodoro, missões e um gacha de personagens (TCC)',
+      en: 'Focus app with Pomodoro, missions and a character gacha (thesis)',
+    },
+    description: {
+      pt: 'Meu TCC em Engenharia de Computação no IFCE: um app que transforma a disciplina numa jornada de recompensas, unindo a técnica Pomodoro, missões e um gacha de personagens colecionáveis.',
+      en: 'My Computer Engineering thesis at IFCE: an app that turns discipline into a journey of rewards, combining the Pomodoro technique, missions and a gacha of collectible characters.',
+    },
+    area: 'mobile',
+    stack: ['Flutter', 'Dart', 'Firebase', 'BLoC'],
+    year: 2025,
+    featured: 4,
+    video: {
+      src: manaMindVideo,
+      poster: manaMindPoster,
+      posterPequeno: manaMindPosterPequeno,
+      description: {
+        pt: 'Gravação do ManaMind num celular. Na tela inicial, a pessoa aceita a missão e cria uma sessão de foco: escolhe a missão de estudar para Cálculo Numérico, a personagem Mao Mao e dois ciclos. Abre a sessão, liga chuva e lo-fi no ambiente sonoro, e o cronômetro corre acelerado pelos dois ciclos de 25 minutos e pela pausa de 5, com o alarme pedindo confirmação entre um e outro. No fim, ganha 50 manacoins, a missão fica concluída e o saldo da tela inicial sobe de 2670 para 2720.',
+        en: 'Screen recording of ManaMind on a phone. On the home screen, the user accepts the mission and creates a focus session: they pick a study mission, the character Mao Mao and two cycles. They open the session, turn on rain and lo-fi in the soundscape, and the timer runs sped up through the two 25-minute cycles and the 5-minute break, with the alarm asking for confirmation between them. At the end they earn 50 manacoins, the mission is completed and the balance on the home screen goes from 2670 to 2720.',
+      },
+    },
   },
   {
     name: '3D Rendering',
@@ -254,7 +280,6 @@ export const projects: readonly Project[] = [
     area: 'web',
     stack: ['React', 'TypeScript', { pt: 'APIs REST', en: 'REST APIs' }],
     year: 2024,
-    featured: 7,
   },
   {
     name: { pt: 'Portfólio do LIT', en: 'LIT Portfolio' },

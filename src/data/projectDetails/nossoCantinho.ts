@@ -131,7 +131,7 @@ const nossoCantinho: ProjectDetails = {
     {
       title: { pt: 'Em números', en: 'By the numbers' },
       stats: [
-        { value: '235', label: { pt: 'commits em cinco meses, até a versão 3.0', en: 'commits over five months, up to version 3.0' } },
+        { value: '235', label: { pt: 'commits até a versão 3.0', en: 'commits up to version 3.0' } },
         {
           value: { pt: '46 mil', en: '46,000' },
           label: { pt: 'linhas de TypeScript no front, com 153 arquivos só do pet', en: 'lines of TypeScript on the front end, with 153 files for the pet alone' },

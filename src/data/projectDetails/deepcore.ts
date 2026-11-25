@@ -147,7 +147,7 @@ const deepcore: ProjectDetails = {
     {
       title: { pt: 'Em números', en: 'By the numbers' },
       stats: [
-        { value: '455', label: { pt: 'commits em menos de dois meses', en: 'commits in under two months' } },
+        { value: '455', label: { pt: 'commits', en: 'commits' } },
         {
           value: { pt: '84 mil', en: '84,000' },
           label: { pt: 'linhas de GDScript em 317 scripts, além de 65 shaders', en: 'lines of GDScript across 317 scripts, plus 65 shaders' },

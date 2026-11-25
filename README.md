@@ -130,21 +130,23 @@ Todo o conteúdo fica em arquivos de dados, separados dos componentes. Para atua
 - Os projetos com `featured` aparecem como cartões em **Destaques**, na ordem desse número. Os demais vão para a lista **Outros projetos**, que tem filtros por área e leva ao repositório.
 - Cada projeto tem um `id` (a chave dele e o endereço da página, `#projeto/<id>`), um `summary`, uma frase usada na lista, e uma `description`, o texto completo dos cartões.
 - Um projeto sem o campo `repo` aparece como repositório privado: com cadeado na lista e, na página de um destaque, com o aviso no lugar do botão do GitHub.
-- Um destaque precisa também de uma prévia (`preview`, um vídeo ou uma imagem, que o cartão mostra e que abre a galeria da página) e da página dele (`details`).
+- Um destaque precisa também de uma prévia (`preview`, um vídeo ou uma imagem, que o cartão mostra e que abre a página dele, ao lado da apresentação) e da página (`details`).
 
 Para pôr um projeto em destaque:
 
 1. Coloque as mídias numa pasta com o `id` dele em `src/assets/projects/`: cada imagem em WebP com até 1600 px de largura, junto da mesma com 640 px e o sufixo `-640`, e cada vídeo em MP4 com o pôster (o primeiro quadro) nas duas larguras.
-2. Escreva a página dele em `src/data/projectDetails/<projeto>.ts`: a abertura (`intro`), as partes do texto (`sections`, cada uma com título e parágrafos, itens ou os dois), as demonstrações (`media`) e, se precisar, uma observação no fim (`note`). Os textos vão nos dois idiomas, e o TypeScript cobra os dois.
+2. Escreva a página dele em `src/data/projectDetails/<projeto>.ts`: a abertura (`intro`), as partes (`sections`) e, se precisar, uma observação no fim (`note`). Cada parte tem um título e parágrafos, itens, números em destaque (`stats`, o valor e o que ele conta) ou uma mistura, e as demonstrações que ilustram aquele texto (`media`). Os textos vão nos dois idiomas, e o TypeScript cobra os dois.
 3. Em `src/data/projects.ts`, dê ao projeto `featured`, `preview` e `details: () => import('./projectDetails/<projeto>.ts').then((modulo) => modulo.default)`.
 
-Nada mais muda: o cartão, a animação, a galeria e o texto saem dos dados.
+Nada mais muda: o cartão, a animação e a página, com o lugar de cada demonstração, saem dos dados.
 
 ### A página de um projeto
 
 Clicado em qualquer ponto (no nome, pelo teclado, ou na prévia), o cartão de um destaque vira a página do projeto. O painel da página, já no tamanho final, começa recortado (`clip-path`) no retângulo do cartão e se abre até ocupar quase a tela inteira; a página atrás escurece e fica desfocada, e o conteúdo aparece com o painel já quase aberto. Ao fechar (pelo X, pelo Esc, por um clique fora ou pelo voltar do navegador), ele encolhe de volta até o cartão, e o foco volta para o botão dele. Para quem prefere menos movimento, a página só aparece e some.
 
-- **A galeria.** A prévia do cartão abre a galeria, seguida das demonstrações do projeto. Passa de uma para outra pelas setas, pelas miniaturas, pelas setas do teclado e arrastando o dedo de lado. Os vídeos se comportam como no cartão.
+- **A abertura.** No alto, a prévia do cartão (a página continua de onde ele parou) e, ao lado, a apresentação, as tecnologias e o caminho para o código.
+- **A diagramação.** A página segue uma grade de 12 colunas, e cada parte do texto vem com as demonstrações dela: o texto em 5 colunas e elas em 7, ao lado, trocando de lado a cada parte. Com várias empilhadas, o texto acompanha a rolagem ao lado delas; com uma só, o mais baixo dos dois fica no meio do outro. Três ou mais telas deitadas põem a primeira ao lado do texto e as outras numa fileira embaixo, com a mesma altura; três ou mais em pé (as animações da Beka) formam uma faixa na largura toda. As partes só de texto seguem o desenho das seções do site, com o título de um lado e o texto do outro, e os números aparecem em destaque. No celular, tudo vira uma coluna, com cada demonstração embaixo do texto dela. Quem decide o arranjo é `diagramacao.ts`, pelo número e pelo formato das demonstrações: um projeto novo não escolhe layout.
+- **Cada demonstração inteira.** A caixa de cada uma tem a proporção dela, sem tarjas, e o espaço fica reservado antes de ela carregar. As imagens vêm no tamanho da coluna, e os vídeos se comportam como no cartão.
 - **O endereço.** A página aberta fica no endereço (`#projeto/<id>`): um link abre direto nela, e o voltar do navegador (o do celular, principalmente) a fecha, em vez de sair do site.
 - **A rolagem.** Enquanto a página está aberta, a do site fica travada com a mesma trava da volta ao topo, que a rolagem suave respeita: a roda e o dedo rolam só o texto do projeto.
 - **Por cima de tudo.** A página é um `<dialog>` nativo, que deixa o resto do site inerte para o teclado e os leitores de tela. Ela vai para o fim do `<body>`, fora do `<main>`: a absorção do buraco negro não a toma por conteúdo.
@@ -156,9 +158,11 @@ Cada peça tem uma responsabilidade só, e as que variam entram sem mudar as out
 |---|---|
 | `src/data/projects.ts` | Os tipos (`Project`, `FeaturedProject`, `ProjectMedia`, `ProjectDetails`) e a lista |
 | `src/data/projectDetails/` | A página de cada destaque, um módulo por projeto |
-| `src/components/project/ProjectMedia.tsx` | Quem mostra cada tipo de mídia: um tipo novo (um modelo 3D, por exemplo) entra aqui, e o cartão e a galeria continuam iguais |
-| `src/components/project/ProjectGallery.tsx` | A galeria: o palco, a legenda e as miniaturas |
-| `src/components/project/ProjectDetails.tsx` | O conteúdo da página: a galeria, o texto, as tecnologias e o caminho para o código |
+| `src/components/project/ProjectMedia.tsx` | Quem mostra cada tipo de mídia: um tipo novo (um modelo 3D, por exemplo) entra aqui, e o cartão e a página continuam iguais |
+| `src/components/project/diagramacao.ts` | O lugar das demonstrações de cada parte (ao lado do texto, embaixo ou numa faixa), sem nada de React |
+| `src/components/project/ProjectFigure.tsx` | Uma demonstração com a legenda, na proporção dela, e as fileiras com a mesma altura |
+| `src/components/project/ProjectSection.tsx` | Uma parte: o número, o título, o texto, os números em destaque e as demonstrações no arranjo dela |
+| `src/components/project/ProjectDetails.tsx` | A página: a abertura, as partes (trocando o lado das demonstrações) e a observação |
 | `src/components/project/ProjectDialog.tsx` | O diálogo: abrir, fechar, o foco, a trava da rolagem e a animação |
 | `src/hooks/useProjectRoute.ts` | Qual projeto está aberto, guardado no endereço |
 | `src/lib/foco.ts` | As contas e os tempos da animação, sem nada de React nem de página |
@@ -168,14 +172,14 @@ O cartão não sabe da página: recebe só o que fazer ao ser clicado. E a pági
 
 ### Mídias dos projetos
 
-Um destaque tem uma prévia no cartão, que pode ser uma imagem ou um vídeo curto: um MP4 sem som, em 16:9, que toca em loop como um GIF. Para não pesar, o vídeo só é baixado quando aparece na tela, pausa ao sair dela e tem botão de pausar. Os vídeos da galeria da página fazem o mesmo.
+Um destaque tem uma prévia no cartão, que pode ser uma imagem ou um vídeo curto: um MP4 sem som, em 16:9, que toca em loop como um GIF. Para não pesar, o vídeo só é baixado quando aparece na tela, pausa ao sair dela e tem botão de pausar. Os vídeos da página do projeto fazem o mesmo.
 
 O botão tem em volta um anel com o progresso do vídeo, que cresce do alto, no sentido do relógio, e recomeça a cada volta do loop. Para não cobrir o vídeo, o botão fica escondido: aparece com o mouse em cima do vídeo, com o foco do teclado ou, no celular, por uns 3 segundos depois de um toque no vídeo. Escondido, ele deixa o toque passar: o primeiro toque só o mostra, e o seguinte pausa.
 
 O vídeo também não toca sozinho para quem ativou "reduzir movimento" no sistema, nem para quem pede economia de dados ao navegador (o modo econômico dele ou do sistema). Nesses casos ele fica no pôster até um toque no botão, e percorrer os projetos deixa de baixar os uns 6 MB dos vídeos.
 
 > [!TIP]
-> Para manter o site leve, exporte os vídeos da prévia em 1280x720, 30 fps e uns 15 segundos (H.264, CRF entre 26 e 28), junto com um quadro em WebP para o pôster. Os da galeria podem ter outra proporção (as animações da Beka são em pé): o palco mostra cada demonstração inteira.
+> Para manter o site leve, exporte os vídeos da prévia em 1280x720, 30 fps e uns 15 segundos (H.264, CRF entre 26 e 28), junto com um quadro em WebP para o pôster. Os da página podem ter outra proporção (as animações da Beka são em pé): cada demonstração aparece inteira, na proporção dela.
 
 ### Português e inglês
 
@@ -668,7 +672,7 @@ O endereço do site usado nas meta tags (`VITE_SITE_URL`) fica no `.env`. No dep
 │   ├── assets/                    # imagens e vídeos otimizados usados pelo site
 │   │   └── projects/              # as mídias dos projetos, uma pasta por projeto
 │   ├── components/                # seções e componentes da página
-│   │   └── project/               # a página dos destaques: o diálogo, a galeria e as mídias
+│   │   └── project/               # a página dos destaques: o diálogo, a diagramação e as mídias
 │   ├── curriculo/                 # modelo e estilo do currículo em PDF
 │   ├── data/                      # conteúdo do portfólio e do currículo
 │   │   └── projectDetails/        # a página de cada destaque, um módulo por projeto

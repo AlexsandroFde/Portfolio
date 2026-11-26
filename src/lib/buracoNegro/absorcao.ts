@@ -1282,8 +1282,17 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       }
       const d = distanciaDoBloco(bloco, rolagem)
       let prioridade: number
-      if (!bloco.foto) prioridade = d
-      else if (!bloco.velha) continue
+      if (!bloco.foto) {
+        // Longe da faixa, a primeira foto também espera a página parar de rolar: cada foto segura a
+        // página por um tempo (num aparelho lento, alguns quadros), e rolando, logo que o site abre,
+        // a rolagem tropeçava em cada uma. Perto, ela não espera: a faixa vai precisar dela.
+        const espera = d > perto ? ESPERA_DA_ROLAGEM - (agora - rolouEm) : 0
+        if (espera > 0) {
+          esperar = Math.min(esperar, espera)
+          continue
+        }
+        prioridade = d
+      } else if (!bloco.velha) continue
       else {
         // A foto velha serve até as transições do mouse acabarem e a página parar de rolar. Só a de
         // um bloco que o mouse mudou e que pode estar à vista na faixa não espera a rolagem: a tira

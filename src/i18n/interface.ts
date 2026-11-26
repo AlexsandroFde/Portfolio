@@ -65,6 +65,8 @@ export const ui = {
     fechar: t('Fechar', 'Close'),
     verCodigo: t('Ver o código no GitHub', 'View the code on GitHub'),
     codigoPrivado: t('Código em repositório privado', 'Code in a private repository'),
+    maisAbaixo: t('Role para ver mais', 'Scroll for more'),
+    rolarParaFechar: t('Continue rolando para fechar', 'Keep scrolling to close'),
     carregando: t('Carregando as demonstrações', 'Loading the demos'),
     falhou: t(
       'Não foi possível carregar as demonstrações. Verifique a conexão e abra o projeto de novo.',

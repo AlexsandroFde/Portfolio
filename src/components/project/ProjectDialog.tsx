@@ -17,11 +17,22 @@ import {
   type Retangulo,
 } from '../../lib/foco.ts'
 import { travarRolagem } from '../../lib/travaDeRolagem.ts'
-import { Close } from '../icons.tsx'
+import { ArrowDown, Close } from '../icons.tsx'
 import { ProjectDetails } from './ProjectDetails.tsx'
+import { acompanharRolagem, type RolagemDaPagina } from './rolagemDaPagina.ts'
 import { ATRIBUTO_DO_VOO, continuarVideo, copiaDoCartao, marcaDoVoo, quadroPorCima, semVoo, voar, voosEntre, type Voo } from './transicao.ts'
 
 const menosMovimento = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+/**
+ * O anel em volta do botão de fechar, no pé da página (no viewBox de 48 do botão, em px): o raio, a
+ * espessura do trilho e a do arco que se enche por cima dele, e a volta.
+ */
+const ANEL = { raio: 22.5, trilho: 1.5, arco: 2.5 }
+const VOLTA_DO_ANEL = 2 * Math.PI * ANEL.raio
+
+/** Quanto do texto (da altura da caixa) o convite para rolar desce. */
+const DESCIDA_DO_CONVITE = 0.8
 
 /** O vídeo da prévia (o que o cartão e a página têm), dentro de um ou de outro. */
 const videoDe = (onde: Element | null) => onde?.querySelector<HTMLVideoElement>(`[${ATRIBUTO_DO_VOO}="midia"] video`) ?? null
@@ -180,6 +191,11 @@ function Painel({
   const fantasma = useRef<HTMLDivElement>(null)
   const conteudo = useRef<HTMLDivElement>(null)
   const corpo = useRef<HTMLDivElement>(null)
+  // o texto da página e o pé dela, com o anel que se enche com o puxão no fim (veja rolagemDaPagina.ts)
+  const pagina = useRef<HTMLDivElement>(null)
+  const pe = useRef<HTMLDivElement>(null)
+  const arco = useRef<SVGCircleElement>(null)
+  const rolagem = useRef<RolagemDaPagina | null>(null)
   // o painel está saindo (desmontando): o fechamento do diálogo não é um pedido de fechar
   const saindo = useRef(false)
   // os movimentos da abertura: fechada antes de eles acabarem, ela volta por eles
@@ -189,6 +205,7 @@ function Painel({
   const videoDoCartao = useRef<{ video: HTMLVideoElement; tocava: boolean } | null>(null)
   const area = areas.find((opcao) => opcao.id === project.area)
   const fechou = useEffectEvent(onFechado)
+  const pedirFechar = useEffectEvent(onClose)
 
   const pecas = (): Pecas | null => {
     const [f, p, c, g] = [fundo.current, painel.current, conteudo.current, fantasma.current]
@@ -265,6 +282,25 @@ function Painel({
     }
   }, [fechando, project.id])
 
+  // A rolagem do texto: a rolagem suave da roda, as marcas de que tem mais embaixo e, no fim, o puxão
+  // que fecha a página (veja rolagemDaPagina.ts). Fechando, ela para, e o que está na tela some como está.
+  useEffect(() => {
+    const [c, p] = [corpo.current, pagina.current]
+    if (fechando || !c || !p) return
+    const acompanhada = acompanharRolagem({ caixa: c, pagina: p, pe: pe.current, arco: arco.current }, () => pedirFechar())
+    rolagem.current = acompanhada
+    return () => {
+      acompanhada.parar()
+      rolagem.current = null
+    }
+  }, [fechando])
+
+  /** O convite para rolar: desce quase uma tela, e o foco fica no texto (o convite some ao rolar). */
+  const rolarMais = () => {
+    rolagem.current?.descer(DESCIDA_DO_CONVITE)
+    corpo.current?.focus({ preventScroll: true })
+  }
+
   return (
     <dialog
       ref={dialogo}
@@ -315,12 +351,63 @@ function Painel({
           </header>
           {/* a linha embaixo do cabeçalho, à parte dele: ela aparece com o resto, e ele, não (tem peças que voam) */}
           <div aria-hidden="true" className="h-px shrink-0 bg-line" />
+          {/* No computador, o navegador não estica nem quica o texto no fim: quem sobe com o puxão da
+              roda é ele (veja rolagemDaPagina.ts). Com o dedo, o navegador estica. O respiro de baixo
+              fica no texto, e não na caixa: o aviso preso ao pé dela (sticky) pararia acima dele. */}
           <div
             ref={corpo}
             tabIndex={-1}
-            className="sem-barra min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-8 outline-none sm:px-8 sm:py-10 lg:px-12 lg:py-12"
+            className="group/rolagem sem-barra min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-8 outline-none pointer-fine:overscroll-y-none sm:px-8 sm:pt-10 lg:px-12 lg:pt-12"
           >
-            <ProjectDetails project={project} />
+            <div ref={pagina} className="pb-8 sm:pb-10 lg:pb-12">
+              <ProjectDetails project={project} />
+              {/* O pé: continuar rolando depois do fim enche o anel em volta do botão, e cheio, a
+                  página fecha. O botão fecha também, como o X. */}
+              <div ref={pe} className="mt-20 flex flex-col items-center gap-4 lg:mt-28">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label={t(ui.projeto.fechar)}
+                  style={{ scale: 'calc(1 + var(--puxao, 0) * 0.08)' }}
+                  className="relative grid size-12 place-items-center rounded-full text-muted transition-colors hover:text-fg"
+                >
+                  <svg viewBox="0 0 48 48" fill="none" aria-hidden="true" className="absolute inset-0 size-full -rotate-90">
+                    <circle cx="24" cy="24" r={ANEL.raio} stroke="var(--line-strong)" strokeWidth={ANEL.trilho} />
+                    <circle
+                      ref={arco}
+                      cx="24"
+                      cy="24"
+                      r={ANEL.raio}
+                      stroke="var(--accent)"
+                      strokeWidth={ANEL.arco}
+                      strokeDasharray={VOLTA_DO_ANEL}
+                      strokeDashoffset={VOLTA_DO_ANEL}
+                    />
+                  </svg>
+                  <Close className="size-5" />
+                </button>
+                <p aria-hidden="true" className="label text-subtle">
+                  {t(ui.projeto.rolarParaFechar)}
+                </p>
+              </div>
+            </div>
+            {/* O aviso de que o texto continua: um degradê no pé da caixa enquanto houver mais embaixo
+                e, com a página no alto, o convite para rolar. Ele fica dentro da caixa, preso ao pé
+                dela (sticky), para a roda e o dedo em cima dele rolarem o texto. */}
+            <div aria-hidden="true" className="pointer-events-none sticky bottom-0 h-0">
+              <div className="absolute -inset-x-5 bottom-0 h-20 bg-linear-to-t from-surface to-transparent opacity-0 transition-opacity duration-300 group-data-mais/rolagem:opacity-100 sm:-inset-x-8 lg:-inset-x-12" />
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={rolarMais}
+                className="label absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-line-strong bg-surface py-2 pr-3.5 pl-4 text-muted opacity-0 shadow-sm transition-[opacity,color] duration-300 hover:text-fg group-data-convite/rolagem:pointer-events-auto group-data-convite/rolagem:opacity-100"
+              >
+                {t(ui.projeto.maisAbaixo)}
+                <span className="group-data-convite/rolagem:motion-safe:animate-convite">
+                  <ArrowDown className="size-3.5" />
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       </article>

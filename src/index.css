@@ -48,6 +48,18 @@
     'Geist Mono Variable', ui-monospace, 'SFMono-Regular', 'Cascadia Code', Menlo, Consolas,
     monospace;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  /* A seta do convite para rolar a página de um projeto (ver ProjectDialog.tsx): desce e volta. */
+  --animate-convite: convite 1.6s ease-in-out infinite;
+
+  @keyframes convite {
+    0%,
+    100% {
+      transform: translateY(-0.125rem);
+    }
+    50% {
+      transform: translateY(0.1875rem);
+    }
+  }
 }
 
 @theme inline {

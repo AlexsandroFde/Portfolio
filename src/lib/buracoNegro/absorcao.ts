@@ -1152,6 +1152,12 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       }
       mostrarFatia(bloco, tira, fatia)
       animar(bloco, tira)
+      // O trajeto de uma fatia que ainda não vai aparecer é calculado já, e não com os outros (veja
+      // animarPendentes, que o encontra pronto): assim ele conta no tempo do quadro, e o que não
+      // couber fica para os próximos. No topo da página, cada fatia tem o seu (veja trajeto), e
+      // calculados todos juntos, logo que o efeito começava, eles seguravam a página por quase um
+      // segundo num aparelho lento.
+      if (d > urgencia) trajeto(bloco, fatia)
     }
     // As que sobraram continuam prontas se a rolagem pode trazê-las de volta logo; as outras saem.
     for (const tira of livres) if (tira.fatia < 0 || !alcancavel(bloco, tira.fatia, rolagem, folga, MANTER)) descartar(bloco, tira)

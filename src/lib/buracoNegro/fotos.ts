@@ -13,6 +13,8 @@
 // Uma imagem não tem mouse em cima: os elementos em que o mouse está são marcados no clone, e as
 // regras com :hover passam a valer para a marca. As animações e as transições ficam paradas no fim.
 
+import { caracteres, fontes as versoesDasFontes } from 'virtual:fontes-das-fotos'
+
 /**
  * O anel do progresso de um vídeo (o do botão de pausa, veja ProjectVideo.tsx): ele anda com o vídeo,
  * e numa foto ficaria parado. Fica fora das fotos, e as telas dos vídeos o desenham a cada quadro
@@ -181,10 +183,26 @@ function comoDado(url: string): Promise<string> {
 type RegraDaFoto =
   /** Uma regra comum: entra se o elemento em que ela vale pode estar no bloco (veja exigencias). */
   | { tipo: 'regra'; texto: string; exige: Exigencia[] | null }
-  /** Uma fonte: entra se o bloco a usa. */
-  | { tipo: 'fonte'; texto: string; familia: string }
+  /** Uma fonte: entra se o bloco a usa (veja versaoDaFonte). */
+  | FonteDaFoto
   /** Um grupo (@layer, @supports), com as regras de dentro. */
   | { tipo: 'grupo'; abre: string; regras: RegraDaFoto[]; camada: boolean }
+
+/**
+ * Uma regra @font-face, com as versões menores da fonte dela, se houver (veja
+ * scripts/fontesDasFotos.ts): cada kB de fonte no SVG custa tempo a cada foto, mesmo o de uma fonte
+ * que o bloco nem usa.
+ */
+interface FonteDaFoto {
+  tipo: 'fonte'
+  /** A regra com a fonte inteira. */
+  texto: string
+  familia: string
+  /** A regra com a fonte reduzida: só os caracteres do site, e igual à inteira em qualquer peso. */
+  reduzida: { texto: string } | null
+  /** A regra com a reduzida fixada num peso (o padrão da fonte): igual à inteira só nele. */
+  estatica: { texto: string; peso: string } | null
+}
 
 /** O que o elemento de um seletor precisa ter para a regra valer nele: as classes e o tipo (a tag), se houver. */
 interface Exigencia {
@@ -198,10 +216,16 @@ interface Registro {
   texto: string
 }
 
-/** O estilo da página para as fotos: as regras e os registros das propriedades. */
+/** O estilo da página para as fotos. */
 interface EstiloDasFotos {
   regras: RegraDaFoto[]
+  /** Os registros das propriedades. */
   registros: Registro[]
+  /**
+   * As exigências das regras que mudam a fonte de um pseudo-elemento: se uma delas entra na foto, o
+   * texto do bloco pode estar numa fonte ou num peso que os elementos dele não mostram (veja estiloPara).
+   */
+  pseudos: (Exigencia[] | null)[]
 }
 
 /** O estilo da página para as fotos, montado uma vez (e de novo se a página mudar). */
@@ -269,33 +293,67 @@ function serializarTodas(regras: CSSRuleList): string {
 const nomeDaFamilia = (nome: string) => nome.trim().replace(/^["']|["']$/g, '').toLowerCase()
 
 /**
- * As regras como as fotos as usam (veja RegraDaFoto), com as media queries resolvidas como em
- * serializar. Os registros das propriedades vão para `registros`: entram em cada foto só se usados.
+ * As regras de uma folha (de endereço `base`) como as fotos as usam (veja RegraDaFoto), com as media
+ * queries resolvidas como em serializar. Os registros das propriedades e as regras de pseudo-elementos
+ * que mudam a fonte vão para `estilo`.
  */
-function paraFotos(regras: CSSRuleList, registros: Registro[]): RegraDaFoto[] {
+function paraFotos(regras: CSSRuleList, estilo: EstiloDasFotos, base: string): RegraDaFoto[] {
   const lista: RegraDaFoto[] = []
   for (const regra of regras) {
     if (regra instanceof CSSMediaRule) {
-      if (window.matchMedia(regra.media.mediaText).matches) lista.push(...paraFotos(regra.cssRules, registros))
+      if (window.matchMedia(regra.media.mediaText).matches) lista.push(...paraFotos(regra.cssRules, estilo, base))
     } else if (regra instanceof CSSStyleRule) {
-      lista.push({ tipo: 'regra', texto: serializar(regra), exige: exigencias(regra.selectorText) })
+      const exige = exigencias(regra.selectorText)
+      lista.push({ tipo: 'regra', texto: serializar(regra), exige })
+      if (mudaAFonteDeUmPseudo(regra)) estilo.pseudos.push(exige)
     } else if (regra instanceof CSSLayerBlockRule) {
-      lista.push({ tipo: 'grupo', abre: `@layer ${regra.name}{`, regras: paraFotos(regra.cssRules, registros), camada: true })
+      lista.push({ tipo: 'grupo', abre: `@layer ${regra.name}{`, regras: paraFotos(regra.cssRules, estilo, base), camada: true })
     } else if (regra instanceof CSSSupportsRule) {
       // o SVG é desenhado por este mesmo navegador: o que não vale aqui também não vale lá
       if (CSS.supports(regra.conditionText)) {
-        lista.push({ tipo: 'grupo', abre: `@supports ${regra.conditionText}{`, regras: paraFotos(regra.cssRules, registros), camada: false })
+        lista.push({ tipo: 'grupo', abre: `@supports ${regra.conditionText}{`, regras: paraFotos(regra.cssRules, estilo, base), camada: false })
       }
     } else if (regra instanceof CSSPropertyRule) {
-      registros.push({ nome: regra.name, texto: regra.cssText })
+      estilo.registros.push({ nome: regra.name, texto: regra.cssText })
     } else if (regra instanceof CSSFontFaceRule) {
-      lista.push({ tipo: 'fonte', texto: regra.cssText, familia: nomeDaFamilia(regra.style.getPropertyValue('font-family')) })
+      lista.push(fonteDaFoto(regra, base))
     } else if (!(regra instanceof CSSKeyframesRule)) {
       // (os quadros-chave ficam de fora: as animações ficam paradas nas fotos, veja PARADAS)
       lista.push({ tipo: 'regra', texto: serializar(regra), exige: null })
     }
   }
   return lista
+}
+
+/** As versões menores de cada fonte, pelo endereço da inteira (montado na primeira foto). */
+let versoes: Map<string, (typeof versoesDasFontes)[number]> | undefined
+
+/** Uma regra @font-face (de uma folha de endereço `base`) para as fotos, com as versões menores da fonte. */
+function fonteDaFoto(regra: CSSFontFaceRule, base: string): FonteDaFoto {
+  const texto = regra.cssText
+  const fonte: FonteDaFoto = { tipo: 'fonte', texto, familia: nomeDaFamilia(regra.style.getPropertyValue('font-family')), reduzida: null, estatica: null }
+  versoes ??= new Map(versoesDasFontes.map((versao) => [new URL(versao.original, document.baseURI).href, versao]))
+  const endereco = /url\(\s*["']?([^"')]+)["']?\s*\)/.exec(texto)?.[1]
+  const versao = endereco && versoes.get(new URL(endereco, base).href)
+  if (!endereco || !versao) return fonte
+  const com = (url: string) => texto.split(endereco).join(new URL(url, document.baseURI).href)
+  fonte.reduzida = { texto: com(versao.reduzida) }
+  if (versao.estatica) fonte.estatica = { texto: com(versao.estatica.url), peso: String(versao.estatica.peso) }
+  return fonte
+}
+
+/** Os pseudo-elementos que podem ter texto. */
+const PSEUDO_COM_TEXTO = /::?(before|after|first-line|first-letter|marker|placeholder|file-selector-button)\b/i
+
+/** A regra (ou uma regra dentro dela) muda a família, o peso ou as variações da fonte de um pseudo-elemento? */
+function mudaAFonteDeUmPseudo(regra: CSSStyleRule): boolean {
+  if (PSEUDO_COM_TEXTO.test(regra.selectorText)) {
+    for (const propriedade of ['font-family', 'font-weight', 'font-variation-settings']) {
+      const valor = regra.style.getPropertyValue(propriedade)
+      if (valor && valor !== 'inherit' && valor !== 'unset') return true
+    }
+  }
+  return [...regra.cssRules].some((dentro) => dentro instanceof CSSStyleRule && mudaAFonteDeUmPseudo(dentro))
 }
 
 /**
@@ -375,11 +433,18 @@ function exigencias(lista: string): Exigencia[] | null {
   return todas
 }
 
-/** As regras que trazem um texto (as de fora dos grupos e as de dentro deles). */
-function comTexto(regras: readonly RegraDaFoto[], lista: Exclude<RegraDaFoto, { tipo: 'grupo' }>[] = []) {
+/** Os textos das regras: os das de fora dos grupos e das de dentro deles, e os das versões das fontes. */
+function comTexto(regras: readonly RegraDaFoto[], lista: { texto: string }[] = []) {
   for (const regra of regras) {
-    if (regra.tipo === 'grupo') comTexto(regra.regras, lista)
-    else lista.push(regra)
+    if (regra.tipo === 'grupo') {
+      comTexto(regra.regras, lista)
+      continue
+    }
+    lista.push(regra)
+    if (regra.tipo === 'fonte') {
+      if (regra.reduzida) lista.push(regra.reduzida)
+      if (regra.estatica) lista.push(regra.estatica)
+    }
   }
   return lista
 }
@@ -392,21 +457,18 @@ async function embutirEnderecos(regras: readonly RegraDaFoto[], base: string) {
       .flatMap((regra) => [...regra.texto.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map((m) => m[1] ?? ''))
       .filter((url) => url && !url.startsWith('data:')),
   )
-  for (const url of enderecos) {
-    let dado: string
-    try {
-      dado = await comoDado(new URL(url, base).href)
-    } catch {
-      // sem ela, fica a do sistema
-      continue
-    }
+  // (todas ao mesmo tempo: as versões das fontes ainda não estão no cache do navegador)
+  const dados = await Promise.all([...enderecos].map((url) => comoDado(new URL(url, base).href).catch(() => null)))
+  ;[...enderecos].forEach((url, i) => {
+    const dado = dados[i]
+    // sem ela, fica a do sistema
+    if (!dado) return
     for (const regra of comEndereco) if (regra.texto.includes(url)) regra.texto = regra.texto.split(url).join(dado)
-  }
+  })
 }
 
 async function montarEstilo(): Promise<EstiloDasFotos> {
-  const regras: RegraDaFoto[] = []
-  const registros: Registro[] = []
+  const estilo: EstiloDasFotos = { regras: [], registros: [], pseudos: [] }
   for (const folha of [...document.styleSheets]) {
     if (folha.disabled) continue
     const media = folha.media.mediaText
@@ -418,11 +480,12 @@ async function montarEstilo(): Promise<EstiloDasFotos> {
       // uma folha de outra origem não pode ser lida: fica de fora
       continue
     }
-    const lista = paraFotos(daFolha, registros)
-    await embutirEnderecos(lista, folha.href ?? document.baseURI)
-    regras.push(...lista)
+    const base = folha.href ?? document.baseURI
+    const lista = paraFotos(daFolha, estilo, base)
+    await embutirEnderecos(lista, base)
+    estilo.regras.push(...lista)
   }
-  return { regras, registros }
+  return estilo
 }
 
 function obterEstilo(): Promise<EstiloDasFotos> {
@@ -440,11 +503,42 @@ function obterEstilo(): Promise<EstiloDasFotos> {
 /** Nas fotos, as animações e as transições ficam paradas no fim. */
 const PARADAS = '*,*::before,*::after{animation:none!important;transition:none!important}'
 
-/** O que há nos elementos de uma foto: as classes (com as da raiz, que o SVG copia), os tipos e as fontes. */
+/** O que há nos elementos de uma foto. */
 interface Conteudo {
+  /** As classes (com as da raiz, que o SVG copia). */
   classes: ReadonlySet<string>
   tipos: ReadonlySet<string>
-  familias: ReadonlySet<string>
+  /** As famílias de fonte, cada uma com os pesos em que aparece ('variável' com font-variation-settings). */
+  pesos: ReadonlyMap<string, ReadonlySet<string>>
+  /**
+   * Que versão das fontes vai: a menor que desenha o bloco igual (veja versaoDaFonte), as inteiras
+   * (um caractere fora das reduzidas), ou todas as fontes, inteiras (uma regra muda a fonte de um
+   * pseudo-elemento, e o texto dele pode estar numa família ou num peso que os elementos não mostram).
+   */
+  fontes: 'menores' | 'inteiras' | 'todas'
+}
+
+/** Os caracteres que as fontes reduzidas têm (veja scripts/fontesDasFotos.ts). */
+const COBERTOS = new Set(caracteres)
+
+/** As fontes reduzidas têm todos os caracteres de `texto`? (Um que faltasse sairia em outra fonte.) */
+function coberto(texto: string): boolean {
+  for (const caractere of texto) if (!COBERTOS.has(caractere)) return false
+  return true
+}
+
+/** A regra pode valer em algum elemento da foto? */
+function vale(exige: Exigencia[] | null, { classes, tipos }: Conteudo): boolean {
+  return !exige || exige.some(({ classes: deste, tipo }) => (tipo === null || tipos.has(tipo)) && deste.every((classe) => classes.has(classe)))
+}
+
+/**
+ * O texto da menor versão da fonte que desenha igual o texto da família em `pesos`: a estática, se
+ * ele está todo no peso dela, senão a reduzida, senão a inteira.
+ */
+function versaoDaFonte(fonte: FonteDaFoto, pesos: ReadonlySet<string>): string {
+  if (fonte.estatica && pesos.size === 1 && pesos.has(fonte.estatica.peso)) return fonte.estatica.texto
+  return (fonte.reduzida ?? fonte).texto
 }
 
 /** O CSS das `regras` que pode valer nos elementos de uma foto. */
@@ -456,11 +550,10 @@ function cssDaFoto(regras: readonly RegraDaFoto[], conteudo: Conteudo): string {
       // (uma camada vazia fica: a ordem das camadas é a da primeira vez que cada uma aparece)
       if (dentro || regra.camada) css += `${regra.abre}${dentro}}`
     } else if (regra.tipo === 'fonte') {
-      if (conteudo.familias.has(regra.familia)) css += regra.texto
-    } else if (
-      !regra.exige ||
-      regra.exige.some(({ classes, tipo }) => (tipo === null || conteudo.tipos.has(tipo)) && classes.every((classe) => conteudo.classes.has(classe)))
-    ) {
+      const pesos = conteudo.pesos.get(regra.familia)
+      if (conteudo.fontes === 'todas') css += regra.texto
+      else if (pesos) css += conteudo.fontes === 'menores' ? versaoDaFonte(regra, pesos) : regra.texto
+    } else if (vale(regra.exige, conteudo)) {
       css += regra.texto
     }
   }
@@ -468,20 +561,32 @@ function cssDaFoto(regras: readonly RegraDaFoto[], conteudo: Conteudo): string {
 }
 
 /**
- * O CSS da foto de `elementos` (os de um bloco, ou os das peças da foto do topo): as regras que podem
- * valer neles, as fontes que eles usam, os registros das propriedades que essas regras usam e as
- * animações paradas.
+ * O CSS da foto dos blocos `raizes` (um bloco, ou as peças da foto do topo): as regras que podem valer
+ * nos elementos deles, as fontes que eles usam (na menor versão que serve), os registros das
+ * propriedades que essas regras usam e as animações paradas.
  */
-function estiloPara({ regras, registros }: EstiloDasFotos, elementos: readonly Element[]): string {
+function estiloPara({ regras, registros, pseudos }: EstiloDasFotos, raizes: readonly Element[]): string {
   const classes = new Set(document.documentElement.classList)
   const tipos = new Set<string>()
-  const familias = new Set<string>()
-  for (const elemento of elementos) {
-    for (const classe of elemento.classList) classes.add(classe)
-    tipos.add(elemento.localName.toLowerCase())
-    for (const nome of getComputedStyle(elemento).fontFamily.split(',')) familias.add(nomeDaFamilia(nome))
+  const pesos = new Map<string, Set<string>>()
+  for (const raiz of raizes) {
+    for (const elemento of elementosDe(raiz)) {
+      for (const classe of elemento.classList) classes.add(classe)
+      tipos.add(elemento.localName.toLowerCase())
+      const computado = getComputedStyle(elemento)
+      const peso = computado.fontVariationSettings === 'normal' ? computado.fontWeight : 'variável'
+      for (const nome of computado.fontFamily.split(',')) {
+        const familia = nomeDaFamilia(nome)
+        const daFamilia = pesos.get(familia)
+        if (daFamilia) daFamilia.add(peso)
+        else pesos.set(familia, new Set([peso]))
+      }
+    }
   }
-  const css = cssDaFoto(regras, { classes, tipos, familias })
+  const conteudo: Conteudo = { classes, tipos, pesos, fontes: 'menores' }
+  if (pseudos.some((exige) => vale(exige, conteudo))) conteudo.fontes = 'todas'
+  else if (!raizes.every((raiz) => coberto(raiz.textContent ?? ''))) conteudo.fontes = 'inteiras'
+  const css = cssDaFoto(regras, conteudo)
   let usados = ''
   for (const registro of registros) if (css.includes(registro.nome)) usados += registro.texto
   return (usados + css + PARADAS).split(']]>').join(']] >')
@@ -675,7 +780,7 @@ async function decodificar(url: string) {
 /** Faz as fotos pedidas do bloco. */
 export async function fotografar(pedido: Pedido): Promise<Fotos> {
   // só o que pode valer no bloco (veja RegraDaFoto)
-  const css = estiloPara(await obterEstilo(), elementosDe(pedido.elemento))
+  const css = estiloPara(await obterEstilo(), [pedido.elemento])
   const { x, y, largura, altura, dpr } = pedido
   const quadro = enquadrar(x, y, largura, altura, dpr)
   const w = Math.round(quadro.largura * dpr)
@@ -750,7 +855,7 @@ export async function fotografarTopo(
 ): Promise<ImageBitmap> {
   const css = estiloPara(
     await obterEstilo(),
-    pecas.flatMap(({ elemento }) => elementosDe(elemento)),
+    pecas.map(({ elemento }) => elemento),
   )
   const quadro = enquadrar(0, 0, largura, altura, dpr)
   const w = Math.round(quadro.largura * dpr)

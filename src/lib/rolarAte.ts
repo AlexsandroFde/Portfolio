@@ -14,6 +14,12 @@ export function oferecerRolagem(quem: Condutor | null) {
   condutor = quem
 }
 
+/**
+ * A rolagem suave está ligada? A página de um projeto rola do mesmo jeito que o site: suave quando
+ * ele rola suave, e pelo navegador quando ele rola pelo navegador.
+ */
+export const rolagemSuaveLigada = () => condutor !== null
+
 /** O máximo (ms) que se espera a página chegar: ela pode parar antes, ou o laço de quadros, dormir. */
 const LIMITE = 2000
 

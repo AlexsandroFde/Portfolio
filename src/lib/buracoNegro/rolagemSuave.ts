@@ -1,8 +1,8 @@
 // A rolagem suave: a roda do mouse não move a página na hora, muda o destino dela, e a página anda até
-// lá com a aceleração limitada (veja ACELERACAO) e sem passar de uma velocidade máxima (veja
-// VELOCIDADE). O dedo arrasta a página com ele, também sem passar da velocidade máxima, e o embalo
-// que ele deixa ao sair da tela anda como a roda. Por mais forte que seja o giro da roda ou o embalo
-// do dedo, a página arranca, freia e chega aos poucos.
+// lá com a aceleração limitada e sem passar de uma velocidade máxima (veja passoSuave.ts, a conta que
+// a página de um projeto também usa). O dedo arrasta a página com ele, também sem passar da
+// velocidade máxima, e o embalo que ele deixa ao sair da tela anda como a roda. Por mais forte que
+// seja o giro da roda ou o embalo do dedo, a página arranca, freia e chega aos poucos.
 //
 // Quem move a página é o laço de quadros da absorção (veja quadro, em index.ts), no começo de cada
 // quadro, antes de ele preparar as fatias: a página nunca anda à frente do que a absorção vê, como
@@ -17,36 +17,10 @@
 // navegador continuam com a rolagem do navegador: quando a página vai para outro lugar sem passar por
 // aqui, o destino passa a ser onde ela está.
 import { oferecerRolagem, QUASE_LA } from '../rolarAte.ts'
+import { andar, CHEGADA, PASSO_MAXIMO, pxDaRoda, VELOCIDADE, VELOCIDADE_DO_LINK } from './passoSuave.ts'
 
-/**
- * A maior aceleração da página (em telas por segundo, a cada segundo): ela arranca, freia e muda de
- * sentido no máximo neste ritmo.
- */
-const ACELERACAO = 6
-/** A maior velocidade da página (telas por segundo). */
-const VELOCIDADE = 3
-/**
- * A maior velocidade indo a um link (telas por segundo): com a da roda, voltar ao topo do fim da
- * página levava uns 4 s. A aceleração é a mesma.
- */
-const VELOCIDADE_DO_LINK = 8
-/**
- * A frenagem para chegar ao destino usa só esta fração da aceleração máxima: com ela toda, os passos
- * de um quadro ficavam para trás da curva de frenagem, e a página chegava ainda rápida e parava de vez.
- */
-const FREIO = 0.75
-/**
- * Em quanto tempo (s), mais ou menos, a página alcança o destino sem pressa: o de um tranco da roda,
- * o de um link e o do embalo do dedo, que vai adiante a velocidade com que ele sai da tela vezes
- * este tempo (e perde velocidade aos poucos, como o embalo do navegador).
- */
-const CHEGADA = { roda: 0.12, link: 0.15, embalo: 0.4 }
 /** As posições do dedo que contam para a velocidade com que ele sai da tela: as dos últimos ms. */
 const JANELA_DO_DEDO = 80
-/** O maior intervalo (s) que um quadro conta: num quadro mais lento, a página anda menos. */
-const PASSO_MAXIMO = 0.05
-/** A altura de uma linha (px), para a roda que conta em linhas (a do Firefox). */
-const LINHA = 100 / 6
 
 export interface RolagemSuave {
   /** Liga ou desliga (desligada, a roda e o dedo rolam a página como sempre, pelo navegador). */
@@ -173,9 +147,8 @@ export function criarRolagemSuave(): RolagemSuave {
     if (!ligada || evento.ctrlKey || Math.abs(evento.deltaX) > Math.abs(evento.deltaY)) return
     if (travada() || rolaPorDentro(evento.target, evento.deltaY)) return
     evento.preventDefault()
-    const fator = evento.deltaMode === 1 ? LINHA : evento.deltaMode === 2 ? tela : 1
     chegada = CHEGADA.roda
-    mover(evento.deltaY * fator)
+    mover(pxDaRoda(evento, tela))
   }
 
   const aoTocar = (evento: PointerEvent) => {
@@ -278,19 +251,10 @@ export function criarRolagemSuave(): RolagemSuave {
         atual += passo
         velocidade = passo / dt
       } else {
-        // A velocidade que leva ao destino no tempo de chegada, mas não mais que a máxima nem que a
-        // velocidade da qual ainda dá para frear até lá (veja FREIO), e mudando no máximo a aceleração.
-        const aceleracao = ACELERACAO * tela
-        const desejada = Math.sign(falta) * Math.min(Math.abs(falta) / chegada, velocidadeMaxima * tela, Math.sqrt(2 * FREIO * aceleracao * Math.abs(falta)))
-        const mudanca = aceleracao * dt
-        velocidade += Math.min(mudanca, Math.max(-mudanca, desejada - velocidade))
-        atual += velocidade * dt
-        // Chegou: passou do ponto no último passo, ou falta menos de um pixel (perto do destino, a
-        // velocidade cai devagar, e o último pixel levava mais de um segundo).
-        if ((falta >= 0 ? atual >= destino : atual <= destino) || Math.abs(destino - atual) < 1) {
-          atual = destino
-          velocidade = 0
-        }
+        // a roda e o embalo andam com a aceleração limitada (veja andar, em passoSuave.ts)
+        const movimento = { atual, destino, velocidade, chegada, velocidadeMaxima }
+        andar(movimento, dt, tela)
+        ;({ atual, velocidade } = movimento)
       }
       window.scrollTo({ top: atual, behavior: 'instant' })
       posta = window.scrollY

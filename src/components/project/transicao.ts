@@ -1,6 +1,7 @@
 // A passagem de dentro do cartão para a página do projeto (veja ProjectDialog.tsx): o que os dois
 // têm voa de um lugar para o outro, e o resto de um se apaga enquanto o resto do outro aparece. Aqui
 // ficam as peças, sem React: quem voa e como, o que aparece e some, a cópia do cartão e o vídeo.
+import { ATRIBUTO_ESCONDIDO, ATRIBUTO_POR_CIMA } from '../../lib/buracoNegro/beira.ts'
 import { ABRE_PROJETO, voo, type Caixa } from '../../lib/foco.ts'
 
 /**
@@ -208,7 +209,7 @@ export function copiaDoCartao(cartao: HTMLElement, caixa: HTMLElement, voos: rea
   })
   const estilo = getComputedStyle(cartao)
   for (const nome of CORES) copia.style.setProperty(nome, estilo.getPropertyValue(nome))
-  for (const atributo of ['id', 'data-reveal', 'data-revealed', 'data-por-cima']) copia.removeAttribute(atributo)
+  for (const atributo of ['id', 'data-reveal', 'data-revealed', ATRIBUTO_POR_CIMA, ATRIBUTO_ESCONDIDO]) copia.removeAttribute(atributo)
   copia.inert = true
   copia.setAttribute('aria-hidden', 'true')
   const r = cartao.getBoundingClientRect()

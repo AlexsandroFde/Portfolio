@@ -37,3 +37,12 @@ export const ATRIBUTO_POR_CIMA = 'data-por-cima'
 /** O bloco está inteiro, por cima da cortina (e não esticado a caminho do buraco negro)? */
 export const estaPorCima = (bloco: Element) => bloco.hasAttribute(ATRIBUTO_POR_CIMA)
 
+/**
+ * O atributo que esconde um bloco enquanto outra coisa o mostra: o cartão de um projeto, enquanto ele
+ * é a página do projeto (veja ProjectDialog.tsx). O CSS o esconde (veja index.css), e a absorção não
+ * tira foto dele assim: a foto sairia vazia, e depois de o cartão voltar, a parte dele que vem da foto
+ * (tudo menos o vídeo, que é desenhado ao vivo) passaria vazia pela faixa. Quando o atributo sai, a
+ * foto é refeita (veja absorcao.ts).
+ */
+export const ATRIBUTO_ESCONDIDO = 'data-escondido'
+

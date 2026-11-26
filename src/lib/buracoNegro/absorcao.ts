@@ -36,7 +36,7 @@
 // página (a borda de cima das seções e das listas) entram como blocos de uma fatia só, desenhadas
 // por um modelo da linha (uma linha só não precisa de foto).
 
-import { ATRIBUTO_POR_CIMA, focoDoTeclado } from './beira.ts'
+import { ATRIBUTO_ESCONDIDO, ATRIBUTO_POR_CIMA, focoDoTeclado } from './beira.ts'
 import { ACELERACAO, type Faixa } from './faixa.ts'
 import { ANEL, elementosDe, enquadrar, fotografar, soltarFoto, type Foto, type Fotos } from './fotos.ts'
 import type { Anel, Recorte } from './pintor.ts'
@@ -211,6 +211,11 @@ interface Bloco {
   fotografando: boolean
   /** Quando a última foto falhou (ms): espera um pouco para tentar de novo. */
   falhou: number
+  /**
+   * Quantas vezes o bloco foi escondido (veja ATRIBUTO_ESCONDIDO): uma foto que estava sendo feita
+   * quando ele foi escondido pode ter saído vazia, e não vale.
+   */
+  escondido: number
   /** Quando o mouse mudou o bloco pela última vez (ms): a foto espera as transições acabarem. */
   mexido: number
   /** O elemento mais fundo do bloco com o mouse em cima (os outros são os ancestrais dele), ou null. */
@@ -658,11 +663,14 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
 
   // O React redesenhou algo dentro de um bloco (o ícone de um vídeo que pausou, um texto que trocou
   // de idioma): a foto dele é refeita. Os estilos que este efeito põe no original (atributo style) e
-  // a entrada dos blocos (data-revealed) não contam.
+  // a entrada dos blocos (data-revealed) não contam. Um bloco que é escondido e volta (o cartão de um
+  // projeto, veja ATRIBUTO_ESCONDIDO) também ganha foto nova, quando volta: enquanto está escondido,
+  // ele não é fotografado (veja escolher).
   const vigiaConteudo = new MutationObserver((registros) => {
-    for (const { target } of registros) {
+    for (const { target, attributeName } of registros) {
       const bloco = blocos.find((outro) => !outro.linha && outro.elemento.contains(target))
       if (!bloco) continue
+      if (attributeName === ATRIBUTO_ESCONDIDO && target === bloco.elemento && bloco.elemento.hasAttribute(ATRIBUTO_ESCONDIDO)) bloco.escondido++
       envelhecer(bloco, { soFrente: bloco.frente?.nos.some((no) => no.contains(target)) ?? false })
     }
   })
@@ -726,7 +734,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
           childList: true,
           characterData: true,
           attributes: true,
-          attributeFilter: ['class', 'src', 'srcset', 'hidden', 'd', 'aria-pressed', 'aria-expanded'],
+          attributeFilter: ['class', 'src', 'srcset', 'hidden', 'd', 'aria-pressed', 'aria-expanded', ATRIBUTO_ESCONDIDO],
         })
       }
       tema = document.documentElement.className
@@ -1260,6 +1268,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     const perto = Math.max(folgaAtual[0], folgaAtual[1]) + window.innerHeight * 0.5
     for (const bloco of blocos) {
       if (bloco.linha || bloco.fotografando) continue
+      // escondido, ele sairia vazio na foto: espera voltar (e ganha foto nova então, veja vigiaConteudo)
+      if (bloco.elemento.hasAttribute(ATRIBUTO_ESCONDIDO)) continue
       if (agora - bloco.falhou < NOVA_TENTATIVA) {
         esperar = Math.min(esperar, NOVA_TENTATIVA - (agora - bloco.falhou))
         continue
@@ -1335,6 +1345,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     // a estrutura pode ter mudado (o React trocou o ícone do botão): a frente é medida de novo
     bloco.frente = medirFrente(bloco.elemento, bloco.videos)
     const fase = bloco.fase
+    const escondido = bloco.escondido
     fotografar({
       elemento: bloco.elemento,
       x: bloco.x,
@@ -1352,6 +1363,13 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       .then((fotos) => {
         if (minhaGeracao !== geracao || !blocos.includes(bloco)) {
           soltarFoto(fotos.foto)
+          return
+        }
+        // Escondido no meio da foto, ele pode ter saído vazio nela: ela não vale, e a de antes
+        // continua até ele voltar e ganhar outra (veja ATRIBUTO_ESCONDIDO).
+        if (bloco.escondido !== escondido || bloco.elemento.hasAttribute(ATRIBUTO_ESCONDIDO)) {
+          soltarFoto(fotos.foto)
+          bloco.velha = true
           return
         }
         aplicarFotos(bloco, fotos, soFrente, chave, soMouse)
@@ -1490,6 +1508,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       soMouse: false,
       fotografando: false,
       falhou: Number.NEGATIVE_INFINITY,
+      escondido: 0,
       mexido: Number.NEGATIVE_INFINITY,
       mouse: null,
       trajetos: new Map(),

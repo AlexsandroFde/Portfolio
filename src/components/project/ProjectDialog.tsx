@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { areas, type FeaturedProject } from '../../data/projects.ts'
 import { useT } from '../../i18n/idioma.ts'
 import { ui } from '../../i18n/interface.ts'
-import { beiraDaAbsorcao, estaPorCima } from '../../lib/buracoNegro/beira.ts'
+import { ATRIBUTO_ESCONDIDO, beiraDaAbsorcao, estaPorCima } from '../../lib/buracoNegro/beira.ts'
 import { cx } from '../../lib/cx.ts'
 import { botaoIcone } from '../../lib/estilos.ts'
 import {
@@ -222,7 +222,8 @@ function Painel({
       videoDoCartao.current = { video: doCartao, tocava: !doCartao.paused }
       doCartao.pause()
     }
-    if (cartao) cartao.style.visibility = 'hidden'
+    // escondido pelo atributo, que a absorção conhece: ela não fotografa o cartão assim (veja beira.ts)
+    cartao?.toggleAttribute(ATRIBUTO_ESCONDIDO, true)
     // O foco vai para o texto, e não para o primeiro botão (o X), que o navegador escolheria: o leitor
     // de tela anuncia o projeto (o título nomeia o diálogo), as setas e o Page Down já rolam o texto,
     // e o X não aparece marcado à toa. O Tab chega a ele.
@@ -235,7 +236,7 @@ function Painel({
       tirarQuadro()
       devolverVideo()
       destravar()
-      if (cartao) cartao.style.visibility = ''
+      cartao?.removeAttribute(ATRIBUTO_ESCONDIDO)
       if (d.open) d.close()
       cartao?.querySelector<HTMLElement>(`[${ABRE_PROJETO}]`)?.focus({ preventScroll: true })
     }

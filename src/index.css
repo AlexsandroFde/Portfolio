@@ -283,6 +283,12 @@
     visibility: hidden;
   }
 
+  /* Escondido enquanto outra coisa o mostra (o cartão de um projeto, enquanto ele é a página do
+     projeto): a absorção não o fotografa assim (ver beira.ts). */
+  [data-escondido] {
+    visibility: hidden;
+  }
+
   /* Marcas de corte nos cantos do retrato (só a partir do tablet: na foto pequena do celular viram ruído). */
   .crop-marks {
     position: relative;

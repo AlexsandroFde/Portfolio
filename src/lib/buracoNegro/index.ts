@@ -234,6 +234,13 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   let velocidade = 0
   // as medidas mudaram: a absorção precisa ser refeita mesmo sem rolagem
   let reabsorver = true
+  /**
+   * A última coisa usada foi o teclado (e não a roda, o mouse ou o dedo): só então o bloco com o
+   * foco do teclado fica por cima da cortina (veja preparar, em absorcao.ts). Fechada a página de um
+   * projeto pelo Esc, o foco volta ao botão do cartão e aparece; rolando com a roda, o cartão é
+   * absorvido como os outros.
+   */
+  let peloTeclado = false
   let sentido = 0          // da última rolagem: 1 para baixo, -1 para cima
   // desempenho da thread principal, medido em janelas de ~1 s de quadros (os intervalos entre eles, em s)
   let janelaTempo = 0
@@ -558,6 +565,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
           : indo < 0
             ? [tela * AQUECER[1], tela * AQUECER[0]]
             : [tela * AQUECER[2], tela * AQUECER[2]],
+      teclado: peloTeclado,
     })
   }
 
@@ -827,13 +835,28 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
 
   // O foco do teclado pode entrar num bloco que está na faixa sem a página rolar: ele sobe por cima
   // da cortina já no próximo quadro (veja preparar, em absorcao.ts). Uma tecla também conta: com o
-  // foco de um clique num botão, ela faz o foco aparecer sem que ele saia do lugar (sem focusin).
+  // foco de um clique num botão, ela faz o foco aparecer sem que ele saia do lugar (sem focusin). E
+  // o foco só segura o bloco enquanto se navega pelo teclado (veja peloTeclado): a roda, um clique ou
+  // um toque o devolvem à absorção. Uma tecla de modificação sozinha (o Ctrl do zoom, o Alt da troca
+  // de janela) não é navegar.
   const aoMudarFoco = () => {
+    reabsorver = true
+  }
+  const aoApertarTecla = (evento: KeyboardEvent) => {
+    reabsorver = true
+    if (evento.ctrlKey || evento.metaKey || evento.altKey || ['Shift', 'Control', 'Alt', 'Meta'].includes(evento.key)) return
+    peloTeclado = true
+  }
+  const aoUsarPonteiro = () => {
+    if (!peloTeclado) return
+    peloTeclado = false
     reabsorver = true
   }
   document.addEventListener('focusin', aoMudarFoco)
   document.addEventListener('focusout', aoMudarFoco)
-  document.addEventListener('keydown', aoMudarFoco)
+  document.addEventListener('keydown', aoApertarTecla)
+  window.addEventListener('wheel', aoUsarPonteiro, { capture: true, passive: true })
+  window.addEventListener('pointerdown', aoUsarPonteiro, { capture: true, passive: true })
 
   const aoMudarMovimento = () => {
     // (remedir prepara a absorção do zero: a página pode ter aberto já com o movimento reduzido)
@@ -920,7 +943,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     document.removeEventListener('visibilitychange', aoMudarVisibilidade)
     document.removeEventListener('focusin', aoMudarFoco)
     document.removeEventListener('focusout', aoMudarFoco)
-    document.removeEventListener('keydown', aoMudarFoco)
+    document.removeEventListener('keydown', aoApertarTecla)
+    window.removeEventListener('wheel', aoUsarPonteiro, { capture: true })
+    window.removeEventListener('pointerdown', aoUsarPonteiro, { capture: true })
     movimentoReduzido.removeEventListener('change', aoMudarMovimento)
     pararDeOuvirVolta()
     pararDeOuvirMergulho()

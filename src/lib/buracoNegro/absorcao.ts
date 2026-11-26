@@ -75,6 +75,11 @@ export interface Preparo {
    * original muda; os mais longe, só quando chegarem perto.
    */
   aquecer: Folga
+  /**
+   * Quem navega agora é o teclado (a última coisa usada foi uma tecla, e não a roda, o mouse ou o
+   * dedo): só então o bloco com o foco do teclado fica por cima da cortina (veja elevar).
+   */
+  teclado: boolean
 }
 
 export interface Absorcao {
@@ -1187,8 +1192,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
 
   /**
    * O bloco fica por cima da cortina, no lugar, e as fatias dele se escondem: com o foco do teclado
-   * dentro (quem navega pelo teclado precisa vê-lo), ou quando as fatias precisam aparecer e a foto
-   * ainda não está pronta (sem ela, o conteúdo sumiria na beira da faixa).
+   * dentro, enquanto se navega pelo teclado (quem navega por ele precisa vê-lo), ou quando as fatias
+   * precisam aparecer e a foto ainda não está pronta (sem ela, o conteúdo sumiria na beira da faixa).
    */
   function elevar(bloco: Bloco, sim: boolean) {
     if (bloco.linha || bloco.elevado === sim) return
@@ -1640,7 +1645,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       agendarFotos(false)
     },
 
-    preparar(rolagem, { folga, urgencia, orcamento, aquecer: [acima, abaixo] }) {
+    preparar(rolagem, { folga, urgencia, orcamento, aquecer: [acima, abaixo], teclado }) {
       incompleto = false
       if (!cena) return 0
       const agora = performance.now()
@@ -1651,8 +1656,10 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       folgaAtual = folga
       aquecerAtual = [acima, abaixo]
       obterCamada()
-      // um bloco com o foco do teclado não é absorvido (veja beira.ts)
-      const doTeclado = focoDoTeclado()
+      // Um bloco com o foco do teclado não é absorvido (veja beira.ts), enquanto se navega pelo
+      // teclado: rolando com a roda ou o dedo, ou clicando, ele é absorvido como os outros (o foco
+      // volta a aparecer, por exemplo, no cartão de um projeto cuja página fechou pelo Esc).
+      const doTeclado = teclado ? focoDoTeclado() : null
       let novas = 0
       let semFoto = false
       /** Algum bloco espera uma foto (nova ou refeita). */

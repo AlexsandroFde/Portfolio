@@ -171,8 +171,41 @@ function comoDado(url: string): Promise<string> {
   return dado
 }
 
-/** As regras de estilo da página para as fotos, montadas uma vez (e de novo se a página mudar). */
-let estilo: { chave: string; texto: Promise<string> } | null = null
+/**
+ * Uma regra da página, pronta para as fotos: o texto dela e para que elementos ela pode valer. Cada
+ * foto leva só as que podem valer no bloco dela (veja estiloPara), e não as regras do site inteiro:
+ * o navegador lê de novo o CSS de cada foto, e com o CSS todo (uns 50 kB, mais as fontes) ler o SVG
+ * era a maior parte do custo dela. Num aparelho lento, as fotos do começo ocupavam a página por
+ * segundos.
+ */
+type RegraDaFoto =
+  /** Uma regra comum: entra se o elemento em que ela vale pode estar no bloco (veja exigencias). */
+  | { tipo: 'regra'; texto: string; exige: Exigencia[] | null }
+  /** Uma fonte: entra se o bloco a usa. */
+  | { tipo: 'fonte'; texto: string; familia: string }
+  /** Um grupo (@layer, @supports), com as regras de dentro. */
+  | { tipo: 'grupo'; abre: string; regras: RegraDaFoto[]; camada: boolean }
+
+/** O que o elemento de um seletor precisa ter para a regra valer nele: as classes e o tipo (a tag), se houver. */
+interface Exigencia {
+  classes: string[]
+  tipo: string | null
+}
+
+/** O registro de uma propriedade (@property): entra se alguma regra que entrou na foto a usa. */
+interface Registro {
+  nome: string
+  texto: string
+}
+
+/** O estilo da página para as fotos: as regras e os registros das propriedades. */
+interface EstiloDasFotos {
+  regras: RegraDaFoto[]
+  registros: Registro[]
+}
+
+/** O estilo da página para as fotos, montado uma vez (e de novo se a página mudar). */
+let estilo: { chave: string; pronto: Promise<EstiloDasFotos> } | null = null
 
 /**
  * Muda quando a página ganha ou perde folhas e regras (o Vite troca as folhas durante o
@@ -232,48 +265,226 @@ function serializarTodas(regras: CSSRuleList): string {
   return texto
 }
 
-async function montarEstilo(): Promise<string> {
-  let css = ''
+/** O nome de uma família de fonte, sem aspas e em minúsculas, para comparar. */
+const nomeDaFamilia = (nome: string) => nome.trim().replace(/^["']|["']$/g, '').toLowerCase()
+
+/**
+ * As regras como as fotos as usam (veja RegraDaFoto), com as media queries resolvidas como em
+ * serializar. Os registros das propriedades vão para `registros`: entram em cada foto só se usados.
+ */
+function paraFotos(regras: CSSRuleList, registros: Registro[]): RegraDaFoto[] {
+  const lista: RegraDaFoto[] = []
+  for (const regra of regras) {
+    if (regra instanceof CSSMediaRule) {
+      if (window.matchMedia(regra.media.mediaText).matches) lista.push(...paraFotos(regra.cssRules, registros))
+    } else if (regra instanceof CSSStyleRule) {
+      lista.push({ tipo: 'regra', texto: serializar(regra), exige: exigencias(regra.selectorText) })
+    } else if (regra instanceof CSSLayerBlockRule) {
+      lista.push({ tipo: 'grupo', abre: `@layer ${regra.name}{`, regras: paraFotos(regra.cssRules, registros), camada: true })
+    } else if (regra instanceof CSSSupportsRule) {
+      // o SVG é desenhado por este mesmo navegador: o que não vale aqui também não vale lá
+      if (CSS.supports(regra.conditionText)) {
+        lista.push({ tipo: 'grupo', abre: `@supports ${regra.conditionText}{`, regras: paraFotos(regra.cssRules, registros), camada: false })
+      }
+    } else if (regra instanceof CSSPropertyRule) {
+      registros.push({ nome: regra.name, texto: regra.cssText })
+    } else if (regra instanceof CSSFontFaceRule) {
+      lista.push({ tipo: 'fonte', texto: regra.cssText, familia: nomeDaFamilia(regra.style.getPropertyValue('font-family')) })
+    } else if (!(regra instanceof CSSKeyframesRule)) {
+      // (os quadros-chave ficam de fora: as animações ficam paradas nas fotos, veja PARADAS)
+      lista.push({ tipo: 'regra', texto: serializar(regra), exige: null })
+    }
+  }
+  return lista
+}
+
+/**
+ * Onde, em `seletor`, há um caractere que `separa`, fora de parênteses, colchetes, aspas e escapes
+ * (lá dentro ele é parte de um nome, de um atributo ou de um :is()).
+ */
+function cortes(seletor: string, separa: (c: string) => boolean): number[] {
+  const posicoes: number[] = []
+  let profundidade = 0
+  let aspas = ''
+  for (let i = 0; i < seletor.length; i++) {
+    const c = seletor[i]
+    if (c === '\\') {
+      i++
+      continue
+    }
+    if (aspas) {
+      if (c === aspas) aspas = ''
+      continue
+    }
+    if (c === '"' || c === "'") aspas = c
+    else if (c === '(' || c === '[') profundidade++
+    else if (c === ')' || c === ']') profundidade--
+    else if (profundidade === 0 && separa(c)) posicoes.push(i)
+  }
+  return posicoes
+}
+
+const FIM_DO_NOME = new Set(['.', '#', ':', '[', ']', '(', ')', ' ', '>', '+', '~', ',', '*', '|', '\t', '\n'])
+
+/** O nome que começa em `i` (o de uma classe, depois do ponto), com os escapes do CSS desfeitos. */
+function nomeEm(texto: string, i: number): string {
+  let nome = ''
+  while (i < texto.length) {
+    const c = texto[i]
+    if (c === '\\') {
+      const hex = /^[0-9a-fA-F]{1,6}\s?/.exec(texto.slice(i + 1, i + 8))
+      if (hex) {
+        const ponto = Number.parseInt(hex[0], 16)
+        nome += ponto > 0 && ponto <= 0x10ffff ? String.fromCodePoint(ponto) : '�'
+        i += 1 + hex[0].length
+      } else {
+        nome += texto[i + 1] ?? ''
+        i += 2
+      }
+      continue
+    }
+    if (FIM_DO_NOME.has(c)) break
+    nome += c
+    i++
+  }
+  return nome
+}
+
+/**
+ * O que o elemento de uma regra precisa ter, para cada seletor da lista: as classes da parte final de
+ * cada um (a do próprio elemento), fora de :is(), :where() e :not(), e o tipo, se ela começa por um
+ * (button, code). Null se algum seletor não exige nada (vale para qualquer elemento, como
+ * [data-reveal] ou ::selection). Na dúvida, a regra entra: uma que não pode valer no bloco só pesa,
+ * e uma que faltasse mudaria a foto.
+ */
+function exigencias(lista: string): Exigencia[] | null {
+  const todas: Exigencia[] = []
+  let inicio = 0
+  for (const fim of [...cortes(lista, (c) => c === ','), lista.length]) {
+    const seletor = lista.slice(inicio, fim).trim()
+    inicio = fim + 1
+    const combinadores = cortes(seletor, (c) => c === ' ' || c === '>' || c === '+' || c === '~' || c === '\t' || c === '\n')
+    const parte = seletor.slice((combinadores.at(-1) ?? -1) + 1)
+    const classes = cortes(parte, (c) => c === '.')
+      .map((i) => nomeEm(parte, i + 1))
+      .filter(Boolean)
+    const tipo = /^[a-zA-Z][\w-]*/.exec(parte)?.[0].toLowerCase() ?? null
+    if (!classes.length && !tipo) return null
+    todas.push({ classes, tipo })
+  }
+  return todas
+}
+
+/** As regras que trazem um texto (as de fora dos grupos e as de dentro deles). */
+function comTexto(regras: readonly RegraDaFoto[], lista: Exclude<RegraDaFoto, { tipo: 'grupo' }>[] = []) {
+  for (const regra of regras) {
+    if (regra.tipo === 'grupo') comTexto(regra.regras, lista)
+    else lista.push(regra)
+  }
+  return lista
+}
+
+/** Fontes e imagens vão embutidas nos textos das regras (sem a fonte, o SVG usaria a do sistema). */
+async function embutirEnderecos(regras: readonly RegraDaFoto[], base: string) {
+  const comEndereco = comTexto(regras).filter((regra) => regra.texto.includes('url('))
+  const enderecos = new Set(
+    comEndereco
+      .flatMap((regra) => [...regra.texto.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map((m) => m[1] ?? ''))
+      .filter((url) => url && !url.startsWith('data:')),
+  )
+  for (const url of enderecos) {
+    let dado: string
+    try {
+      dado = await comoDado(new URL(url, base).href)
+    } catch {
+      // sem ela, fica a do sistema
+      continue
+    }
+    for (const regra of comEndereco) if (regra.texto.includes(url)) regra.texto = regra.texto.split(url).join(dado)
+  }
+}
+
+async function montarEstilo(): Promise<EstiloDasFotos> {
+  const regras: RegraDaFoto[] = []
+  const registros: Registro[] = []
   for (const folha of [...document.styleSheets]) {
     if (folha.disabled) continue
     const media = folha.media.mediaText
     if (media && !window.matchMedia(media).matches) continue
-    let regras: CSSRuleList
+    let daFolha: CSSRuleList
     try {
-      regras = folha.cssRules
+      daFolha = folha.cssRules
     } catch {
       // uma folha de outra origem não pode ser lida: fica de fora
       continue
     }
-    const base = folha.href ?? document.baseURI
-    let texto = serializarTodas(regras)
-    // fontes e imagens vão embutidas (sem a fonte, o SVG usaria a do sistema)
-    const urls = new Set(
-      [...texto.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map((m) => m[1] ?? '').filter((u) => u && !u.startsWith('data:')),
-    )
-    for (const url of urls) {
-      try {
-        texto = texto.split(url).join(await comoDado(new URL(url, base).href))
-      } catch {
-        // sem ela, fica a do sistema
-      }
-    }
-    css += texto
+    const lista = paraFotos(daFolha, registros)
+    await embutirEnderecos(lista, folha.href ?? document.baseURI)
+    regras.push(...lista)
   }
-  css += '*,*::before,*::after{animation:none!important;transition:none!important}'
-  return css.split(']]>').join(']] >')
+  return { regras, registros }
 }
 
-function obterEstilo(): Promise<string> {
+function obterEstilo(): Promise<EstiloDasFotos> {
   const chave = chaveDoEstilo()
   if (!estilo || estilo.chave !== chave) {
-    const texto = montarEstilo()
-    estilo = { chave, texto }
-    texto.catch(() => {
-      if (estilo?.texto === texto) estilo = null
+    const pronto = montarEstilo()
+    estilo = { chave, pronto }
+    pronto.catch(() => {
+      if (estilo?.pronto === pronto) estilo = null
     })
   }
-  return estilo.texto
+  return estilo.pronto
+}
+
+/** Nas fotos, as animações e as transições ficam paradas no fim. */
+const PARADAS = '*,*::before,*::after{animation:none!important;transition:none!important}'
+
+/** O que há nos elementos de uma foto: as classes (com as da raiz, que o SVG copia), os tipos e as fontes. */
+interface Conteudo {
+  classes: ReadonlySet<string>
+  tipos: ReadonlySet<string>
+  familias: ReadonlySet<string>
+}
+
+/** O CSS das `regras` que pode valer nos elementos de uma foto. */
+function cssDaFoto(regras: readonly RegraDaFoto[], conteudo: Conteudo): string {
+  let css = ''
+  for (const regra of regras) {
+    if (regra.tipo === 'grupo') {
+      const dentro = cssDaFoto(regra.regras, conteudo)
+      // (uma camada vazia fica: a ordem das camadas é a da primeira vez que cada uma aparece)
+      if (dentro || regra.camada) css += `${regra.abre}${dentro}}`
+    } else if (regra.tipo === 'fonte') {
+      if (conteudo.familias.has(regra.familia)) css += regra.texto
+    } else if (
+      !regra.exige ||
+      regra.exige.some(({ classes, tipo }) => (tipo === null || conteudo.tipos.has(tipo)) && classes.every((classe) => conteudo.classes.has(classe)))
+    ) {
+      css += regra.texto
+    }
+  }
+  return css
+}
+
+/**
+ * O CSS da foto de `elementos` (os de um bloco, ou os das peças da foto do topo): as regras que podem
+ * valer neles, as fontes que eles usam, os registros das propriedades que essas regras usam e as
+ * animações paradas.
+ */
+function estiloPara({ regras, registros }: EstiloDasFotos, elementos: readonly Element[]): string {
+  const classes = new Set(document.documentElement.classList)
+  const tipos = new Set<string>()
+  const familias = new Set<string>()
+  for (const elemento of elementos) {
+    for (const classe of elemento.classList) classes.add(classe)
+    tipos.add(elemento.localName.toLowerCase())
+    for (const nome of getComputedStyle(elemento).fontFamily.split(',')) familias.add(nomeDaFamilia(nome))
+  }
+  const css = cssDaFoto(regras, { classes, tipos, familias })
+  let usados = ''
+  for (const registro of registros) if (css.includes(registro.nome)) usados += registro.texto
+  return (usados + css + PARADAS).split(']]>').join(']] >')
 }
 
 /** O endereço da imagem que o <img> mostra, ou mostraria (um lazy que ainda não carregou). */
@@ -463,7 +674,8 @@ async function decodificar(url: string) {
 
 /** Faz as fotos pedidas do bloco. */
 export async function fotografar(pedido: Pedido): Promise<Fotos> {
-  const css = await obterEstilo()
+  // só o que pode valer no bloco (veja RegraDaFoto)
+  const css = estiloPara(await obterEstilo(), elementosDe(pedido.elemento))
   const { x, y, largura, altura, dpr } = pedido
   const quadro = enquadrar(x, y, largura, altura, dpr)
   const w = Math.round(quadro.largura * dpr)
@@ -536,7 +748,10 @@ export async function fotografarTopo(
   dpr: number,
   ajustar: (copia: HTMLElement) => void,
 ): Promise<ImageBitmap> {
-  const css = await obterEstilo()
+  const css = estiloPara(
+    await obterEstilo(),
+    pecas.flatMap(({ elemento }) => elementosDe(elemento)),
+  )
   const quadro = enquadrar(0, 0, largura, altura, dpr)
   const w = Math.round(quadro.largura * dpr)
   const h = Math.round(quadro.altura * dpr)

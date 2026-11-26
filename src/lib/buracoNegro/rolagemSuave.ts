@@ -212,12 +212,15 @@ export function criarRolagemSuave(): RolagemSuave {
       if (sim === ligada) return
       ligada = sim
       dedo = null
+      // (lida antes de mudar o touch-action: o navegador o propaga a todos os elementos, e a leitura
+      // depois o obrigaria a refazer o estilo da página inteira na hora; assim, ele o refaz uma vez
+      // só, junto com o que mais mudar até a próxima leitura, veja ajustarAncoras em index.ts)
+      pararEm(window.scrollY)
       // Ligada, o dedo não rola a página pelo navegador (rola por aqui); a pinça do zoom continua.
       if (sim) raiz.style.touchAction = 'pinch-zoom'
       else raiz.style.removeProperty('touch-action')
       // e quem leva a página a um ponto pelo código vem por aqui, como os links
       oferecerRolagem(sim ? irPara : null)
-      pararEm(window.scrollY)
       avisar()
     },
 

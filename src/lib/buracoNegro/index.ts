@@ -578,10 +578,12 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       soltarVariaveis()
       return
     }
-    // Toda seção tem pelo menos 5rem de respiro antes do título: ela pode parar 4rem dentro da
-    // faixa sem que nada dela seja puxado.
-    const respiro = 4 * (Number.parseFloat(getComputedStyle(raiz).fontSize) || 16)
-    raiz.style.setProperty('--topo-livre', `${Math.ceil(Math.max(faixa().inicio - respiro, topo + 24))}px`)
+    // Toda seção tem pelo menos 5rem de respiro antes do título: ela pode parar 4rem (a célula da
+    // malha, lida em remedir) dentro da faixa sem que nada dela seja puxado. Sem ler o estilo de novo
+    // aqui: logo depois de o touch-action mudar (veja ligar, em rolagemSuave.ts), a leitura obrigava
+    // o navegador a refazer na hora o estilo da página inteira, e as variáveis abaixo, outra vez (cada
+    // vez, uns 60 ms com a CPU 4 vezes mais lenta). Assim, as duas mudanças entram numa vez só.
+    raiz.style.setProperty('--topo-livre', `${Math.ceil(Math.max(faixa().inicio - celula, topo + 24))}px`)
     // a beira da cortina, para quem precisa saber o que da página está à vista (veja beira.ts)
     raiz.style.setProperty(VARIAVEL_DA_BEIRA, `${faixa().inicio}px`)
   }

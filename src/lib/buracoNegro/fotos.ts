@@ -8,12 +8,14 @@
 // página (as fontes e as imagens embutidas: um SVG usado como imagem não busca nada fora dele) e da
 // largura da janela, para as media queries e as unidades vw valerem o mesmo que na página. O
 // navegador desenha esse SVG numa tela, na resolução da tela e alinhado aos pixels dela como o
-// original, e a tela vira um PNG: decodificado uma vez, ele serve a todas as fatias do bloco.
+// original, e a tela vira um PNG (num worker, veja codificador.ts): decodificado uma vez, ele serve
+// a todas as fatias do bloco.
 //
 // Uma imagem não tem mouse em cima: os elementos em que o mouse está são marcados no clone, e as
 // regras com :hover passam a valer para a marca. As animações e as transições ficam paradas no fim.
 
 import { caracteres, fontes as versoesDasFontes } from 'virtual:fontes-das-fotos'
+import type { DoCodificador, ParaOCodificador } from './codificador.ts'
 
 /**
  * O anel do progresso de um vídeo (o do botão de pausa, veja ProjectVideo.tsx): ele anda com o vídeo,
@@ -766,6 +768,67 @@ function paraBlob(tela: HTMLCanvasElement): Promise<Blob> {
   })
 }
 
+/** O worker que faz os PNGs (veja paraPng): ligado na primeira foto; null onde não há como. */
+let codificador: Worker | null | undefined
+let pedidosAoCodificador = 0
+/** Os pedidos ao codificador que esperam o PNG, pelo número. */
+const esperandoPng = new Map<number, (png: Blob | null) => void>()
+
+function obterCodificador(): Worker | null {
+  if (codificador !== undefined) return codificador
+  codificador = null
+  if (typeof Worker !== 'function' || typeof OffscreenCanvas !== 'function' || typeof createImageBitmap !== 'function') return null
+  try {
+    const worker = new Worker(new URL('./codificador.ts', import.meta.url), { type: 'module', name: 'fotos' })
+    worker.addEventListener('message', ({ data }: MessageEvent<DoCodificador>) => {
+      esperandoPng.get(data.id)?.(data.png)
+      esperandoPng.delete(data.id)
+    })
+    // sem ele, de vez: a tela faz os PNGs
+    worker.addEventListener('error', () => {
+      worker.terminate()
+      if (codificador === worker) codificador = null
+      for (const responder of esperandoPng.values()) responder(null)
+      esperandoPng.clear()
+    })
+    codificador = worker
+  } catch {
+    codificador = null
+  }
+  return codificador
+}
+
+/** O codificador para (a absorção acabou): os pedidos que esperavam ficam com a tela. Volta na próxima foto. */
+export function soltarCodificador() {
+  codificador?.terminate()
+  codificador = undefined
+  for (const responder of esperandoPng.values()) responder(null)
+  esperandoPng.clear()
+}
+
+/**
+ * O PNG da tela, feito no codificador (veja codificador.ts): na thread principal, o Chrome só o faz
+ * num tempo ocioso dela, e com a página rolando cada foto esperava mais de um segundo. Onde não há
+ * como, ou se ele falhar, a própria tela o faz.
+ */
+async function paraPng(tela: HTMLCanvasElement): Promise<Blob> {
+  const worker = obterCodificador()
+  if (worker) {
+    try {
+      const imagem = await createImageBitmap(tela)
+      const id = ++pedidosAoCodificador
+      const png = await new Promise<Blob | null>((responder) => {
+        esperandoPng.set(id, responder)
+        worker.postMessage({ id, imagem } satisfies ParaOCodificador, [imagem])
+      })
+      if (png) return png
+    } catch {
+      // a tela faz o PNG
+    }
+  }
+  return paraBlob(tela)
+}
+
 /** Decodifica a imagem antes de ela aparecer nas fatias (sem isso, a primeira fatia podia sair vazia). */
 async function decodificar(url: string) {
   const imagem = new Image()
@@ -799,7 +862,7 @@ export async function fotografar(pedido: Pedido): Promise<Fotos> {
     contexto.drawImage(imagem, 0, 0)
     let url: string
     try {
-      url = URL.createObjectURL(await paraBlob(tela))
+      url = URL.createObjectURL(await paraPng(tela))
       await decodificar(url)
     } catch {
       // Onde a tela fica bloqueada depois de receber o SVG (no Safari), o próprio SVG vai de fundo.

@@ -38,7 +38,7 @@
 
 import { ATRIBUTO_ESCONDIDO, ATRIBUTO_POR_CIMA, focoDoTeclado } from './beira.ts'
 import { ACELERACAO, type Faixa } from './faixa.ts'
-import { ANEL, elementosDe, enquadrar, fotografar, soltarFoto, type Foto, type Fotos } from './fotos.ts'
+import { ANEL, elementosDe, enquadrar, fotografar, soltarCodificador, soltarFoto, type Foto, type Fotos } from './fotos.ts'
 import type { Anel, Recorte } from './pintor.ts'
 import type { Relogio } from './rolagem.ts'
 import { criarPintor, type Pintor, type Tela } from './telas.ts'
@@ -1751,6 +1751,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       camada = null
       pintor?.destruir()
       pintor = null
+      soltarCodificador()
       porAnimar.length = 0
       incompleto = false
     },

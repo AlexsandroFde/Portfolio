@@ -94,6 +94,16 @@ export interface Absorcao {
   preparar(rolagem: number, preparo: Preparo): number
   /** Ficaram fatias por pôr no lugar para o próximo quadro. */
   pendente(): boolean
+  /**
+   * Antes de o efeito começar: mede os blocos e começa as fotos, das mais perto da faixa às mais
+   * longe, sem pôr fatias. Quando a absorção começar, as do topo já estão prontas.
+   */
+  antecipar(cena: Cena): void
+  /**
+   * Espera as fotos dos blocos a até uma tela da faixa (os que a rolagem pode trazer logo a ela),
+   * por até `prazo` ms. O efeito só começa com elas (veja index.ts).
+   */
+  fotosProntas(prazo: number): Promise<void>
   /** Devolve todos os blocos ao normal e apaga as fatias e as fotos. */
   limpar(): void
 }
@@ -1340,8 +1350,9 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     vezDasFotos = 0
     if (!cena || !camada) return
     // As medidas e as fotos dependem das fontes: antes de elas carregarem, as fotos sairiam erradas.
+    // Elas começam assim que as fontes chegam (cada foto ainda espera a sua vez, veja tirarFoto).
     if (document.fonts && document.fonts.status !== 'loaded') {
-      void document.fonts.ready.then(() => agendarFotos(false))
+      void document.fonts.ready.then(() => agendarFotos(true))
       return
     }
     const agora = performance.now()
@@ -1606,7 +1617,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     if (bloco.foto && bloco.foto.fase !== bloco.fase) envelhecer(bloco, {})
   }
 
-  return {
+  const absorcao: Absorcao = {
     definirCena(nova) {
       const novoDpr = window.devicePixelRatio || 1
       const igual =
@@ -1654,6 +1665,38 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     },
 
     pendente: () => incompleto,
+
+    antecipar(nova) {
+      rolagemAtual = window.scrollY
+      absorcao.definirCena(nova)
+      absorcao.medir()
+      // as do topo (ao alcance da rolagem) logo depois deste quadro, as outras em tempo ocioso
+      agendarFotos(true)
+    },
+
+    fotosProntas(prazo) {
+      const ate = performance.now() + prazo
+      return new Promise((pronto) => {
+        const olhar = () => {
+          const agora = performance.now()
+          const rolagem = window.scrollY
+          // (um bloco escondido, ou cuja foto acabou de falhar, não tem como ficar pronto agora)
+          const falta =
+            cena !== null &&
+            blocos.some(
+              (bloco) =>
+                !bloco.linha &&
+                !bloco.foto &&
+                !bloco.elemento.hasAttribute(ATRIBUTO_ESCONDIDO) &&
+                agora - bloco.falhou >= NOVA_TENTATIVA &&
+                distanciaDoBloco(bloco, rolagem) <= window.innerHeight,
+            )
+          if (!falta || agora >= ate) pronto()
+          else window.setTimeout(olhar, 50)
+        }
+        olhar()
+      })
+    },
 
     medir() {
       // As medidas ignoram o efeito (o original nunca sai do lugar): as fatias e a foto continuam
@@ -1806,4 +1849,5 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       incompleto = false
     },
   }
+  return absorcao
 }

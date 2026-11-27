@@ -68,6 +68,13 @@ const ESPERA_DA_CHEGADA = 1500
  * as letras piscariam.
  */
 const SUMIR = 160
+/**
+ * Quanto o começo do efeito espera, no máximo (ms), depois da entrada da apresentação, pelas fotos
+ * dos blocos que a rolagem pode trazer logo à faixa (veja anteciparFotos): sem elas, quem rolasse
+ * assim que o buraco negro aparece veria esses blocos passarem por cima da cortina, sem ser
+ * absorvidos. Num aparelho lento, o buraco negro aparece um pouco depois.
+ */
+const PRAZO_DAS_FOTOS = 2000
 
 // Converte qualquer cor CSS em RGBA de 0 a 1 (o canvas 2D normaliza o texto da cor).
 const sonda = document.createElement('canvas').getContext('2d')
@@ -609,8 +616,8 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     raiz.style.removeProperty(VARIAVEL_DA_BEIRA)
   }
 
-  const remedir = () => {
-    if (!comecou || !motorPronto || desligado) return
+  /** As medidas da tela e da página de que a absorção e o motor dependem. */
+  const medirTela = () => {
     alturaHero = hero.offsetHeight
     alturaDaTela = regua.offsetHeight || window.innerHeight
     topo = alturaDoCabecalho()
@@ -621,6 +628,24 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       espaco?.offsetHeight ? espaco.getBoundingClientRect().top + window.scrollY : raiz.scrollHeight - window.innerHeight,
     )
     celula = 4 * Number.parseFloat(getComputedStyle(raiz).fontSize) || 64
+  }
+
+  /**
+   * As fotos dos blocos começam já, durante a entrada da apresentação, e não quando o efeito começa:
+   * a absorção começa junto com o buraco negro, e quem rolava logo encontrava os blocos do topo ainda
+   * sem foto, passando por cima da cortina sem ser absorvidos. As medidas de agora servem (medirBloco
+   * desconta o deslocamento da entrada); as definitivas vêm quando o efeito começa (veja remedir), e
+   * as fotos continuam valendo.
+   */
+  function anteciparFotos() {
+    if (comecou || desligado || parado()) return
+    medirTela()
+    absorcao.antecipar(cenaDaAbsorcao())
+  }
+
+  const remedir = () => {
+    if (!comecou || !motorPronto || desligado) return
+    medirTela()
     aplicarModo()
     ajustarTamanho()
     ponte.enviar({ tipo: 'palco', palco: medirPalco() })
@@ -983,13 +1008,17 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   window.addEventListener('pointerup', aoSoltarToque, { passive: true })
   window.addEventListener('pointercancel', aoSoltarToque, { passive: true })
 
-  void aposEntrada(hero).then(() => {
-    if (desligado) return
-    comecou = true
-    comecar()
-    // as fontes mudam a largura dos textos
-    void document.fonts?.ready.then(remedir)
-  })
+  anteciparFotos()
+  void aposEntrada(hero)
+    // o efeito começa com as fotos do que a rolagem pode trazer logo à faixa (veja PRAZO_DAS_FOTOS)
+    .then(() => absorcao.fotosProntas(PRAZO_DAS_FOTOS))
+    .then(() => {
+      if (desligado) return
+      comecou = true
+      comecar()
+      // as fontes mudam a largura dos textos
+      void document.fonts?.ready.then(remedir)
+    })
 
   return () => {
     desligado = true

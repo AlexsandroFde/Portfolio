@@ -1383,36 +1383,60 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     bloco.frente = medirFrente(bloco.elemento, bloco.videos)
     const fase = bloco.fase
     const escondido = bloco.escondido
-    fotografar({
-      elemento: bloco.elemento,
-      x: bloco.x,
-      y: bloco.y,
-      largura: bloco.largura,
-      altura: bloco.altura,
-      dpr,
-      frente: bloco.frente?.elementos ?? [],
-      vivos: bloco.vivos.map((vivo) => vivo.indice),
-      mouse,
-      foto: !soFrente,
-      fotoDaFrente: bloco.frente !== null,
-      urgente: () => bloco.elevado || bloco.tiras.some((tira) => tira.fatia >= 0) || (!bloco.foto && distanciaDoBloco(bloco, rolagemAtual) <= alcanceDaFoto()),
-    })
-      .then((fotos) => {
-        if (minhaGeracao !== geracao || !blocos.includes(bloco)) {
-          soltarFoto(fotos.foto)
-          return
-        }
-        // Escondido no meio da foto, ele pode ter saído vazio nela: ela não vale, e a de antes
-        // continua até ele voltar e ganhar outra (veja ATRIBUTO_ESCONDIDO).
-        if (bloco.escondido !== escondido || bloco.elemento.hasAttribute(ATRIBUTO_ESCONDIDO)) {
-          soltarFoto(fotos.foto)
-          bloco.velha = true
-          return
-        }
-        aplicarFotos(bloco, fotos, soFrente, chave, soMouse)
-        // o bloco mudou de lugar no meio da foto: ela serve até a próxima
-        if (bloco.fase !== fase) envelhecer(bloco, {})
+    // A primeira foto de um bloco com vídeos fica pronta antes da da frente deles, e já vai para as
+    // fatias: sem ela, o bloco passaria por cima da cortina, sem ser absorvido. A da frente (o botão
+    // de pausa sobre o vídeo, nas telas das fatias) vem logo depois.
+    const emDuas = !bloco.foto && !soFrente && bloco.frente !== null
+    const pedir = (foto: boolean, fotoDaFrente: boolean) =>
+      fotografar({
+        elemento: bloco.elemento,
+        x: bloco.x,
+        y: bloco.y,
+        largura: bloco.largura,
+        altura: bloco.altura,
+        dpr,
+        frente: bloco.frente?.elementos ?? [],
+        vivos: bloco.vivos.map((vivo) => vivo.indice),
+        mouse,
+        foto,
+        fotoDaFrente,
+        urgente: () => bloco.elevado || bloco.tiras.some((tira) => tira.fatia >= 0) || (!bloco.foto && distanciaDoBloco(bloco, rolagemAtual) <= alcanceDaFoto()),
       })
+    /** A foto ainda serve ao bloco? Senão, ela é solta. */
+    const serve = (fotos: Fotos): boolean => {
+      if (minhaGeracao !== geracao || !blocos.includes(bloco)) {
+        soltarFoto(fotos.foto)
+        return false
+      }
+      // Escondido no meio da foto, ele pode ter saído vazio nela: ela não vale, e a de antes
+      // continua até ele voltar e ganhar outra (veja ATRIBUTO_ESCONDIDO).
+      if (bloco.escondido !== escondido || bloco.elemento.hasAttribute(ATRIBUTO_ESCONDIDO)) {
+        soltarFoto(fotos.foto)
+        bloco.velha = true
+        return false
+      }
+      return true
+    }
+    const fazer = async () => {
+      const fotos = await pedir(!soFrente, bloco.frente !== null && !emDuas)
+      if (!serve(fotos)) return
+      aplicarFotos(bloco, fotos, soFrente, chave, soMouse)
+      // o bloco mudou de lugar no meio da foto: ela serve até a próxima (que traz a da frente também)
+      if (bloco.fase !== fase) {
+        envelhecer(bloco, {})
+        return
+      }
+      if (!emDuas) return
+      const daFrente = await pedir(false, true)
+      if (!serve(daFrente)) {
+        // (escondido no meio dela: a do bloco vale, e só a da frente é refeita quando ele voltar)
+        if (bloco.velha) bloco.soFrente = true
+        return
+      }
+      aplicarFotos(bloco, daFrente, true, chave, false)
+      if (bloco.fase !== fase) envelhecer(bloco, {})
+    }
+    fazer()
       .catch(() => {
         bloco.falhou = performance.now()
         if (bloco.foto) bloco.velha = true

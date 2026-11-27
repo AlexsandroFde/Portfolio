@@ -140,7 +140,8 @@ function criarCanvasFixo(nivel: number): HTMLCanvasElement {
  *
  * Quem o desenha é o motor (motor.ts), num worker, fora da thread principal (veja ponte.ts): daqui
  * vão para ele as medidas da página, a rolagem a cada quadro, o ponteiro e o tema. A absorção, que
- * mexe na página, fica aqui.
+ * mexe na página, fica aqui. Com a página parada, o laço de quadros daqui dorme (veja quadro), e o
+ * motor continua com a última rolagem.
  *
  * `aoAtivar` avisa quando o primeiro quadro foi desenhado, e quando o efeito deixa de funcionar.
  * Devolve a função que desliga tudo.
@@ -157,7 +158,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   const relogio = criarRelogio(document.querySelector('main'))
   const absorcao = criarAbsorcao(relogio)
   /** A roda e o dedo movem a página com a aceleração limitada, enquanto a absorção age (veja rolagemSuave.ts). */
-  const rolagemSuave = criarRolagemSuave()
+  const rolagemSuave = criarRolagemSuave(acordar)
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'display:block;width:100%;height:100%'
   recipiente.append(canvas)
@@ -229,6 +230,20 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
 
   let pedido = 0
   let anterior = 0
+  /**
+   * O laço de quadros dorme com a página parada e nada a preparar (veja quadro), e acorda com o que
+   * pode precisar dele (veja acordar). Acordado, ele pede um quadro atrás do outro, e cada quadro da
+   * página custa à thread principal o estilo, a pintura e o envio à placa de vídeo, mesmo sem nada
+   * mudar: num celular fraco, com a página parada, isso era quase um terço do tempo dela.
+   */
+  let dormindo = false
+  /** Acabou de acordar: o próximo quadro conta o de antes como um quadro comum (veja quadro). */
+  let acordou = false
+  /**
+   * O intervalo entre os quadros da tela (ms): o menor entre os quadros recentes do laço (num quadro
+   * mais demorado, a página pulou algum). É o do quadro em que ele acorda.
+   */
+  let ritmo = 1000 / 60
   let rolagemAnterior = window.scrollY
   /** Quão rápido a página está rolando (px/s), suavizado: decide com que antecedência preparar as fatias. */
   let velocidade = 0
@@ -496,7 +511,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       tampa.style.display = ''
       rolagemSuave.ligar(true)
     }
-    reabsorver = true
+    pedirReabsorcao()
     ajustarAncoras()
     // o som do fundo cresce com o buraco negro, e o da queda, só com ele andando
     definirBuracoNegroAnimado(!preso)
@@ -623,9 +638,12 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     pedirFoto()
   }
 
-  /** A rolagem deste quadro da página vai para o motor (veja rolagemEm, em motor.ts). */
-  function enviarRolagem(s: number, agora: number, salto = false) {
-    ponte.enviar({ tipo: 'rolagem', s, t: performance.timeOrigin + agora, salto })
+  /**
+   * A rolagem deste quadro da página vai para o motor (veja rolagemEm, em motor.ts). Um salto (a volta
+   * ao topo) não é o leitor rolando; uma retomada é a primeira notícia depois de o laço dormir.
+   */
+  function enviarRolagem(s: number, agora: number, marca?: 'salto' | 'retomada') {
+    ponte.enviar({ tipo: 'rolagem', s, t: performance.timeOrigin + agora, salto: marca === 'salto', retomada: marca === 'retomada' })
   }
 
   /**
@@ -678,13 +696,26 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       quadro(agora)
     } finally {
       // um erro num quadro (aparece no console) não pode parar a absorção
-      if (deveAnimar()) pedido = requestAnimationFrame(laco)
+      if (deveAnimar() && !dormindo) pedido = requestAnimationFrame(laco)
     }
   }
 
   function quadro(agora: number) {
+    if (acordou) {
+      // O laço dormia: o quadro de antes, com a página onde ela estava, conta como um quadro comum,
+      // no ritmo da tela. A rolagem suave dá o passo de um quadro, a velocidade sai como sairia com o
+      // laço acordado, e o motor, que desenha a rolagem entre as notícias dela, recebe a de antes:
+      // ele vai dela à nova no tempo de um quadro, e não de uma vez.
+      acordou = false
+      anterior = Math.max(anterior, agora - ritmo)
+      enviarRolagem(rolagemAnterior, anterior, 'retomada')
+      // (esse intervalo não foi medido: não diz nada do aparelho)
+      ignorar = Math.max(ignorar, 1)
+    }
     const intervalo = anterior ? (agora - anterior) / 1000 : 0
     anterior = agora
+    // (sobe devagar, se a tela passar a ter menos quadros por segundo)
+    if (intervalo >= 0.004 && intervalo < 0.1) ritmo = Math.min(intervalo * 1000, ritmo * 1.01)
     // a página anda o passo da rolagem suave antes de qualquer leitura da rolagem neste quadro
     rolagemSuave.quadro(intervalo)
     const dt = Math.min(intervalo, 0.1)
@@ -717,10 +748,35 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       if (preparar(s) > 6) ignorar = Math.max(ignorar, 2)
     }
     avaliarDesempenho(intervalo)
+    // Nada mudou neste quadro e nada espera o próximo: o laço dorme. O motor continua desenhando o
+    // buraco negro com a última rolagem, e as fotos e o mouse seguem por conta própria (veja
+    // absorcao.ts).
+    dormindo = !rolou && velocidade === 0 && !absorcao.pendente() && !rolagemSuave.andando()
+  }
+
+  /**
+   * Acorda o laço, se ele dorme: a página rolou (pelo navegador: o teclado, a busca, o botão do meio),
+   * a roda, o dedo ou um link a mandaram andar, ou mudou algo que a absorção precisa ver. Ele volta já
+   * no quadro da página em que a rolagem mudou: o navegador avisa da rolagem e, em seguida, atende
+   * os pedidos de quadro, inclusive o feito no aviso.
+   */
+  function acordar() {
+    if (!dormindo) return
+    dormindo = false
+    acordou = true
+    if (!pedido && deveAnimar()) pedido = requestAnimationFrame(laco)
+  }
+
+  /** As medidas, o modo ou o foco mudaram: a absorção é preparada de novo no próximo quadro, mesmo sem rolagem. */
+  function pedirReabsorcao() {
+    reabsorver = true
+    acordar()
   }
 
   function retomar() {
     if (pedido || !deveAnimar()) return
+    dormindo = false
+    acordou = false
     anterior = 0
     ignorar = 2
     janelaTempo = 0
@@ -733,6 +789,8 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   function pausar() {
     cancelAnimationFrame(pedido)
     pedido = 0
+    // (parado, só retomar o põe de volta)
+    dormindo = false
   }
 
   /** Com o motor pronto e a entrada da apresentação terminada, o efeito começa. */
@@ -811,6 +869,8 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
       if (!comecou || !motorPronto || preso) return
       absorcao.medir()
       preparar(window.scrollY)
+      // o que não coube neste quadro fica para os próximos
+      acordar()
     })
   })
   const principal = document.querySelector('main')
@@ -842,23 +902,26 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   // um toque o devolvem à absorção. Uma tecla de modificação sozinha (o Ctrl do zoom, o Alt da troca
   // de janela) não é navegar.
   const aoMudarFoco = () => {
-    reabsorver = true
+    pedirReabsorcao()
   }
   const aoApertarTecla = (evento: KeyboardEvent) => {
-    reabsorver = true
+    pedirReabsorcao()
     if (evento.ctrlKey || evento.metaKey || evento.altKey || ['Shift', 'Control', 'Alt', 'Meta'].includes(evento.key)) return
     peloTeclado = true
   }
   const aoUsarPonteiro = () => {
     if (!peloTeclado) return
     peloTeclado = false
-    reabsorver = true
+    pedirReabsorcao()
   }
   document.addEventListener('focusin', aoMudarFoco)
   document.addEventListener('focusout', aoMudarFoco)
   document.addEventListener('keydown', aoApertarTecla)
   window.addEventListener('wheel', aoUsarPonteiro, { capture: true, passive: true })
   window.addEventListener('pointerdown', aoUsarPonteiro, { capture: true, passive: true })
+  // A página rolou sem passar pela rolagem suave (o teclado, a busca do navegador, o botão do meio,
+  // um link pelo Enter): o laço acorda, se dormia (a rolagem suave o acorda ela mesma).
+  window.addEventListener('scroll', acordar, { passive: true })
 
   const aoMudarMovimento = () => {
     // (remedir prepara a absorção do zero: a página pode ter aberto já com o movimento reduzido)
@@ -874,9 +937,9 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     rolagemSuave.sincronizar()
     rolagemAnterior = window.scrollY
     velocidade = 0
-    reabsorver = true
+    pedirReabsorcao()
     relogio.acertar(rolagemAnterior)
-    enviarRolagem(rolagemAnterior, performance.now(), true)
+    enviarRolagem(rolagemAnterior, performance.now(), 'salto')
   })
 
   // O ponteiro vai para o motor: a câmera o acompanha de leve, e o mouse é uma pequena massa que
@@ -948,6 +1011,7 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
     document.removeEventListener('keydown', aoApertarTecla)
     window.removeEventListener('wheel', aoUsarPonteiro, { capture: true })
     window.removeEventListener('pointerdown', aoUsarPonteiro, { capture: true })
+    window.removeEventListener('scroll', acordar)
     movimentoReduzido.removeEventListener('change', aoMudarMovimento)
     pararDeOuvirVolta()
     pararDeOuvirMergulho()

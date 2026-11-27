@@ -65,8 +65,13 @@ export type ParaOMotor =
   | { tipo: 'palco'; palco: Palco }
   /** A faixa da absorção e a rolagem em que o puxão fica pleno (veja faixa.ts): a tampa é desenhada com elas. */
   | { tipo: 'faixa'; faixa: Faixa; plena: number }
-  /** A rolagem `s` no quadro da página que começou em `t` (ms desde a época, veja performance.timeOrigin). */
-  | { tipo: 'rolagem'; s: number; t: number; salto?: boolean }
+  /**
+   * A rolagem `s` no quadro da página que começou em `t` (ms desde a época, veja performance.timeOrigin).
+   * Um salto (a volta ao topo) não é o leitor rolando. Uma retomada é a primeira notícia depois de a
+   * página ficar um tempo sem mandar nenhuma (o laço dela dorme com a página parada, veja index.ts):
+   * o intervalo até ela não é o ritmo da página.
+   */
+  | { tipo: 'rolagem'; s: number; t: number; salto?: boolean; retomada?: boolean }
   /**
    * O ponteiro, na tela (px CSS), e se é o mouse sobre a página (`dentro`): fora da janela, ou num
    * toque, a massa do mouse some.
@@ -197,6 +202,8 @@ const ONDA = { dura: 1.8, enfraquece: 0.9 }
 interface Amostra {
   s: number
   t: number
+  /** A página não mandou nada antes desta por um tempo (veja ParaOMotor): o intervalo até ela não conta. */
+  retomada: boolean
 }
 
 const pedirQuadro: (f: FrameRequestCallback) => number =
@@ -341,7 +348,8 @@ export function criarMotor(
    * rolagem de um instante um pouco antes, entre duas notícias que ele já tem (em linha reta entre
    * elas): o buraco negro e a malha andam lisos, sem esperar a thread principal e sem passar do
    * ponto quando a rolagem para. O atraso é o maior intervalo entre as últimas notícias, e se ajusta
-   * aos poucos quando o ritmo da página muda.
+   * aos poucos quando o ritmo da página muda. Com a página parada, ela não manda nada (o laço dela
+   * dorme), e vale a última notícia.
    */
   function rolagemEm(agora: number, dt: number): number {
     const n = amostras.length
@@ -350,8 +358,8 @@ export function criarMotor(
     let maior = 0
     for (let i = 1; i < n; i++) {
       const passo = amostras[i].t - amostras[i - 1].t
-      // (uma pausa longa, como a da aba escondida, não é o ritmo da página)
-      if (passo < 120) maior = Math.max(maior, passo)
+      // (uma pausa, como a da aba escondida ou a do laço da página dormindo, não é o ritmo da página)
+      if (passo < 120 && !amostras[i].retomada) maior = Math.max(maior, passo)
     }
     atraso += (Math.min(maior, ATRASO_MAXIMO) - atraso) * Math.min(1, dt * 10)
     const instante = agora - atraso
@@ -367,12 +375,12 @@ export function criarMotor(
     return (amostras[0] ?? ultima).s
   }
 
-  function receberRolagem(s: number, t: number, salto: boolean) {
+  function receberRolagem(s: number, t: number, salto: boolean, retomada: boolean) {
     const ultima = amostras[amostras.length - 1]
     if (salto) {
       // A volta ao topo, no fim do mergulho, não é o leitor rolando para cima: sem jatos.
       amostras.length = 0
-      amostras.push({ s, t })
+      amostras.push({ s, t, retomada: false })
       suavizada = Number.NaN
       sentido = 0
       atividade = 0
@@ -383,7 +391,7 @@ export function criarMotor(
       sentido = Math.sign(s - ultima.s)
       ultimaRolagem = t
     }
-    amostras.push({ s, t })
+    amostras.push({ s, t, retomada })
     if (amostras.length > AMOSTRAS) amostras.shift()
   }
 
@@ -815,7 +823,7 @@ export function criarMotor(
           desenhada = Number.NaN
           break
         case 'rolagem':
-          receberRolagem(m.s, m.t, m.salto ?? false)
+          receberRolagem(m.s, m.t, m.salto ?? false, m.retomada ?? false)
           break
         case 'ponteiro':
           if (tamanho) {

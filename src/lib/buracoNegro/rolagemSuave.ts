@@ -8,7 +8,8 @@
 // quadro, antes de ele preparar as fatias: a página nunca anda à frente do que a absorção vê, como
 // acontecia com a rolagem do navegador, que corre fora do JavaScript e, rápida demais para o
 // aparelho, levava o conteúdo à faixa antes de as fatias dele estarem prontas. Num quadro lento, a
-// página anda menos (veja PASSO_MAXIMO), em vez de saltar.
+// página anda menos (veja PASSO_MAXIMO), em vez de saltar. Com a página parada, o laço dorme: a roda,
+// o dedo e os links o acordam quando dão à página para onde andar.
 //
 // Os links para outro ponto da página (o menu, os botões da apresentação), clicados com o mouse ou o
 // dedo, também vão pela rolagem suave, um pouco mais rápida (veja VELOCIDADE_DO_LINK), e o que leva a
@@ -30,12 +31,21 @@ export interface RolagemSuave {
    * `intervalo` s, o tempo desde o quadro anterior (0 no primeiro).
    */
   quadro(intervalo: number): void
+  /**
+   * A página ainda anda, ou acabou de chegar e quem esperava por ela ainda não soube: quem a move
+   * precisa do próximo quadro.
+   */
+  andando(): boolean
   /** A página foi para outro lugar por conta própria (a volta ao topo, no fim do mergulho). */
   sincronizar(): void
   destruir(): void
 }
 
-export function criarRolagemSuave(): RolagemSuave {
+/**
+ * `acordar` é chamada quando a página passa a ter para onde andar (a roda, o dedo, um link): o laço de
+ * quadros que a move (veja index.ts) dorme com ela parada.
+ */
+export function criarRolagemSuave(acordar: () => void): RolagemSuave {
   const raiz = document.documentElement
   let ligada = false
   /** Onde a página está, aonde vai e com que velocidade (px, px/s; para baixo é positivo). */
@@ -90,6 +100,7 @@ export function criarRolagemSuave(): RolagemSuave {
     if (parada()) pararEm(window.scrollY)
     destino = Math.min(maiorRolagem(), Math.max(0, destino + quanto))
     velocidadeMaxima = VELOCIDADE
+    if (!parada()) acordar()
   }
 
   /**
@@ -113,6 +124,7 @@ export function criarRolagemSuave(): RolagemSuave {
     destino = Math.min(maiorRolagem(), Math.max(0, alvo.getBoundingClientRect().top + window.scrollY - recuo))
     chegada = CHEGADA.link
     velocidadeMaxima = VELOCIDADE_DO_LINK
+    if (!parada()) acordar()
   }
 
   /**
@@ -128,9 +140,11 @@ export function criarRolagemSuave(): RolagemSuave {
     chegada = CHEGADA.link
     velocidadeMaxima = VELOCIDADE_DO_LINK
     if (parada()) return Promise.resolve()
-    return new Promise((pronto) => {
+    const chegou = new Promise<void>((pronto) => {
       quemEspera = pronto
     })
+    acordar()
+    return chegou
   }
 
   /** Um elemento por dentro do alvo rola na direção `dy` por conta própria (uma lista com rolagem)? */
@@ -265,6 +279,8 @@ export function criarRolagemSuave(): RolagemSuave {
       // quase lá, quem esperava já pode seguir: o resto anda a menos de um pixel por quadro
       if (Math.abs(destino - atual) < QUASE_LA) avisar()
     },
+
+    andando: () => !parada() || quemEspera !== null,
 
     sincronizar() {
       pararEm(window.scrollY)

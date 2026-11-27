@@ -263,9 +263,9 @@ const FIO = 1
 const PERSPECTIVA_MAXIMA = 12
 /**
  * Quanto tempo (ms) um quadro pode gastar, no máximo, pondo no lugar as fatias que podem aparecer
- * já nos próximos quadros (as outras têm o orçamento que preparar recebe). Um quadro longo demais
- * não adianta: enquanto ele roda, a rolagem anda sem o JavaScript e passa das fatias que ele ainda
- * está preparando.
+ * já nos próximos quadros (as outras têm o orçamento que preparar recebe, e as que aparecem neste
+ * entram sempre, veja distribuir). Um quadro longo demais não adianta: enquanto ele roda, a rolagem
+ * anda sem o JavaScript e passa das fatias que ele ainda está preparando.
  */
 const ORCAMENTO_URGENTE = 8
 /**
@@ -1142,7 +1142,10 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       if (cobertas.has(fatia)) continue
       let tira = livres.pop()
       if (!tira) {
-        if (performance.now() > (d > urgencia ? limite : limiteUrgente)) {
+        // A que aparece já neste quadro entra sempre, mesmo passando do tempo: sem ela, o conteúdo
+        // sumiria na beira da faixa, sem ser puxado (e com a rolagem suave, quem move a página é este
+        // laço: um quadro mais longo não deixa a página passar à frente das fatias).
+        if (d > 0 && performance.now() > (d > urgencia ? limite : limiteUrgente)) {
           incompleto = true
           continue
         }

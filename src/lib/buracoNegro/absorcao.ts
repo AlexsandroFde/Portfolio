@@ -302,6 +302,16 @@ const POR_CIMA = '42'
 const PERTO = 12
 /** Quantas fotos são feitas ao mesmo tempo (cada uma espera a imagem carregar, e enquanto isso a outra anda). */
 const FOTOS_AO_MESMO_TEMPO = 2
+/** Até quantas, contando as primeiras fotos de blocos ao alcance da rolagem (veja ALCANCE_DA_FOTO). */
+const FOTOS_URGENTES = 4
+/**
+ * Até quantas telas além da folga a primeira foto de um bloco é feita mesmo com a página rolando, e
+ * sem esperar um tempo ocioso: a foto leva umas centenas de ms num aparelho lento, e na rolagem mais
+ * rápida (três telas por segundo, veja passoSuave.ts) o bloco precisa dela antes de chegar à faixa.
+ * Sem ela, ele passaria por cima da cortina, sem ser absorvido. Mais longe, a foto espera a página
+ * parar (veja escolher).
+ */
+const ALCANCE_DA_FOTO = 1.5
 /**
  * Quanto a foto nova espera (ms) depois que o mouse muda o bloco: as transições do original (as
  * cores, a seta do link) terminam antes, e a foto sai com o estado final, sem pesar no meio delas.
@@ -1100,6 +1110,11 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     return comeco > rolagem ? comeco - rolagem : fim < rolagem ? rolagem - fim : 0
   }
 
+  /** Até que distância (px de rolagem, veja distanciaDoBloco) a primeira foto de um bloco é urgente (veja ALCANCE_DA_FOTO). */
+  function alcanceDaFoto(): number {
+    return Math.max(folgaAtual[0], folgaAtual[1]) + window.innerHeight * ALCANCE_DA_FOTO
+  }
+
   /**
    * A fatia pode aparecer com a página rolada entre `rolagem - folga[0]·fator` (o que já foi
    * engolido, se a rolagem voltar) e `rolagem + folga[1]·fator` (o que vem pela frente)?
@@ -1288,8 +1303,9 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       if (!bloco.foto) {
         // Longe da faixa, a primeira foto também espera a página parar de rolar: cada foto segura a
         // página por um tempo (num aparelho lento, alguns quadros), e rolando, logo que o site abre,
-        // a rolagem tropeçava em cada uma. Perto, ela não espera: a faixa vai precisar dela.
-        const espera = d > perto ? ESPERA_DA_ROLAGEM - (agora - rolouEm) : 0
+        // a rolagem tropeçava em cada uma. Ao alcance da rolagem, ela não espera: a faixa vai
+        // precisar dela (veja ALCANCE_DA_FOTO).
+        const espera = d > alcanceDaFoto() ? ESPERA_DA_ROLAGEM - (agora - rolouEm) : 0
         if (espera > 0) {
           esperar = Math.min(esperar, espera)
           continue
@@ -1331,10 +1347,13 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
     const agora = performance.now()
     const rolagem = window.scrollY
     let esperar = Infinity
-    while (fotografando < FOTOS_AO_MESMO_TEMPO) {
+    while (fotografando < FOTOS_URGENTES) {
       const escolha = escolher(agora, rolagem)
       esperar = escolha.esperar
       if (!escolha.bloco) break
+      // Além das de sempre, só as primeiras fotos ao alcance da rolagem: a de um bloco longe, feita
+      // com a página parada, pode levar mais de um segundo, e a fila não espera por ela.
+      if (fotografando >= FOTOS_AO_MESMO_TEMPO && (escolha.bloco.foto || distanciaDoBloco(escolha.bloco, rolagem) > alcanceDaFoto())) break
       tirarFoto(escolha.bloco)
     }
     window.clearTimeout(esperaDasFotos)
@@ -1376,7 +1395,7 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       mouse,
       foto: !soFrente,
       fotoDaFrente: bloco.frente !== null,
-      urgente: () => bloco.elevado || bloco.tiras.some((tira) => tira.fatia >= 0),
+      urgente: () => bloco.elevado || bloco.tiras.some((tira) => tira.fatia >= 0) || (!bloco.foto && distanciaDoBloco(bloco, rolagemAtual) <= alcanceDaFoto()),
     })
       .then((fotos) => {
         if (minhaGeracao !== geracao || !blocos.includes(bloco)) {
@@ -1402,7 +1421,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
         bloco.fotografando = false
         if (minhaGeracao === geracao) {
           fotografando--
-          agendarFotos(false)
+          // a próxima, se algum bloco ao alcance da rolagem ainda está sem foto, não espera um tempo ocioso
+          agendarFotos(blocos.some((outro) => !outro.linha && !outro.foto && !outro.fotografando && distanciaDoBloco(outro, rolagemAtual) <= alcanceDaFoto()))
         }
       })
   }
@@ -1698,9 +1718,11 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
       // volta a aparecer, por exemplo, no cartão de um projeto cuja página fechou pelo Esc).
       const doTeclado = teclado ? focoDoTeclado() : null
       let novas = 0
+      /** Algum bloco ao alcance da rolagem ainda não tem foto: as fotos não esperam um tempo ocioso. */
       let semFoto = false
       /** Algum bloco espera uma foto (nova ou refeita). */
       let falta = false
+      const alcance = alcanceDaFoto()
       for (const bloco of blocos) {
         const quantas = quantasFatias(bloco)
         // o trecho da rolagem em que alguma fatia do bloco pode estar na faixa
@@ -1710,7 +1732,8 @@ export function criarAbsorcao(relogio: Relogio): Absorcao {
         if (!bloco.linha) {
           bloco.focado = doTeclado !== null && bloco.elemento.contains(doTeclado)
           const precisa = fatias.length > 0 && !bloco.foto
-          if (precisa) semFoto = true
+          const longe = comeco > rolagem ? comeco - rolagem : fim < rolagem ? rolagem - fim : 0
+          if (precisa || (!bloco.foto && longe <= alcance)) semFoto = true
           if (!bloco.fotografando && (!bloco.foto || bloco.velha)) falta = true
           elevar(bloco, bloco.focado || precisa)
         }

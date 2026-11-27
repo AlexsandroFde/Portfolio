@@ -683,10 +683,10 @@ export function iniciarBuracoNegro(recipiente: HTMLElement, aoAtivar: (ativo: bo
   }
 
   function quadro(agora: number) {
-    // a página anda o passo da rolagem suave antes de qualquer leitura da rolagem neste quadro
-    rolagemSuave.quadro(agora)
     const intervalo = anterior ? (agora - anterior) / 1000 : 0
     anterior = agora
+    // a página anda o passo da rolagem suave antes de qualquer leitura da rolagem neste quadro
+    rolagemSuave.quadro(intervalo)
     const dt = Math.min(intervalo, 0.1)
 
     const s = window.scrollY

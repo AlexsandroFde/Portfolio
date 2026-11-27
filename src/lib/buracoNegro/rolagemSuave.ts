@@ -25,8 +25,11 @@ const JANELA_DO_DEDO = 80
 export interface RolagemSuave {
   /** Liga ou desliga (desligada, a roda e o dedo rolam a página como sempre, pelo navegador). */
   ligar(sim: boolean): void
-  /** No começo de cada quadro, antes de qualquer leitura da rolagem: a página anda um passo. */
-  quadro(agora: number): void
+  /**
+   * No começo de cada quadro, antes de qualquer leitura da rolagem: a página anda um passo de
+   * `intervalo` s, o tempo desde o quadro anterior (0 no primeiro).
+   */
+  quadro(intervalo: number): void
   /** A página foi para outro lugar por conta própria (a volta ao topo, no fim do mergulho). */
   sincronizar(): void
   destruir(): void
@@ -41,7 +44,6 @@ export function criarRolagemSuave(): RolagemSuave {
   let velocidade = 0
   /** A última posição que esta rolagem pôs na página: outra, e alguém mais rolou (veja quadro). */
   let posta = atual
-  let anterior = 0
   /** A altura da tela e a maior rolagem possível, medidas quando precisam (veja medir). */
   let tela = window.innerHeight
   let maxima = Number.NaN
@@ -224,9 +226,8 @@ export function criarRolagemSuave(): RolagemSuave {
       avisar()
     },
 
-    quadro(agora) {
-      const dt = anterior ? Math.min((agora - anterior) / 1000, PASSO_MAXIMO) : 0
-      anterior = agora
+    quadro(intervalo) {
+      const dt = Math.min(intervalo, PASSO_MAXIMO)
       // (parada, quem esperava por ela fica sabendo, no começo do quadro seguinte ao da chegada)
       if (!ligada || parada()) {
         avisar()

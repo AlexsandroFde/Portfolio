@@ -365,7 +365,7 @@ Enquanto a absorção age, a roda do mouse e o dedo passam por uma rolagem suave
 - **O cartão de um projeto.** Antes de abrir a página de um projeto, a tela vai até o cartão do mesmo jeito que os links. Ligada, a rolagem suave se oferece em `src/lib/rolarAte.ts` (`irPara`) e avisa quando a página para, ou quando falta tão pouco que ela já anda menos de um pixel por quadro: o resto da chegada, que freia aos poucos, não atrasa a página do projeto.
 - **Teclado e busca.** O teclado (inclusive o Enter num link, que também leva para lá o ponto de partida do Tab) e a busca do navegador continuam com a rolagem do navegador, e a rolagem suave segue de onde eles deixam a página.
 
-Quem move a página é o próprio laço de quadros da absorção, antes de preparar as fatias. Assim, a página nunca anda à frente do que a absorção vê, como acontecia com a rolagem do navegador, que corre fora do JavaScript e, rápida demais para um celular, levava o conteúdo à faixa antes de as fatias dele estarem prontas. Num quadro lento, a página anda menos, em vez de saltar.
+Quem move a página é o próprio laço de quadros da absorção, antes de preparar as fatias. Assim, a página nunca anda à frente do que a absorção vê, como acontecia com a rolagem do navegador, que corre fora do JavaScript e, rápida demais para um celular, levava o conteúdo à faixa antes de as fatias dele estarem prontas. Num quadro lento, a página anda menos, em vez de saltar. Com a página parada, o laço dorme, e a roda, o dedo e os links o acordam quando dão à página para onde andar (veja **Desempenho**).
 
 > [!NOTE]
 > Ligada, a rolagem suave tira do navegador a rolagem pelo dedo (`touch-action: pinch-zoom` no `html`; a pinça do zoom continua). No celular, a barra de endereço não some ao rolar e o puxar para recarregar não funciona. Quem prefere menos movimento, ou tem um aparelho lento demais para o efeito, fica com a rolagem do navegador.
@@ -391,7 +391,7 @@ flowchart LR
     pagina -- "quadros dos vídeos" --> pintor
 ```
 
-A página só manda para o motor a rolagem de cada quadro seu, que, com a página pesada, pode chegar na metade do ritmo da tela. O motor desenha a rolagem de um instante antes, entre duas notícias que já tem, suavizada, e o buraco negro e a malha andam lisos, sem passar do ponto quando a rolagem para. Onde não há worker com `OffscreenCanvas`, o mesmo motor roda na thread principal.
+A página só manda para o motor a rolagem de cada quadro seu, que, com a página pesada, pode chegar na metade do ritmo da tela. O motor desenha a rolagem de um instante antes, entre duas notícias que já tem, suavizada, e o buraco negro e a malha andam lisos, sem passar do ponto quando a rolagem para. Com a página parada, ela não manda nada, e o motor segue com a última. Onde não há worker com `OffscreenCanvas`, o mesmo motor roda na thread principal.
 
 ### O mergulho
 
@@ -607,6 +607,7 @@ Os valores do efeito ficam em constantes com nomes em português, nos arquivos d
 ### O que mantém o efeito leve
 
 - O código do efeito só é baixado depois que a página carrega, e a animação pausa com a aba escondida.
+- Com a página parada, o laço de quadros da absorção dorme. Acordado, ele pede um quadro atrás do outro para ler a rolagem e mandá-la ao motor, e cada quadro da página custa o estilo, a pintura e o envio à placa de vídeo, mesmo sem nada mudar. Ele dorme quando a rolagem para, a velocidade dela zera e nenhuma fatia falta, e acorda com o que pode precisar dele: a rolagem do navegador (o teclado, a busca, o botão do meio), a roda, o dedo, os links, o foco, o tamanho da tela e os blocos que mudam. Acorda no mesmo quadro em que a rolagem muda e conta o anterior como um quadro comum, no ritmo da tela: a rolagem suave, a velocidade e o motor seguem como se ele não tivesse parado. O buraco negro continua girando, desenhado pelo worker.
 - As fatias ficam prontas antes da hora: rolando, cada quadro gasta no máximo meio milissegundo com as que ainda não vão aparecer.
 - Cada fatia é só um retângulo com um pedaço de uma imagem já decodificada, então quase não custa para criar nem para desenhar. As que a rolagem deixou para trás saem da página (paradas ali, escondidas, pesavam em todo quadro em que o navegador repinta algo).
 - As fatias de cada bloco ficam num grupo só delas na camada, com a foto numa variável CSS do grupo: trocar a foto é mudar uma propriedade só. As que atravessam a faixa com o puxão inteiro dividem os mesmos quadros-chave, calculados uma vez.
@@ -630,6 +631,9 @@ Os valores do efeito ficam em constantes com nomes em português, nos arquivos d
 | Abrindo o site com a CPU 4 vezes mais lenta, no computador, sem mexer (os primeiros 12 s) | 234 ms bloqueados em tarefas longas, a maior com 210 ms | 795 ms, a maior com 462 ms (as fatias do topo numa tarefa só, e o CSS do site inteiro e as fontes inteiras em cada foto) |
 | O mesmo num celular                                                     | 450 ms bloqueados, a maior com 384 ms                 | 877 ms, a maior com 597 ms                                                                            |
 | Rolando logo que o site abre, com a CPU 4 vezes mais lenta, no computador | 242 ms bloqueados, e o quadro mais demorado com 53 ms | 482 ms, e o quadro mais demorado com 147 ms                                                           |
+| A página parada, depois das fotos, com a CPU 4 vezes mais lenta, no computador | Uns 35 ms de trabalho por segundo, sem nenhum quadro pedido pela página | Uns 290 ms por segundo, com um quadro atrás do outro mesmo sem nada mudar                     |
+| O mesmo num celular                                                     | Uns 40 ms por segundo                                 | Uns 265 ms por segundo                                                                                |
+| A página parada, sem limitar a CPU, no computador e no celular          | Uns 8 ms por segundo                                  | Uns 60 ms por segundo                                                                                 |
 
 ### Limites conhecidos
 
